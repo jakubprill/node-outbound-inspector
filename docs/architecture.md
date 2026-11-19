@@ -544,7 +544,7 @@ OutboundRequest { id /* globalny, rosnący */, processId, cdpRequestId, pageRequ
                   startedAtMs, tsStart, tsResponse?, tsEnd?,
                   state: 'pending' | 'finished' | 'failed', error?,
                   body: { state: 'none' | 'available' | 'truncated' | 'unavailable' | 'evicted' | 'skipped',
-                          bytes?, data? },
+                          bytes?, data?, encoding?, encodedBytes? },
                   origin?: { file, line, column, fn, snippet?, via: 'call' | 'async' | 'cdp', mapped, stale? },
                   stack?: Frame[] }
 ```
@@ -567,7 +567,8 @@ Polityka:
 - tryb `eager` (domyślny): po `loadingFinished` pobiera treść, przechowuje do 256 KB na odpowiedź i 32 MB łącznie (najstarsze treści wypadają pierwsze, metadane zostają); odpowiedzi z błędem mają pierwszeństwo;
 - tryb `lazy`: pobiera dopiero przy `get_server_request`; Node mógł już treść usunąć, wtedy stan `evicted`;
 - tryb `off`: nigdy;
-- obcięcie wykrywane przez porównanie z `content-length`;
+- obcięcie wykrywane przez porównanie z `content-length`, czyli z rozmiarem na łączu (przed dekompresją);
+- treść z `content-encoding` (gzip, br, deflate zlib i surowy, zstd; kilka kodowań naraz) przy tekstowym `content-type` jest dekompresowana, z limitem wyniku równym limitowi na odpowiedź (ochrona przed bombą dekompresyjną: zostaje początek treści, stan `truncated`); nieobsługiwane albo uszkodzone kodowanie daje stan `skipped` z surowymi bajtami w base64 i powodem;
 - treść żądania: pobierana, gdy dostępna, w przeciwnym razie stan `unavailable` z powodem.
 
 **Retencja.** Bufor pierścieniowy 5000 zapytań (jak dziś), osobny budżet bajtów na treści, żądania stron znikają razem z ostatnim swoim zapytaniem. Rekordy rozłączonych procesów zostają do wyparcia. Bez zapisu na dysk.
