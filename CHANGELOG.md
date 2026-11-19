@@ -4,6 +4,18 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/), wersj
 
 ## [Unreleased]
 
+### Naprawione (zgłoszenia #1–#6)
+- **#1** Treści z `content-encoding` (gzip, x-gzip, br, deflate zlib/raw, zstd) są dekompresowane. Wieloetapowe kodowanie i wielkość liter są obsługiwane, a limit wyniku chroni przed bombą dekompresyjną (stan `truncated`). Obcięcie jest wykrywane po bajtach skompresowanych. Dochodzą pola `body_encoding` i `body_encoded_bytes`. Uszkodzone lub nieznane kodowanie daje stan `skipped` z powodem. Odpowiedź z `charset` w `content-type`, którą inspektor Node zamienia na zniekształcony tekst, ma stan `unavailable`.
+- **#2** Miejsce wywołania (`origin`) pomija ramki dowolnych bibliotek: każdy `node_modules/`, pnpm, Yarn PnP i chunki Turbopacka z bibliotekami (`node_modules_…`, `…__pnpm_…`, `[turbopack]_runtime`, `[externals]_…`, `__next-internal_`). Pomija też `vendor-chunks/` i runtime webpacka, a ścieżki Windows są normalizowane. Chunki `[root-of-the-server]__…` zostają, bo zawierają kod aplikacji (sprawdzone na Next 16.4). Doszła nowa zmienna `OUTBOUND_LIBRARY_PATHS`.
+- **#3** Nieudane zapytanie bez opisu błędu ma status `FAILED (brak opisu błędu od inspektora)` zamiast `FAILED: `. Przyczyną jest `AggregateError`, gdy `localhost` rozwiązuje się do IPv4 i IPv6. `get_server_request` podaje dodatkowo `error_kind` (np. `connection_refused`, `timeout`) i `error_hint`.
+- **#4** Eksport OpenTelemetry (`/v1/traces|metrics|logs` na porcie 4318, OTLP/gRPC `…Service/Export`) jest domyślnie pomijany. Wyłącza to `OUTBOUND_IGNORE_OTLP=0`. `inspector_status` pokazuje reguły (`ignored_otlp`) i liczniki pominiętych zapytań (`ignored_requests_total`).
+- **#5** Nowe polecenie `outbound-next` uruchamia `next` z inspekcją sieci bez pośrednictwa powłoki. Działa w `cmd.exe` i PowerShell, z npm, pnpm, Yarn i Bun. README i przykład monorepo zostały zaktualizowane, a README opisuje też wariant ze ścieżką względną.
+- **#6** Analiza wykrywa zależności danych między zapytaniami: wartość z odpowiedzi A występuje w URL-u albo nagłówkach B. Kroki zależne nie liczą się do oszczędności, a `hint` nie proponuje `Promise.all`. Dochodzą pola `dependencies` i `dependency_check` (`complete`, `partial` albo `unavailable`, gdy brak treści).
+
+### Znane ograniczenia (znalezione przy zgłoszeniach)
+- `node:http`: gdy połączenie zerwie się w trakcie odbierania treści, inspektor Node nie wysyła ani `loadingFinished`, ani `loadingFailed`, więc zapytanie zostaje w toku.
+- `node:http` na Node 22: po `res.setEncoding()` inspektor zwraca pustą treść.
+
 ### Naprawione (M2 — poprawność i bezpieczeństwo rdzenia)
 - **Wada 2:** proces bez `--experimental-network-inspection` nie jest już raportowany jako działający. `inspector_status` sprawdza flagę w `process.execArgv` (bo `Network.enable` odpowiada sukcesem także bez niej) i podaje powód w `warnings`.
 - **Wada 3:** klucz rekordu to numer podłączenia (`processId`) i `requestId`, a nie port, więc po restarcie aplikacji na tym samym porcie rekordy sprzed restartu zostają.
