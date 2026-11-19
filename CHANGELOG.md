@@ -4,6 +4,8 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/), wersj
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-11-19
+
 ### Zmienione (niezgodne z 0.4.0)
 - **`list_server_requests` zwraca obiekt** `{ requests, next_since_id }` zamiast tablicy, z `has_more`/`remaining` przy stronicowaniu i `older_not_shown`, gdy nie pokazano starszych. Obiekt jest potrzebny, żeby wynik mógł nieść kursor i znacznik przycięcia.
 - **`analyze_server_timeline` domyślnie zwraca podsumowanie** (M6, ADR 0008): 20 najnowszych żądań stron bez `timeline`, do 10 błędów (`errors_total`, gdy jest ich więcej), do 10 serii bez strony, pole `detail: "summary"`. Pełny raport po podaniu `page_request_id` albo `detail: "full"`. Pola używane dotąd (`by_page_request`, `verdict`, `verdict_code`, `sequential_chains`, `errors`, `in_flight`) zostają.
@@ -87,5 +89,6 @@ Pierwsza wersja w repozytorium (prototyp).
 - Narzędzia: `inspector_status`, `list_server_requests`, `get_server_request`, `analyze_server_timeline`, `clear_server_requests`.
 - Testy e2e (dwie aplikacje uruchomione równolegle), przykład monorepo Next.js, skrypt demonstracyjny, dokumentacja analizy i wyników testów.
 
-[Unreleased]: https://github.com/jakubprill/node-outbound-inspector/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/jakubprill/node-outbound-inspector/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/jakubprill/node-outbound-inspector/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/jakubprill/node-outbound-inspector/releases/tag/v0.4.0

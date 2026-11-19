@@ -31,7 +31,7 @@ Node ma eksperymentalną flagę `--experimental-network-inspection` (od 22.6 / 2
 ## Szybki start
 
 ### 1. Uruchom aplikację z inspekcją sieci
-Dodaj narzędzie jako devDependency (w monorepo: w katalogu głównym), np. `"node-outbound-inspector": "github:jakubprill/node-outbound-inspector#v0.4.0"`, i w aplikacji:
+Dodaj narzędzie jako devDependency (w monorepo: w katalogu głównym), np. `"node-outbound-inspector": "github:jakubprill/node-outbound-inspector#v0.5.0"`, i w aplikacji:
 ```jsonc
 // package.json aplikacji — każda aplikacja w monorepo ma WŁASNY port inspektora
 "dev:inspect": "outbound-next dev --port 3101 --inspect=9231"
