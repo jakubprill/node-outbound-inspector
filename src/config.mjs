@@ -21,6 +21,8 @@ export function loadConfig({ env = {} } = {}) {
     ports: Object.freeze(parsePorts(env.INSPECTOR_PORTS || '9229-9249')),
     appNames: Object.freeze(parseAppNames(env.APP_NAMES)),
     ignoreHosts: Object.freeze((env.IGNORE_HOSTS ?? 'registry.npmjs.org').split(',').filter(Boolean)),
+    // eksport OpenTelemetry (OTLP, np. @vercel/otel → localhost:4318/v1/traces) to szum, gdy lokalnie nie ma kolektora
+    ignoreOtlp: env.OUTBOUND_IGNORE_OTLP !== '0',
     maxRequests: Number(env.MAX_REQUESTS || 5000),
     pageCorrelation: env.PAGE_CORRELATION !== '0',
     redact: env.OUTBOUND_REDACT !== '0',

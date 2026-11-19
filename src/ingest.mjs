@@ -1,6 +1,7 @@
 // Zdarzenia CDP Network.* → zmiany w magazynie (czyste). Efekty uboczne zwracane jako lista.
 // Redakcja sekretów odbywa się tutaj, zanim dane trafią do magazynu.
 import { userFrames } from './frames.mjs';
+import { ignoreReason } from './ignore.mjs';
 
 /** Node podaje wallTime w ms, specyfikacja CDP w sekundach — wartość < 10¹¹ traktujemy jako sekundy. */
 export function normalizeWallTime(wallTime, nowMs) {
@@ -13,17 +14,16 @@ export function normalizeWallTime(wallTime, nowMs) {
  * @param {{ processId: number, port: number, app: string, pid?: number }} session
  * @param {string} method
  * @param {any} p parametry zdarzenia
- * @param {{ ignoreHosts: readonly string[], inspectorPorts: readonly number[], nowMs: number,
+ * @param {{ ignoreHosts: readonly string[], inspectorPorts: readonly number[], ignoreOtlp?: boolean, nowMs: number,
  *           redact: ReturnType<import('./redact.mjs').createRedactor>, bodies: 'eager' | 'lazy' | 'off' }} ctx
- * @returns {{ type: 'fetch-body', key: string, requestId: string }[]}
+ * @returns {({ type: 'fetch-body', key: string, requestId: string } | { type: 'ignored', reason: 'hosts' | 'inspector' | 'otlp' })[]}
  */
-export function applyNetworkEvent(store, session, method, p, { ignoreHosts, inspectorPorts, nowMs, redact, bodies = 'eager' }) {
+export function applyNetworkEvent(store, session, method, p, { ignoreHosts, inspectorPorts, ignoreOtlp = false, nowMs, redact, bodies = 'eager' }) {
   const key = `${session.processId}:${p.requestId}`;
   if (method === 'Network.requestWillBeSent') {
-    let host = '';
-    try { host = new URL(p.request.url).host; } catch {}
-    if (ignoreHosts.some(h => host.includes(h))) return [];
-    if (inspectorPorts.some(port => host === `127.0.0.1:${port}` || host === `localhost:${port}`)) return []; // ruch do inspektorów
+    // pominięte zapytanie nie trafia do magazynu, więc jego dalsze zdarzenia też przepadają (brak rekordu)
+    const reason = ignoreReason(p.request.url, { ignoreHosts, inspectorPorts, ignoreOtlp });
+    if (reason) return [{ type: 'ignored', reason }];
     store.add({
       key, processId: session.processId, app: session.app, port: session.port, pid: session.pid, requestId: p.requestId,
       method: p.request.method, url: redact.url(p.request.url), requestHeaders: redact.headers(p.request.headers),

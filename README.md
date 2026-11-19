@@ -73,6 +73,7 @@ Przykładowy przebieg pracy agenta: `clear_server_requests` → otwarcie strony 
 | `OUTBOUND_BODY_MAX_KB` / `OUTBOUND_BODIES_TOTAL_MB` | `256` / `32` | Limit treści jednej odpowiedzi i wszystkich treści w kolektorze |
 | `OUTBOUND_INSPECTOR_BUFFER_MB` / `OUTBOUND_INSPECTOR_RESOURCE_MB` | `32` / `2` | Limity bufora treści w procesie aplikacji (na sesję) |
 | `IGNORE_HOSTS` | `registry.npmjs.org` | Hosty pomijane (Next sam sprawdza aktualizacje) |
+| `OUTBOUND_IGNORE_OTLP` | `1` | Pomija eksport OpenTelemetry (np. `@vercel/otel` bez lokalnego kolektora): `/v1/traces`, `/v1/metrics`, `/v1/logs` na porcie `4318` (dowolny host) i OTLP/gRPC (`…Service/Export`). `0` pokazuje ten ruch. Pominięte reguły i liczniki: `inspector_status` (`ignored_otlp`, `ignored_requests_total`). Eksport do chmury na innym porcie dodaj do `IGNORE_HOSTS`. |
 | `MAX_REQUESTS` | `5000` | Rozmiar bufora |
 
 ## Przykład i testy

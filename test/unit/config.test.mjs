@@ -31,3 +31,9 @@ test('loadConfig: zmienne środowiskowe', () => {
   assert.equal(c.maxRequests, 10);
   assert.equal(c.appNames[9231], 'web');
 });
+
+test('loadConfig: eksport OTLP domyślnie pomijany, OUTBOUND_IGNORE_OTLP=0 wyłącza (issue #4)', () => {
+  assert.equal(loadConfig({ env: {} }).ignoreOtlp, true);
+  assert.equal(loadConfig({ env: { OUTBOUND_IGNORE_OTLP: '1' } }).ignoreOtlp, true);
+  assert.equal(loadConfig({ env: { OUTBOUND_IGNORE_OTLP: '0' } }).ignoreOtlp, false);
+});

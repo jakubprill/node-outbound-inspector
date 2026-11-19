@@ -7,6 +7,7 @@ import { applyNetworkEvent } from './ingest.mjs';
 import { applyPageEntries } from './correlate.mjs';
 import { createRedactor } from './redact.mjs';
 import { classifyBody, enforceBodyBudget } from './bodies.mjs';
+import { OTLP_RULES } from './ignore.mjs';
 
 /**
  * @param {ReturnType<import('./config.mjs').loadConfig>} config
@@ -19,6 +20,7 @@ export function createCollector(config, { log = () => {}, now = Date.now } = {})
   const byProcess = new Map();  // processId → aktywna sesja (do pobierania treści w trybie lazy)
   let processSeq = 0;           // każde podłączenie dostaje nowy processId — klucz rekordu przeżywa restart (wada 3)
   let pollTimer = null;
+  const ignored = { hosts: 0, otlp: 0, inspector: 0 }; // licznik pominiętych zapytań od startu kolektora
 
   /** Pobiera treść z inspektora i zapisuje ją w rekordzie z jawnym stanem. */
   async function fetchBody(r, missingState) {
@@ -31,9 +33,10 @@ export function createCollector(config, { log = () => {}, now = Date.now } = {})
 
   function onNetwork(session, method, params) {
     const effects = applyNetworkEvent(store, session, method, params,
-      { ignoreHosts: config.ignoreHosts, inspectorPorts: config.ports, nowMs: now(), redact, bodies: config.bodies });
+      { ignoreHosts: config.ignoreHosts, inspectorPorts: config.ports, ignoreOtlp: config.ignoreOtlp, nowMs: now(), redact, bodies: config.bodies });
     for (const e of effects) {
       if (e.type === 'fetch-body') { const r = store.get(e.key); if (r) fetchBody(r, 'unavailable'); }
+      else if (e.type === 'ignored') ignored[e.reason]++;
     }
   }
 
@@ -85,6 +88,8 @@ export function createCollector(config, { log = () => {}, now = Date.now } = {})
       const ports = config.ports;
       return {
         ports_scanned: `${ports[0]}-${ports.at(-1)} (${ports.length})`, ignored_hosts: config.ignoreHosts,
+        // reguły OTLP i liczba zapytań pominiętych przy przyjęciu od startu kolektora (nie trafiły do magazynu)
+        ignored_otlp: config.ignoreOtlp ? OTLP_RULES : [], ignored_requests_total: { ...ignored },
         apps: [...sessions.values()].map(s => ({ app: s.app, port: s.port, pid: s.pid, cwd: s.cwd, network_inspection: !!s.networkOk, page_correlation: !!s.pageCorrelation, since: s.connectedAt,
           buffered_requests: store.values().filter(r => r.app === s.app).length,
           node: s.node, ready: !!s.ready, warnings: s.warnings })),
