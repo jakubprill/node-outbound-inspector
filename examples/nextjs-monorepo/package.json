@@ -2,6 +2,7 @@
   "name": "acme-monorepo-example",
   "private": true,
   "workspaces": ["apps/*"],
+  "devDependencies": { "node-outbound-inspector": "file:../.." },
   "scripts": {
     "mock": "node mock-services.mjs",
     "dev": "npm run dev -w @acme/web & npm run dev -w @acme/admin & wait",

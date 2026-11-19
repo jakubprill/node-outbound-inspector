@@ -12,7 +12,8 @@
   "private": true,
   "type": "module",
   "bin": {
-    "outbound-mcp": "src/outbound-mcp.mjs"
+    "outbound-mcp": "src/outbound-mcp.mjs",
+    "outbound-next": "bin/outbound-next.mjs"
   },
   "engines": {
     "node": ">=22"

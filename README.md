@@ -29,10 +29,27 @@ Node od wersji 22.6 / 20.18 ma eksperymentalną flagę `--experimental-network-i
 ## Szybki start
 
 ### 1. Uruchom aplikację z inspekcją sieci
+Dodaj narzędzie jako devDependency (w monorepo: w katalogu głównym), np. `"node-outbound-inspector": "github:jakubprill/node-outbound-inspector#<tag>"`, i w aplikacji:
 ```jsonc
 // package.json aplikacji — każda aplikacja w monorepo ma WŁASNY port inspektora
-"dev:inspect": "node --experimental-network-inspection $(node -p \"require.resolve('next/dist/bin/next')\") dev --port 3101 --inspect=9231"
+"dev:inspect": "outbound-next dev --port 3101 --inspect=9231"
 ```
+`outbound-next` znajduje `next` tak jak `require` z katalogu aplikacji i uruchamia go przez `node --experimental-network-inspection`. Wszystkie argumenty idą do `next`, a kod wyjścia i sygnały wracają do menedżera pakietów. Nie zależy od powłoki, więc działa z npm, pnpm, Yarn i Bun na Windows (`cmd.exe`, PowerShell), macOS i Linuksie. Ostrzega, gdy brakuje `--inspect=<port>` albo gdy inspektor ma słuchać poza `127.0.0.1`.
+Plik CLI można wskazać ręcznie zmienną `OUTBOUND_NEXT_BIN` (ścieżka względem katalogu aplikacji).
+
+<details><summary>Bez instalowania narzędzia</summary>
+
+Ścieżka do pliku `next` jako zwykły argument `node` działa w każdej powłoce (ukośniki `/` są w porządku także na Windows):
+```jsonc
+"dev:inspect": "node --experimental-network-inspection ./node_modules/next/dist/bin/next dev --port 3101 --inspect=9231"
+// monorepo, w którym menedżer wyniósł next do katalogu głównego (npm/Bun/Yarn z node_modules):
+"dev:inspect": "node --experimental-network-inspection ../../node_modules/next/dist/bin/next dev --port 3101 --inspect=9231"
+```
+Gdzie leży `next`, sprawdzisz raz: `node -p "require.resolve('next/dist/bin/next')"` w katalogu aplikacji. W pnpm `node_modules/next` w aplikacji to symlink, więc działa wariant `./node_modules/…`. Yarn PnP nie ma `node_modules`, więc ścieżki nie ma czego wskazać. Tam użyj `outbound-next` (Yarn ładuje PnP przez `NODE_OPTIONS`, a proces potomny je dziedziczy; na PnP jeszcze niesprawdzone) albo `nodeLinker: node-modules`.
+
+Dotychczasowy zapis `node --experimental-network-inspection $(node -p "require.resolve('next/dist/bin/next')") dev …` wymaga powłoki POSIX (sh, bash, zsh, Git Bash). npm i pnpm na Windows uruchamiają skrypty w `cmd.exe`, gdzie `$(…)` nie działa.
+</details>
+
 > ⚠️ Flaga **nie działa** w `NODE_OPTIONS` (Node ją odrzuca). Gdy dwie aplikacje używają tego samego portu (domyślnie 9229), druga po cichu działa bez inspektora.
 
 ### 2a. Podgląd w Chrome
@@ -92,6 +109,7 @@ npm run mock          # udawane serwisy na :4001
 npm run dev:inspect   # web :3101 (inspektor 9231) + admin :3102 (inspektor 9241)
 npm run demo          # agent testowy: ruch + analiza
 ```
+Skrypty `dev:inspect` aplikacji są przenośne (`outbound-next`). Skrypty zbiorcze w katalogu głównym przykładu (`&`/`wait`, `APPS=…`) wymagają powłoki POSIX; na Windows uruchom każdą aplikację w osobnym terminalu (`npm run dev:inspect -w @acme/web`), szczegóły w README przykładu.
 
 Minimalny klient CDP (to, co robi zakładka Network): [`examples/cdp-network-probe.mjs`](examples/cdp-network-probe.mjs).
 
