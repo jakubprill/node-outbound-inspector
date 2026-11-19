@@ -116,7 +116,7 @@ Skrypty `dev:inspect` aplikacji są przenośne (`outbound-next`). Skrypty zbiorc
 Minimalny klient CDP (to, co robi zakładka Network): [`examples/cdp-network-probe.mjs`](examples/cdp-network-probe.mjs).
 
 ## Ograniczenia
-- Funkcja Node jest **eksperymentalna**. Wymagany Node ≥ 24 (testowane w CI na 24 i najnowszej wersji). Na starszym Node narzędzie działa w ograniczonym zakresie: brak treści odpowiedzi `fetch`, ostrzeżenie w `inspector_status`.
+- Funkcja Node jest **eksperymentalna**. Wymagany Node ≥ 24 (testowane w CI na 24 i najnowszej wersji). Na starszym Node kolektor nie startuje, a proces aplikacji nie jest podsłuchiwany (powód w `inspector_status`).
 - **Bun** jako runtime nie jest obsługiwany (WebKit Inspector zamiast CDP). Działa, jeśli Bun służy tylko do instalowania pakietów i uruchamiania skryptów, a aplikacja działa na Node.
 - W Next.js `fetch` jest opakowany przez sam Next, więc stos wywołań nie pokazuje linii strony. Kod znajduje się po URL-u i przypisanej stronie.
 - Zapytania poza kontekstem żądania strony (start serwera, zadania w tle) trafiają do grupy „bez strony”.
@@ -128,6 +128,7 @@ Minimalny klient CDP (to, co robi zakładka Network): [`examples/cdp-network-pro
 - Sekrety w nagłówkach i parametrach URL są redagowane, zanim trafią do agenta. Treści odpowiedzi nie są redagowane (na razie), więc przy wrażliwych integracjach użyj `OUTBOUND_BODIES=off`.
 
 ## Dokumentacja
+- [`llms.txt`](llms.txt): instrukcja integracji i użycia dla agentów AI
 - [Pełna analiza: problem, alternatywy (proxy, OpenTelemetry/Jaeger), WebMCP, rekomendacje](docs/analysis.md)
 - [Wyniki testów](docs/test-results.md)
 - [Changelog](CHANGELOG.md)

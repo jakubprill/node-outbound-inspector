@@ -1,0 +1,84 @@
+# node-outbound-inspector
+
+> Serwer MCP (stdio, zero zależności), który pokazuje agentowi AI wychodzące zapytania HTTP procesów Node.js, np. serwera Next.js w trybie dev wołającego wewnętrzne serwisy. Działa na inspektorze Node (`--inspect` + `--experimental-network-inspection`, Chrome DevTools Protocol). Obsługuje wiele aplikacji naraz (monorepo), przypisuje zapytania do żądania strony i wykrywa zapytania sekwencyjne (waterfall). Wyłącznie do lokalnego developmentu.
+
+Ten plik jest instrukcją dla modeli językowych: jak podłączyć narzędzie do istniejącego projektu i jak go używać. Reszta dokumentacji jest po polsku, identyfikatory po angielsku.
+
+## Wymagania
+
+- Node ≥ 24 dla kolektora (`outbound-mcp`) i dla każdego podsłuchiwanego procesu. Kolektor na starszym Node nie startuje; proces aplikacji na starszym Node nie jest podsłuchiwany (powód w `inspector_status`).
+- Bun może być menedżerem pakietów i uruchamiać skrypty (`bun run`), ale aplikacja musi działać w runtime Node. `bun --bun` nie działa (Bun nie ma CDP).
+- Edge runtime Next.js nie jest objęty.
+
+## Integracja: uruchomienie aplikacji z inspekcją
+
+Każdy podsłuchiwany proces Node potrzebuje dwóch rzeczy:
+
+1. flagi `--experimental-network-inspection` jako **argumentu `node`**. Node odrzuca ją w `NODE_OPTIONS`;
+2. **własnego** portu inspektora. Kolektor domyślnie skanuje 9229–9249 (`INSPECTOR_PORTS`). Gdy dwa procesy dostaną ten sam port, drugi po cichu działa bez inspektora.
+
+Next.js 16 uruchamia serwer w procesie potomnym. `next dev --inspect=<port>` przenosi inspektor do tego procesu, więc port podaje się jako argument `next`, nie `node`.
+
+Wariant A, polecenie `outbound-next` (narzędzie zainstalowane jako devDependency). Szuka `next` z katalogu aplikacji i uruchamia go przez `node --experimental-network-inspection`; argumenty idą do `next`:
+
+```
+outbound-next dev --port 3101 --inspect=9231
+```
+
+Wariant B, bez instalowania narzędzia:
+
+```
+node --experimental-network-inspection <ścieżka do next/dist/bin/next> dev --port 3101 --inspect=9231
+```
+
+Ścieżkę rozwiązuje się z katalogu aplikacji: `require.resolve('next/dist/bin/next')`. W monorepo `next` może leżeć w głównym `node_modules`.
+
+Własny skrypt, który spawnuje aplikacje (np. uruchamiany przez `bun run`): zmień argumenty spawnu według wariantu A albo B, z unikalnym portem dla każdej aplikacji. Zalecane włączanie warunkowe, np. zmienną `OUTBOUND=1`, żeby zwykłe `dev` się nie zmieniło. Inspektor daje pełną kontrolę nad procesem: słuchaj tylko na `127.0.0.1` (domyślnie tak jest).
+
+## Integracja: podłączenie serwera MCP
+
+```
+claude mcp add outbound -- node /ścieżka/do/node-outbound-inspector/src/outbound-mcp.mjs
+```
+
+Albo w konfiguracji klienta MCP:
+
+```json
+{ "mcpServers": { "outbound": { "command": "node", "args": ["/ścieżka/do/node-outbound-inspector/src/outbound-mcp.mjs"], "env": { "APP_NAMES": "9231=web,9232=admin" } } } }
+```
+
+Kolektor sam znajduje procesy na skanowanych portach, także uruchomione po nim. `APP_NAMES` jest opcjonalne; bez niego nazwa pochodzi z `package.json` procesu.
+
+## Weryfikacja integracji
+
+1. Uruchom aplikacje w trybie z inspekcją.
+2. `inspector_status`: każda aplikacja ma `ready: true`, `network_inspection: true`, puste `warnings`. Brak aplikacji na liście oznacza zły albo zajęty port. `network_inspection: false` oznacza brak flagi albo Node < 24 (powód w `warnings`).
+3. Otwórz stronę aplikacji, która woła serwisy, potem `list_server_requests`: zapytania mają wypełnione `app` i stronę.
+
+## Narzędzia MCP
+
+- `inspector_status`: podłączone aplikacje (nazwa, port, pid, katalog, wersja Node, stan inspekcji i korelacji, `node_workarounds`, ostrzeżenia), ustawienia kolektora. Wywołaj najpierw.
+- `list_server_requests`: zapytania (aplikacja, strona, metoda, URL, status, czas, miejsce w kodzie). Parametr `limit` (domyślnie 50).
+- `get_server_request`: jedno zapytanie po `id`: nagłówki, treść odpowiedzi ze stanem (`available`, `truncated`, `unavailable`, `evicted`, `skipped`), stos wywołań.
+- `analyze_server_timeline`: per aplikacja i per żądanie strony: SEKWENCYJNIE / RÓWNOLEGLE / MIESZANE, możliwa oszczędność z `Promise.all` (z uwzględnieniem zależności danych między zapytaniami), błędy 4xx/5xx i zerwane połączenia.
+- `clear_server_requests`: czyści bufor (całość albo jedna aplikacja).
+
+Wspólne filtry: `app` (nazwa albo port), `url_contains`, `page_contains` (np. `/checkout`), `last_ms`, `since_id`.
+
+Typowy przebieg: `clear_server_requests` → wejście na stronę (np. przez Chrome DevTools MCP albo `curl`) → `analyze_server_timeline` → `get_server_request` dla błędów i podejrzanych zapytań.
+
+## Na co uważać
+
+- Nagłówki i parametry URL z sekretami są redagowane przed oddaniem agentowi. Treści odpowiedzi nie są redagowane; przy wrażliwych danych ustaw `OUTBOUND_BODIES=off`.
+- W Next.js `fetch` jest opakowany przez Next, więc stos nie wskazuje linii strony. Kod szukaj po URL-u i przypisanej stronie.
+- Zapytania poza żądaniem strony (start serwera, zadania w tle) są w grupie „bez strony”.
+- Błąd Node nodejs/node#66551: `res.setEncoding()` w `node:http` przy włączonej inspekcji sieci niszczy połączenie. Kolektor instaluje obejście automatycznie (`node_workarounds`). Same Chrome DevTools bez kolektora nadal ten błąd wywołują.
+- Eksport OpenTelemetry (port 4318, OTLP/gRPC) i `registry.npmjs.org` są domyślnie pomijane.
+
+## Dokumentacja
+
+- [README](README.md): szybki start, pełna tabela zmiennych środowiskowych, ograniczenia
+- [Przykładowe monorepo z dwiema aplikacjami Next.js](examples/nextjs-monorepo/README.md)
+- [Architektura i plan rozwoju](docs/architecture.md)
+- [Decyzje (ADR)](docs/adr/)
+- [Changelog](CHANGELOG.md)
