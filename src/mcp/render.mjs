@@ -3,11 +3,35 @@ import { duration } from '../analyze/timeline.mjs';
 
 export const NO_ORIGIN = '(brak ramki z kodu aplikacji — np. fetch opakowany przez Next.js; szukaj po URL)';
 
+/** Status nieudanego zapytania, gdy inspektor Node podał pusty errorText (issue #3). */
+export const FAILED_NO_TEXT = 'FAILED (brak opisu błędu od inspektora)';
+export const EMPTY_ERROR_HINT = 'Inspektor Node podał pusty errorText (to error.message). Najczęstsza przyczyna: host ma kilka adresów '
+  + '(np. localhost → ::1 i 127.0.0.1), połączenie nie udało się pod żadnym i Node zgłasza AggregateError bez opisu — '
+  + 'zwykle pod tym adresem nic nie nasłuchuje (ECONNREFUSED).';
+
+// Rodzaj błędu z errorText inspektora. Kolejność ma znaczenie: „aborted due to timeout” to timeout.
+const ERROR_KINDS = [
+  ['timeout', /timeout|timed out|ETIMEDOUT/i],
+  ['aborted', /abort/i],
+  ['connection_refused', /ECONNREFUSED/],
+  ['connection_reset', /ECONNRESET|EPIPE|socket hang up|other side closed|UND_ERR_SOCKET/i],
+  ['dns', /ENOTFOUND|EAI_AGAIN|EAI_FAIL|EAI_NONAME|getaddrinfo/i],
+  ['tls', /certificate|CERT_|SSL|TLS/i],
+];
+
+/** @returns {'timeout'|'aborted'|'connection_refused'|'connection_reset'|'dns'|'tls'|'other'|'unknown'} */
+export function errorKind(text) {
+  if (!text?.trim()) return 'unknown';
+  return ERROR_KINDS.find(([, re]) => re.test(text))?.[0] ?? 'other';
+}
+
+const failedStatus = error => error?.trim() ? `FAILED: ${error}` : FAILED_NO_TEXT;
+
 /** @param {any} r rekord zapytania  @param {number} [t0] początek osi czasu (sekundy inspektora) */
 export function row(r, t0) {
   return {
     id: r.id, app: r.app, page: r.page ? `${r.page.method} ${r.page.url}` : null, method: r.method, url: r.url,
-    status: r.state === 'failed' ? `FAILED: ${r.error}` : (r.status ?? 'pending'),
+    status: r.state === 'failed' ? failedStatus(r.error) : (r.status ?? 'pending'),
     start_ms: t0 != null ? Math.round((r.tsStart - t0) * 1000) : undefined,
     duration_ms: duration(r),
     origin: r.origin[0] ?? NO_ORIGIN,
@@ -28,5 +52,8 @@ export function details(r, maxBodyChars) {
     // M2: stan treści zamiast pustego łańcucha; czas do pierwszego bajtu
     body_state: r.body?.state ?? 'none', body_bytes: r.body?.bytes ?? null, body_reason: r.body?.reason ?? null,
     ttfb_ms: ttfb(r),
+    // issue #3: rodzaj błędu (tylko dla nieudanych) i wyjaśnienie pustego opisu
+    ...(r.state === 'failed' ? { error_kind: errorKind(r.error) } : {}),
+    ...(r.state === 'failed' && !r.error?.trim() ? { error_hint: EMPTY_ERROR_HINT } : {}),
   };
 }

@@ -36,6 +36,14 @@ test('pomija ignorowane hosty i ruch do inspektorów', () => {
   assert.equal(s.size, 0);
 });
 
+test('pusty errorText zostaje pustym łańcuchem (render pokazuje opis, issue #3)', () => {
+  const s = createStore({ maxRequests: 10 });
+  applyNetworkEvent(s, session, ...willBeSent('r1', 'http://localhost:4319/x'), ctx);
+  applyNetworkEvent(s, session, 'Network.loadingFailed', { requestId: 'r1', timestamp: 2, type: 'Fetch', errorText: '' }, ctx);
+  assert.equal(s.get('3:r1').state, 'failed');
+  assert.equal(s.get('3:r1').error, '');
+});
+
 test('brak wallTime → czas kolektora; zdarzenia dla nieznanego zapytania są ignorowane', () => {
   const s = createStore({ maxRequests: 10 });
   applyNetworkEvent(s, session, ...willBeSent('r1', 'http://svc/a', { wallTime: undefined }), ctx);
