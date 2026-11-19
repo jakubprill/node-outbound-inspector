@@ -1,0 +1,33 @@
+---
+status: proposed
+date: 2026-11-19
+---
+
+# 0009. Bezpieczeństwo: tylko pętla zwrotna, instrumentacja za zgodą, redakcja przy przyjęciu danych
+
+## Kontekst
+
+Inspektor Node daje pełną kontrolę nad procesem. Prototyp łączy się z każdym inspektorem w zakresie portów, wstrzykuje do niego kod bez pytania i zwraca agentowi nagłówki żądań oraz odpowiedzi bez zmian, w tym `Authorization`, `Cookie` i `Set-Cookie`. Wynik narzędzia trafia do dostawcy modelu, czyli poza maszynę dewelopera. Treści odpowiedzi serwisów mogą też zawierać tekst, który model weźmie za polecenie.
+
+## Decyzja
+
+1. **Tylko pętla zwrotna.** Kolektor łączy się wyłącznie z `127.0.0.1`. Launcher zawsze podaje `--inspect=127.0.0.1:<port>`. Inspektor słuchający na innym adresie jest zgłaszany w `inspector_status`.
+2. **Instrumentacja za zgodą.** Hak działa tylko w procesach, w których deweloper sam go załadował (`outbound run` albo `--import`). Procesy znalezione po porcie są domyślnie tylko obserwowane; wstrzyknięcie wymaga `OUTBOUND_INJECT=1`. Wyłącznik: `OUTBOUND_HOOK=0`.
+3. **Minimalny ślad w CDP.** Używamy `Network.*`, `Runtime.evaluate` z wyrażeniami tylko do odczytu i `Runtime.addBinding`. Nigdy nie włączamy domeny `Debugger` ani `Runtime`.
+4. **Redakcja przy przyjęciu.** Wartości nagłówków uwierzytelniających i pasujących do wzorca nazw oraz wrażliwych parametrów URL i pól JSON są zastępowane opisem (schemat, długość, sześć znaków skrótu SHA-256), zanim trafią do magazynu. Domyślnie włączone; wyłączenie tylko jawnie (`OUTBOUND_REDACT=0`) i z ostrzeżeniem w statusie.
+5. **Treści jako dane.** Treści są przycinane, zwracane w wyraźnie nazwanym polu, a `instructions` serwera mówi modelowi, żeby traktował je jako dane. Tryb treści (`eager`, `lazy`, `off`) wybiera zespół.
+6. **Bez wykonywania kodu z repozytorium.** Konfiguracja to JSON. Rejestr ma prawa 0700 i 0600. Klient MCP uruchamia narzędzie przez ścieżkę, nie przez `npx` z krótką nazwą.
+
+## Rozważane alternatywy
+
+- **Redakcja dopiero w odpowiedzi narzędzia.** Sekret zostaje w pamięci kolektora i wypłynie każdą nową drogą wyjścia (eksport, nowe narzędzie, log). Odrzucone.
+- **Pełne ukrycie wartości** (`***`). Agent nie stwierdzi wtedy, czy dwa zapytania niosły ten sam token, a to częste pytanie przy błędach 401. Skrót o długości sześciu znaków na to pozwala i nie odtwarza sekretu o dużej entropii.
+- **Wstrzykiwanie domyślnie włączone** (stan obecny). Wygodne, ale kolektor wykonuje wtedy kod w każdym procesie, który akurat słucha na skanowanym porcie.
+- **Token dostępu do kolektora.** Zbędny, dopóki kolektor nie słucha na żadnym gnieździe (stdio).
+
+## Konsekwencje
+
+- Redakcja jest nieodwracalna w ramach sesji: żeby zobaczyć wartość, trzeba uruchomić kolektor z wyłączoną redakcją.
+- Tryb zgodności (procesy bez launchera) domyślnie traci przypisanie do stron. To zmiana zachowania względem prototypu, opisana w changelogu.
+- Redakcja pól JSON w treściach działa po nazwach kluczy, więc nie złapie danych osobowych pod neutralną nazwą. Ostateczną ochroną jest tryb treści `off`.
+- Narzędzie pozostaje wyłącznie do lokalnego developmentu.
