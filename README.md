@@ -73,8 +73,12 @@ Przykładowy przebieg pracy agenta: `clear_server_requests` → otwarcie strony 
 ## Przykład i testy
 
 ```bash
-npm test                         # e2e: 2 aplikacje, przypisanie, waterfall, błędy (bez Next.js)
+npm test                         # jednostkowe, golden (kontrakt narzędzi), e2e — bez Next.js i bez sieci
+npm run record                   # nagranie zdarzeń inspektora do test/fixtures/recordings/
+npm run golden:update            # odświeżenie zrzutów golden (zmiana kontraktu → wpis w CHANGELOG)
 ```
+
+Budowa kodu i plan rozwoju: [`docs/architecture.md`](docs/architecture.md), decyzje: [`docs/adr/`](docs/adr/).
 
 Przykładowe monorepo z dwiema aplikacjami Next.js: [`examples/nextjs-monorepo`](examples/nextjs-monorepo/README.md)
 ```bash

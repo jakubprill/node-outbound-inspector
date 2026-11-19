@@ -10,7 +10,7 @@ export async function startScenario({ servicesPort, apps, inspectorFlags = ['--e
   const procs = [];
   procs.push(spawn(process.execPath, [fx('services.mjs')], { env: { ...process.env, PORT: servicesPort }, stdio: 'ignore' }));
   const started = apps.map(a => {
-    const p = spawn(process.execPath, [...(a.flags ?? inspectorFlags), `--inspect=127.0.0.1:${a.inspect}`, fx('fake-app.mjs')],
+    const p = spawn(process.execPath, [...(a.flags ?? inspectorFlags), `--inspect=127.0.0.1:${a.inspect}`, fx(a.script ?? 'fake-app.mjs')],
       { cwd: fx(`apps/${a.dir}`), env: { ...process.env, PORT: a.port, SERVICES_PORT: servicesPort, npm_package_name: '' }, stdio: 'ignore' });
     procs.push(p);
     return { ...a, proc: p };
