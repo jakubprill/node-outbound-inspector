@@ -1,5 +1,7 @@
 # node-outbound-inspector
 
+[![test](https://github.com/jakubprill/node-outbound-inspector/actions/workflows/test.yml/badge.svg)](https://github.com/jakubprill/node-outbound-inspector/actions/workflows/test.yml)
+
 Inspekcja **wychodzącego ruchu HTTP** procesów Node.js, np. serwera Next.js wołającego wewnętrzne integracje: w Chrome DevTools oraz dla agentów AI przez serwer **MCP**.
 
 - 🔍 Podgląd zapytań serwera (`fetch`/undici, `node:http`, HTTP/2): URL, nagłówki, status, treść, czas.
@@ -95,3 +97,7 @@ Minimalny klient CDP (to, co robi zakładka Network): [`examples/cdp-network-pro
 ## Dokumentacja
 - [Pełna analiza: problem, alternatywy (proxy, OpenTelemetry/Jaeger), WebMCP, rekomendacje](docs/analysis.md)
 - [Wyniki testów](docs/test-results.md)
+- [Changelog](CHANGELOG.md)
+
+## Licencja
+[MIT](LICENSE) © 2026 Jakub Prill
