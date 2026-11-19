@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 3101",
-    "dev:inspect": "node --experimental-network-inspection $(node -p \"require.resolve('next/dist/bin/next')\") dev --port 3101 --inspect=9231"
+    "dev:inspect": "outbound-next dev --port 3101 --inspect=9231"
   },
   "dependencies": { "next": "^16.4.0", "react": "^19.2.0", "react-dom": "^19.2.0" }
 }

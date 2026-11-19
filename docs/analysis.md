@@ -26,6 +26,8 @@ Node ma wbudowaną, eksperymentalną flagę `--experimental-network-inspection`,
 "dev:inspect": "node --experimental-network-inspection $(node -p \"require.resolve('next/dist/bin/next')\") dev --inspect"
 ```
 
+Zapis `$(…)` wymaga powłoki POSIX; na Windows (`cmd.exe`) użyj `outbound-next dev --inspect` albo ścieżki `./node_modules/next/dist/bin/next` (README, „Szybki start”).
+
 Użycie:
 1. `npm run dev:inspect`
 2. Chrome → `chrome://inspect` → **Open dedicated DevTools for Node** → zakładka **Network**
@@ -71,7 +73,7 @@ Użycie:
 // package.json (root) — równolegle, jak `dev`
 "dev:inspect": "npm run dev:inspect -w @acme/web & npm run dev:inspect -w @acme/admin & wait"
 ```
-`require.resolve` znajduje `next` niezależnie od tego, gdzie menedżer pakietów go umieścił (wersja hoisted albo pnpm). Składnia `$(...)` nie działa w Windowsowym cmd.
+`require.resolve` znajduje `next` niezależnie od tego, gdzie menedżer pakietów go umieścił (wersja hoisted albo pnpm). Składnia `$(...)` nie działa w Windowsowym cmd. Przenośny zapis, niezależny od powłoki: `"dev:inspect": "outbound-next dev --port 3101 --inspect=9231"` (README, „Szybki start”; issue #5).
 
 **Wynik testu (2 × Next 16.4 Turbopack uruchomione równolegle, ruch generowany jednocześnie w obu):**
 

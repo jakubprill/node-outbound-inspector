@@ -655,7 +655,7 @@ Nagrania powstają skryptem `scripts/record-fixture.mjs`, który zapisuje surowy
     "args": ["node_modules/node-outbound-inspector/bin/outbound.mjs", "mcp"] } } }
 ```
 
-`package.json` narzędzia: `bin: { outbound, outbound-mcp }`, `exports: { "./register": "./src/hook/preload.mjs" }`, `engines.node >= 22`.
+`package.json` narzędzia: `bin: { outbound, outbound-mcp, outbound-next }`, `exports: { "./register": "./src/hook/preload.mjs" }`, `engines.node >= 22`.
 
 **Konfiguracja.** Opcjonalny `outbound.config.json` w katalogu głównym repozytorium; wszystko ma wartości domyślne. Dzisiejsze zmienne (`INSPECTOR_PORTS`, `APP_NAMES`, `IGNORE_HOSTS`, `PAGE_CORRELATION`, `MAX_REQUESTS`) są honorowane do 1.0. Zmienia się jedna wartość domyślna: od M4 hak nie jest wstrzykiwany do procesów bez launchera, dopóki nie włączy tego `OUTBOUND_INJECT=1` (albo jawne `PAGE_CORRELATION=1`).
 
@@ -785,7 +785,7 @@ Tych rzeczy nie dało się sprawdzić bez Next.js. Każda zajmuje kilka minut na
 
 1. `registry.mjs` i `hook/preload.mjs` w wersji samej rejestracji (bez haka).
 2. `discovery` czyta rejestr; skanowanie portów zostaje bez zmian (domyślny zakres, `INSPECTOR_PORTS`), a proces znaleziony dwiema drogami jest jednym celem.
-3. `cli/run.mjs`: polecenie `node`, pliki binarne pakietów, adapter Next, rezerwacja portu, oczekiwanie na zgłoszenie, ostrzeżenie, sygnały, kod wyjścia, wykrycie Bun.
+3. `cli/run.mjs`: polecenie `node`, pliki binarne pakietów, adapter Next, rezerwacja portu, oczekiwanie na zgłoszenie, ostrzeżenie, sygnały, kod wyjścia, wykrycie Bun. Punkt wyjścia: `src/cli/launch.mjs` z issue #5 (`outbound-next`: rozwiązanie `next` z cwd, `spawn` z `process.execPath` bez powłoki, sygnały, kod wyjścia, wykrycie Bun). `outbound-next` zostaje aliasem `outbound run -- next`.
 4. `cli/status.mjs`; `bin/outbound.mjs`; `exports["./register"]`.
 5. Aktualizacja `examples/nextjs-monorepo` i README.
 

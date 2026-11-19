@@ -15,6 +15,23 @@ npm run dev:inspect   # terminal 2 — obie aplikacje z inspekcją sieci
 npm run demo          # terminal 3 — serwer MCP + ruch na wszystkich stronach + analiza
 ```
 
+`npm install` podłącza narzędzie z tego repozytorium (`"node-outbound-inspector": "file:../.."` w `devDependencies`), więc w skryptach aplikacji jest dostępne polecenie `outbound-next`:
+```jsonc
+// apps/web/package.json
+"dev:inspect": "outbound-next dev --port 3101 --inspect=9231"
+```
+W prawdziwym monorepo zamiast `file:../..` jest zależność z gita przypięta do tagu (`github:jakubprill/node-outbound-inspector#<tag>`).
+
+### Windows
+Skrypty `dev:inspect` aplikacji działają w `cmd.exe` i PowerShell. Skrypty zbiorcze w katalogu głównym (`dev`, `dev:inspect` z `&` i `wait`, `demo` z `APPS=…`) wymagają powłoki POSIX (np. Git Bash). W PowerShell:
+```powershell
+npm run dev:inspect -w @acme/web     # terminal 2
+npm run dev:inspect -w @acme/admin   # terminal 3
+$env:APPS='[{"app":"@acme/web","url":"http://localhost:3101","pages":["/seq","/err"]},{"app":"@acme/admin","url":"http://localhost:3102","pages":["/par","/seq"]}]'
+node ../../scripts/mcp-demo.mjs      # terminal 4 (PowerShell)
+```
+W monorepo z turbo równoległe uruchamianie zapewnia `turbo run dev:inspect`.
+
 Oczekiwany wynik `npm run demo` (wartości przybliżone):
 ```
 [@acme/web]   GET /seq  3 zap., ~470 ms → SEKWENCYJNIE (waterfall) | możliwa oszczędność ~310 ms
@@ -27,4 +44,4 @@ Podgląd w Chrome: `chrome://inspect` → *Configure…* → dodaj `localhost:92
 
 ## Na co zwrócić uwagę
 - Gdyby obie aplikacje miały gołe `--inspect` (domyślny port 9229), druga wypisałaby tylko `Starting inspector on 127.0.0.1:9229 failed: address already in use` i działałaby dalej bez inspektora. Dlatego każda ma własny port.
-- `require.resolve('next/dist/bin/next')` znajduje `next` niezależnie od tego, gdzie menedżer pakietów go umieścił (npm/pnpm/yarn). Składnia `$(...)` wymaga powłoki POSIX, więc nie działa w Windowsowym cmd.
+- `outbound-next` znajduje `next` przez `require.resolve('next/dist/bin/next')` z katalogu aplikacji, niezależnie od tego, gdzie menedżer pakietów go umieścił (npm/pnpm/yarn/bun). Dawny zapis `$(node -p "require.resolve(…)")` w skrypcie wymaga powłoki POSIX, więc nie działa w `cmd.exe`, w którym npm i pnpm uruchamiają skrypty na Windows.
