@@ -1,0 +1,11 @@
+{
+  "name": "acme-monorepo-example",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "mock": "node mock-services.mjs",
+    "dev": "npm run dev -w @acme/web & npm run dev -w @acme/admin & wait",
+    "dev:inspect": "npm run dev:inspect -w @acme/web & npm run dev:inspect -w @acme/admin & wait",
+    "demo": "APPS='[{\"app\":\"@acme/web\",\"url\":\"http://localhost:3101\",\"pages\":[\"/seq\",\"/err\"]},{\"app\":\"@acme/admin\",\"url\":\"http://localhost:3102\",\"pages\":[\"/par\",\"/seq\"]}]' node ../../scripts/mcp-demo.mjs"
+  }
+}
