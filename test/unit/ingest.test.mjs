@@ -36,6 +36,25 @@ test('pomija ignorowane hosty i ruch do inspektorów', () => {
   assert.equal(s.size, 0);
 });
 
+test('eksport OTLP pomijany przy przyjęciu, z efektem do licznika w statusie (issue #4)', () => {
+  const s = createStore({ maxRequests: 10 });
+  const on = { ...ctx, ignoreOtlp: true };
+  assert.deepEqual(applyNetworkEvent(s, session, ...willBeSent('r1', 'http://localhost:4318/v1/traces'), on), [{ type: 'ignored', reason: 'otlp' }]);
+  assert.deepEqual(applyNetworkEvent(s, session, 'Network.loadingFailed', { requestId: 'r1', timestamp: 2, errorText: '' }, on), [], 'dalsze zdarzenia przepadają');
+  assert.deepEqual(applyNetworkEvent(s, session, ...willBeSent('r2', 'https://registry.npmjs.org/next'), on), [{ type: 'ignored', reason: 'hosts' }]);
+  assert.equal(s.size, 0);
+  applyNetworkEvent(s, session, ...willBeSent('r3', 'http://localhost:4318/v1/traces'), { ...ctx, ignoreOtlp: false });
+  assert.equal(s.size, 1);
+});
+
+test('pusty errorText zostaje pustym łańcuchem (render pokazuje opis, issue #3)', () => {
+  const s = createStore({ maxRequests: 10 });
+  applyNetworkEvent(s, session, ...willBeSent('r1', 'http://localhost:4319/x'), ctx);
+  applyNetworkEvent(s, session, 'Network.loadingFailed', { requestId: 'r1', timestamp: 2, type: 'Fetch', errorText: '' }, ctx);
+  assert.equal(s.get('3:r1').state, 'failed');
+  assert.equal(s.get('3:r1').error, '');
+});
+
 test('brak wallTime → czas kolektora; zdarzenia dla nieznanego zapytania są ignorowane', () => {
   const s = createStore({ maxRequests: 10 });
   applyNetworkEvent(s, session, ...willBeSent('r1', 'http://svc/a', { wallTime: undefined }), ctx);

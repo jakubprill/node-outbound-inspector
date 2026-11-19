@@ -32,6 +32,17 @@
   "ignored_hosts": [
     "registry.npmjs.org"
   ],
+  "ignored_otlp": [
+    "*/opentelemetry.proto.collector.{trace,metrics,logs}.v1.*Service/Export",
+    "*:4318/v1/logs",
+    "*:4318/v1/metrics",
+    "*:4318/v1/traces"
+  ],
+  "ignored_requests_total": {
+    "hosts": 0,
+    "inspector": 0,
+    "otlp": 0
+  },
   "last_id": "<num>",
   "ports_scanned": "9431-9441 (2)",
   "redaction": true,

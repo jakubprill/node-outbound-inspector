@@ -38,3 +38,9 @@ test('loadConfig: OUTBOUND_LIBRARY_PATHS', () => {
   assert.deepEqual([...c.libraryPaths], ['packages/http-client/', '@acme_tracing_']);
   assert.ok(Object.isFrozen(c.libraryPaths));
 });
+
+test('loadConfig: eksport OTLP domyślnie pomijany, OUTBOUND_IGNORE_OTLP=0 wyłącza (issue #4)', () => {
+  assert.equal(loadConfig({ env: {} }).ignoreOtlp, true);
+  assert.equal(loadConfig({ env: { OUTBOUND_IGNORE_OTLP: '1' } }).ignoreOtlp, true);
+  assert.equal(loadConfig({ env: { OUTBOUND_IGNORE_OTLP: '0' } }).ignoreOtlp, false);
+});

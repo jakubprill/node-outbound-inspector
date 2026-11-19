@@ -166,6 +166,7 @@ src/
   session.mjs             # cykl życia jednej sesji CDP: identyfikacja, możliwości, hak
   ingest.mjs              # zdarzenia CDP i komunikaty haka → zmiany w magazynie (czyste)
   redact.mjs              # redakcja nagłówków, parametrów URL, pól JSON (czyste)
+  ignore.mjs              # reguły pomijania przy przyjęciu: IGNORE_HOSTS, inspektory, eksport OTLP (czyste)
   store.mjs               # model w pamięci, indeksy, retencja, zapytania (czyste)
   correlate.mjs           # złączenie komunikatu haka z rekordem: requestId, awaryjnie URL+czas (czyste)
   frames.mjs              # klasyfikacja ramek, wybór miejsca wywołania (czyste)
@@ -202,7 +203,7 @@ flowchart LR
   IN["Wejścia<br/>bin · cli/* · mcp/server · mcp/tools"]
   ROOT["collector.mjs<br/>(korzeń kompozycji)"]
   IO["Adaptery I/O<br/>discovery · session · cdp-client<br/>sourcemap · registry"]
-  CORE["Czysty rdzeń<br/>store · ingest · redact · correlate<br/>frames · analyze/* · mcp/render"]
+  CORE["Czysty rdzeń<br/>store · ingest · ignore · redact · correlate<br/>frames · analyze/* · mcp/render"]
   HOOK["hook/*<br/>(w procesie aplikacji)"]
   IN --> ROOT
   ROOT --> IO
