@@ -1,137 +1,144 @@
 # node-outbound-inspector
 
+**English** | [Polski](README.pl.md)
+
 [![test](https://github.com/jakubprill/node-outbound-inspector/actions/workflows/test.yml/badge.svg)](https://github.com/jakubprill/node-outbound-inspector/actions/workflows/test.yml)
 
-Inspekcja **wychodzącego ruchu HTTP** procesów Node.js, np. serwera Next.js wołającego wewnętrzne integracje: w Chrome DevTools oraz dla agentów AI przez serwer **MCP**.
+Inspect the **outbound HTTP traffic** of Node.js processes, e.g. a Next.js server calling internal services: in Chrome DevTools, and for AI agents through an **MCP** server.
 
-- 🔍 Podgląd zapytań serwera (`fetch`/undici, `node:http`, HTTP/2): URL, nagłówki, status, treść, czas.
-- 🧩 **Wiele aplikacji naraz** (monorepo): każda wykrywana i nazywana automatycznie.
-- 🧭 **Przypisanie do żądania strony**: wiadomo, które wejście na `/checkout` wywołało które zapytania, nawet gdy kilka stron renderuje się równolegle.
-- 🌊 **Wykrywanie zapytań sekwencyjnych (waterfall)** i wyliczanie zysku z `Promise.all`, a także wykrywanie błędów 4xx/5xx.
-- 📦 Zero zależności, **Node ≥ 24** (kolektor i aplikacje).
+- 🔍 See the server's requests (`fetch`/undici, `node:http`, HTTP/2): URL, headers, status, body, timing.
+- 🧩 **Several apps at once** (monorepo): each one is discovered and named automatically.
+- 🧭 **Page correlation**: you know which visit to `/checkout` triggered which requests, even when several pages render in parallel.
+- 🌊 **Detects sequential requests (waterfalls)**, estimates the gain from `Promise.all`, and reports 4xx/5xx errors.
+- 📦 Zero dependencies, **Node ≥ 24** (collector and apps).
 
-> Narzędzie tylko do **lokalnego developmentu**: inspektor Node daje pełną kontrolę nad procesem.
+> For **local development only**: the Node inspector gives full control over the process.
 
-## Jak to działa
+## How it works
 
 ```
- przeglądarka ──► Next.js (Node) ──► wewnętrzne serwisy
-                      │  --inspect=<port> --experimental-network-inspection
-                      ▼  (Chrome DevTools Protocol: zdarzenia Network.*)
-        ┌─────────────┴─────────────┐
- Chrome DevTools              outbound-mcp  ──► agent AI (Claude Code, Cursor, …)
- („dedicated DevTools         (MCP, stdio)
-  for Node” → Network)
+ browser ──► Next.js (Node) ──► internal services
+                 │  --inspect=<port> --experimental-network-inspection
+                 ▼  (Chrome DevTools Protocol: Network.* events)
+   ┌─────────────┴─────────────┐
+ Chrome DevTools          outbound-mcp  ──► AI agent (Claude Code, Cursor, …)
+ ("dedicated DevTools     (MCP, stdio)
+  for Node" → Network)
 ```
 
-Node od wersji 22.6 / 20.18 ma eksperymentalną flagę `--experimental-network-inspection`, która wysyła zdarzenia sieciowe do podłączonego klienta DevTools. `outbound-mcp` podłącza się jako taki klient do każdego procesu, zbiera zdarzenia i udostępnia je agentowi jako narzędzia MCP.
+Node has an experimental `--experimental-network-inspection` flag (since 22.6 / 20.18; this tool requires Node ≥ 24) that sends network events to an attached DevTools client. `outbound-mcp` attaches as such a client to every process, collects the events and exposes them to the agent as MCP tools.
 
-## Szybki start
+## Quick start
 
-### 1. Uruchom aplikację z inspekcją sieci
-Dodaj narzędzie jako devDependency (w monorepo: w katalogu głównym), np. `"node-outbound-inspector": "github:jakubprill/node-outbound-inspector#<tag>"`, i w aplikacji:
+### 1. Run the app with network inspection
+Add the tool as a devDependency (in a monorepo: at the root), e.g. `"node-outbound-inspector": "github:jakubprill/node-outbound-inspector#<tag>"`, and in the app:
 ```jsonc
-// package.json aplikacji — każda aplikacja w monorepo ma WŁASNY port inspektora
+// app package.json — every app in a monorepo gets its OWN inspector port
 "dev:inspect": "outbound-next dev --port 3101 --inspect=9231"
 ```
-`outbound-next` znajduje `next` tak jak `require` z katalogu aplikacji i uruchamia go przez `node --experimental-network-inspection`. Wszystkie argumenty idą do `next`, a kod wyjścia i sygnały wracają do menedżera pakietów. Nie zależy od powłoki, więc działa z npm, pnpm, Yarn i Bun na Windows (`cmd.exe`, PowerShell), macOS i Linuksie. Ostrzega, gdy brakuje `--inspect=<port>` albo gdy inspektor ma słuchać poza `127.0.0.1`.
-Plik CLI można wskazać ręcznie zmienną `OUTBOUND_NEXT_BIN` (ścieżka względem katalogu aplikacji).
+`outbound-next` resolves `next` the way `require` does from the app directory and runs it via `node --experimental-network-inspection`. All arguments go to `next`; the exit code and signals are passed back to the package manager. It does not depend on a shell, so it works with npm, pnpm, Yarn and Bun on Windows (`cmd.exe`, PowerShell), macOS and Linux. It warns when `--inspect=<port>` is missing or when the inspector would listen outside `127.0.0.1`.
+You can point to the CLI file manually with the `OUTBOUND_NEXT_BIN` variable (path relative to the app directory).
 
-<details><summary>Bez instalowania narzędzia</summary>
+<details><summary>Without installing the tool</summary>
 
-Ścieżka do pliku `next` jako zwykły argument `node` działa w każdej powłoce (ukośniki `/` są w porządku także na Windows):
+The path to the `next` file as a plain `node` argument works in any shell (forward slashes `/` are fine on Windows too):
 ```jsonc
 "dev:inspect": "node --experimental-network-inspection ./node_modules/next/dist/bin/next dev --port 3101 --inspect=9231"
-// monorepo, w którym menedżer wyniósł next do katalogu głównego (npm/Bun/Yarn z node_modules):
+// monorepo where the package manager hoisted next to the root (npm/Bun/Yarn with node_modules):
 "dev:inspect": "node --experimental-network-inspection ../../node_modules/next/dist/bin/next dev --port 3101 --inspect=9231"
 ```
-Gdzie leży `next`, sprawdzisz raz: `node -p "require.resolve('next/dist/bin/next')"` w katalogu aplikacji. W pnpm `node_modules/next` w aplikacji to symlink, więc działa wariant `./node_modules/…`. Yarn PnP nie ma `node_modules`, więc ścieżki nie ma czego wskazać. Tam użyj `outbound-next` (Yarn ładuje PnP przez `NODE_OPTIONS`, a proces potomny je dziedziczy; na PnP jeszcze niesprawdzone) albo `nodeLinker: node-modules`.
+Find where `next` lives once: `node -p "require.resolve('next/dist/bin/next')"` in the app directory. With pnpm, `node_modules/next` in the app is a symlink, so the `./node_modules/…` variant works. Yarn PnP has no `node_modules`, so there is no path to point at. Use `outbound-next` there (Yarn loads PnP via `NODE_OPTIONS` and the child process inherits it; not yet verified on PnP) or `nodeLinker: node-modules`.
 
-Dotychczasowy zapis `node --experimental-network-inspection $(node -p "require.resolve('next/dist/bin/next')") dev …` wymaga powłoki POSIX (sh, bash, zsh, Git Bash). npm i pnpm na Windows uruchamiają skrypty w `cmd.exe`, gdzie `$(…)` nie działa.
+The older form `node --experimental-network-inspection $(node -p "require.resolve('next/dist/bin/next')") dev …` needs a POSIX shell (sh, bash, zsh, Git Bash). npm and pnpm on Windows run scripts in `cmd.exe`, where `$(…)` does not work.
 </details>
 
-> ⚠️ Flaga **nie działa** w `NODE_OPTIONS` (Node ją odrzuca). Gdy dwie aplikacje używają tego samego portu (domyślnie 9229), druga po cichu działa bez inspektora.
+> ⚠️ The flag **does not work** in `NODE_OPTIONS` (Node rejects it). When two apps use the same port (9229 by default), the second one silently runs without an inspector.
 
-### 2a. Podgląd w Chrome
-`chrome://inspect` → **Open dedicated DevTools for Node** → zakładka **Network**.
+If your own script spawns the apps (e.g. started with `bun run`), change the spawn arguments the same way, with a unique inspector port per app. The app must run on the Node runtime, not Bun's (`bun --bun` does not work). Step-by-step instructions for agents: [`llms.txt`](llms.txt).
 
-### 2b. Podłącz agenta (MCP)
+### 2a. View in Chrome
+`chrome://inspect` → **Open dedicated DevTools for Node** → **Network** tab.
+
+### 2b. Connect an agent (MCP)
 ```bash
-claude mcp add outbound -- node /ścieżka/do/node-outbound-inspector/src/outbound-mcp.mjs
+claude mcp add outbound -- node /path/to/node-outbound-inspector/src/outbound-mcp.mjs
 ```
-Albo w konfiguracji klienta MCP:
+Or in the MCP client config:
 ```json
-{ "mcpServers": { "outbound": { "command": "node", "args": ["/ścieżka/do/node-outbound-inspector/src/outbound-mcp.mjs"] } } }
+{ "mcpServers": { "outbound": { "command": "node", "args": ["/path/to/node-outbound-inspector/src/outbound-mcp.mjs"] } } }
 ```
 
-## Narzędzia MCP
+## MCP tools
 
-| Narzędzie | Opis |
+| Tool | Description |
 |---|---|
-| `inspector_status` | Podłączone aplikacje: nazwa, port, pid, katalog, stan korelacji stron |
-| `list_server_requests` | Zapytania: aplikacja, strona, metoda, URL, status, czas, miejsce w kodzie |
-| `get_server_request` | Szczegóły: nagłówki żądania i odpowiedzi, treść, stos wywołań |
-| `analyze_server_timeline` | Analiza per aplikacja i per żądanie strony: SEKWENCYJNIE / RÓWNOLEGLE / MIESZANE, możliwa oszczędność, błędy |
-| `clear_server_requests` | Czyszczenie bufora (całość albo jedna aplikacja) |
+| `inspector_status` | Connected apps: name, port, pid, directory, page correlation state |
+| `list_server_requests` | Requests: app, page, method, URL, status, duration, code location |
+| `get_server_request` | Details: request and response headers, body, call stack |
+| `analyze_server_timeline` | Analysis per app and per page request: SEQUENTIAL / PARALLEL / MIXED, potential saving, errors |
+| `clear_server_requests` | Clear the buffer (everything or one app) |
 
-Filtry: `app`, `page_contains`, `url_contains`, `last_ms`, `since_id`.
+Filters: `app`, `page_contains`, `url_contains`, `last_ms`, `since_id`.
 
-Przykładowy przebieg pracy agenta: `clear_server_requests` → otwarcie strony (np. przez [Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp)) → `analyze_server_timeline` → `get_server_request` dla błędów.
+A typical agent workflow: `clear_server_requests` → open a page (e.g. with [Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp)) → `analyze_server_timeline` → `get_server_request` for errors.
 
-### Konfiguracja (zmienne środowiskowe)
-| Zmienna | Domyślnie | Opis |
+Tool descriptions and tool output are currently in Polish.
+
+### Configuration (environment variables)
+| Variable | Default | Description |
 |---|---|---|
-| `INSPECTOR_PORTS` | `9229-9249` | Porty/zakresy inspektorów, np. `9231,9241` |
-| `APP_NAMES` | — | Nazwy po porcie, np. `9231=web,9241=admin`. Domyślnie nazwa pochodzi z `npm_package_name`, potem z `name` w `package.json` w katalogu procesu, potem z nazwy katalogu. |
-| `PAGE_CORRELATION` | `1` | `0` wyłącza wstrzykiwanie kodu korelującego zapytania ze stronami |
-| `OUTBOUND_REDACT` | `1` | `0` wyłącza redakcję sekretów (ostrzeżenie w `inspector_status`) |
-| `OUTBOUND_REDACT_HEADERS` | — | Dodatkowe nagłówki do redakcji, np. `x-acme-token,x-tenant-secret` |
-| `OUTBOUND_BODIES` | `eager` | Treści odpowiedzi: `eager` (od razu), `lazy` (przy `get_server_request`), `off` (nigdy) |
-| `OUTBOUND_BODY_MAX_KB` / `OUTBOUND_BODIES_TOTAL_MB` | `256` / `32` | Limit treści jednej odpowiedzi i wszystkich treści w kolektorze |
-| `OUTBOUND_INSPECTOR_BUFFER_MB` / `OUTBOUND_INSPECTOR_RESOURCE_MB` | `32` / `2` | Limity bufora treści w procesie aplikacji (na sesję) |
-| `OUTBOUND_LIBRARY_PATHS` | — | Dodatkowe fragmenty ścieżek pomijane przy ustalaniu miejsca wywołania (`origin`), np. własny wrapper `fetch` w workspace: `packages/http-client/,@acme_tracing_` |
-| `IGNORE_HOSTS` | `registry.npmjs.org` | Hosty pomijane (Next sam sprawdza aktualizacje) |
-| `OUTBOUND_IGNORE_OTLP` | `1` | Pomija eksport OpenTelemetry (np. `@vercel/otel` bez lokalnego kolektora): `/v1/traces`, `/v1/metrics`, `/v1/logs` na porcie `4318` (dowolny host) i OTLP/gRPC (`…Service/Export`). `0` pokazuje ten ruch. Pominięte reguły i liczniki: `inspector_status` (`ignored_otlp`, `ignored_requests_total`). Eksport do chmury na innym porcie dodaj do `IGNORE_HOSTS`. |
-| `MAX_REQUESTS` | `5000` | Rozmiar bufora |
+| `INSPECTOR_PORTS` | `9229-9249` | Inspector ports/ranges, e.g. `9231,9241` |
+| `APP_NAMES` | — | Names by port, e.g. `9231=web,9241=admin`. By default the name comes from `npm_package_name`, then from `name` in `package.json` in the process directory, then from the directory name. |
+| `PAGE_CORRELATION` | `1` | `0` disables injecting the code that correlates requests with pages |
+| `OUTBOUND_REDACT` | `1` | `0` disables secret redaction (warning in `inspector_status`) |
+| `OUTBOUND_REDACT_HEADERS` | — | Extra headers to redact, e.g. `x-acme-token,x-tenant-secret` |
+| `OUTBOUND_BODIES` | `eager` | Response bodies: `eager` (right away), `lazy` (on `get_server_request`), `off` (never) |
+| `OUTBOUND_BODY_MAX_KB` / `OUTBOUND_BODIES_TOTAL_MB` | `256` / `32` | Limit for one response body and for all bodies in the collector |
+| `OUTBOUND_INSPECTOR_BUFFER_MB` / `OUTBOUND_INSPECTOR_RESOURCE_MB` | `32` / `2` | Body buffer limits inside the app process (per session) |
+| `OUTBOUND_LIBRARY_PATHS` | — | Extra path fragments skipped when finding the call site (`origin`), e.g. your own `fetch` wrapper in the workspace: `packages/http-client/,@acme_tracing_` |
+| `IGNORE_HOSTS` | `registry.npmjs.org` | Hosts to skip (Next checks for updates itself) |
+| `OUTBOUND_IGNORE_OTLP` | `1` | Skips OpenTelemetry export (e.g. `@vercel/otel` without a local collector): `/v1/traces`, `/v1/metrics`, `/v1/logs` on port `4318` (any host) and OTLP/gRPC (`…Service/Export`). `0` shows this traffic. Skipped rules and counters: `inspector_status` (`ignored_otlp`, `ignored_requests_total`). Add cloud export on another port to `IGNORE_HOSTS`. |
+| `MAX_REQUESTS` | `5000` | Buffer size |
 
-## Przykład i testy
+## Example and tests
 
 ```bash
-npm test                         # jednostkowe, golden (kontrakt narzędzi), e2e — bez Next.js i bez sieci
-npm run record                   # nagranie zdarzeń inspektora do test/fixtures/recordings/
-npm run golden:update            # odświeżenie zrzutów golden (zmiana kontraktu → wpis w CHANGELOG)
+npm test                         # unit, golden (tool contract), e2e — no Next.js, no network
+npm run record                   # record inspector events into test/fixtures/recordings/
+npm run golden:update            # refresh golden snapshots (contract change → CHANGELOG entry)
 ```
 
-Budowa kodu i plan rozwoju: [`docs/architecture.md`](docs/architecture.md), decyzje: [`docs/adr/`](docs/adr/).
+Code structure and roadmap: [`docs/architecture.md`](docs/architecture.md), decisions: [`docs/adr/`](docs/adr/) (in Polish).
 
-Przykładowe monorepo z dwiema aplikacjami Next.js: [`examples/nextjs-monorepo`](examples/nextjs-monorepo/README.md)
+Example monorepo with two Next.js apps: [`examples/nextjs-monorepo`](examples/nextjs-monorepo/README.md)
 ```bash
 cd examples/nextjs-monorepo && npm install
-npm run mock          # udawane serwisy na :4001
-npm run dev:inspect   # web :3101 (inspektor 9231) + admin :3102 (inspektor 9241)
-npm run demo          # agent testowy: ruch + analiza
+npm run mock          # fake services on :4001
+npm run dev:inspect   # web :3101 (inspector 9231) + admin :3102 (inspector 9241)
+npm run demo          # test agent: traffic + analysis
 ```
-Skrypty `dev:inspect` aplikacji są przenośne (`outbound-next`). Skrypty zbiorcze w katalogu głównym przykładu (`&`/`wait`, `APPS=…`) wymagają powłoki POSIX; na Windows uruchom każdą aplikację w osobnym terminalu (`npm run dev:inspect -w @acme/web`), szczegóły w README przykładu.
+The apps' `dev:inspect` scripts are portable (`outbound-next`). The aggregate scripts at the example root (`&`/`wait`, `APPS=…`) need a POSIX shell; on Windows run each app in its own terminal (`npm run dev:inspect -w @acme/web`), details in the example's README.
 
-Minimalny klient CDP (to, co robi zakładka Network): [`examples/cdp-network-probe.mjs`](examples/cdp-network-probe.mjs).
+A minimal CDP client (what the Network tab does): [`examples/cdp-network-probe.mjs`](examples/cdp-network-probe.mjs).
 
-## Ograniczenia
-- Funkcja Node jest **eksperymentalna**. Wymagany Node ≥ 24 (testowane w CI na 24 i najnowszej wersji). Na starszym Node kolektor nie startuje, a proces aplikacji nie jest podsłuchiwany (powód w `inspector_status`).
-- **Bun** jako runtime nie jest obsługiwany (WebKit Inspector zamiast CDP). Działa, jeśli Bun służy tylko do instalowania pakietów i uruchamiania skryptów, a aplikacja działa na Node.
-- W Next.js `fetch` jest opakowany przez sam Next, więc stos wywołań nie pokazuje linii strony. Kod znajduje się po URL-u i przypisanej stronie.
-- Zapytania poza kontekstem żądania strony (start serwera, zadania w tle) trafiają do grupy „bez strony”.
-- Edge runtime nie jest objęty.
-- `outbound-mcp` wstrzykuje do procesu kod (`diagnostics_channel` i `AsyncLocalStorage`). Używaj wyłącznie lokalnie, z inspektorem na `127.0.0.1`.
-- Treści z `content-encoding` (gzip, br, deflate, zstd) są dekompresowane (`body_encoding`, `body_encoded_bytes`). Gdy `content-type` ma `charset`, inspektor Node oddaje skompresowane bajty jako zniekształcony tekst i treść ma stan `unavailable`.
-- **Błąd Node [#66551](https://github.com/nodejs/node/issues/66551):** gdy aplikacja czyta odpowiedź `node:http` po `res.setEncoding()` (robi tak wiele bibliotek), a do procesu jest podłączony klient z inspekcją sieci, Node rzuca `Missing dataLength in event` i niszczy połączenie. Aplikacja dostaje wtedy błąd albo nie dostaje odpowiedzi wcale. `outbound-mcp` instaluje w procesie aplikacji obejście przed włączeniem inspekcji (`node_workarounds` w `inspector_status`). **Same Chrome DevTools (bez kolektora) nadal wywołują ten błąd.**
-- Zachowanie inspektora Node, na które narzędzie nie ma wpływu: gdy połączenie `node:http` zerwie się w trakcie odbierania treści, zapytanie zostaje w toku (brak zdarzenia końcowego).
-- Sekrety w nagłówkach i parametrach URL są redagowane, zanim trafią do agenta. Treści odpowiedzi nie są redagowane (na razie), więc przy wrażliwych integracjach użyj `OUTBOUND_BODIES=off`.
+## Limitations
+- The Node feature is **experimental**. Node ≥ 24 is required (tested in CI on 24 and the latest version). On older Node the collector does not start, and an app process is not inspected (the reason is in `inspector_status`).
+- **Bun** as a runtime is not supported (WebKit Inspector instead of CDP). It works if Bun only installs packages and runs scripts while the app runs on Node.
+- In Next.js, `fetch` is wrapped by Next itself, so the call stack does not show the page's line. Find the code by URL and the correlated page.
+- Requests outside a page request (server start, background jobs) go into the "no page" group.
+- The Edge runtime is not covered.
+- `outbound-mcp` injects code into the process (`diagnostics_channel` and `AsyncLocalStorage`). Use it only locally, with the inspector on `127.0.0.1`.
+- Bodies with `content-encoding` (gzip, br, deflate, zstd) are decompressed (`body_encoding`, `body_encoded_bytes`). When `content-type` has a `charset`, the Node inspector returns the compressed bytes as garbled text and the body is marked `unavailable`.
+- **Node bug [#66551](https://github.com/nodejs/node/issues/66551):** when an app reads a `node:http` response after `res.setEncoding()` (many libraries do) while a client with network inspection is attached, Node throws `Missing dataLength in event` and destroys the connection. The app then gets an error or no response at all. `outbound-mcp` installs a workaround in the app process before enabling inspection (`node_workarounds` in `inspector_status`). **Chrome DevTools alone (without the collector) still triggers this bug.**
+- Node inspector behavior the tool cannot change: when a `node:http` connection drops while the body is being received, the request stays in flight (no final event).
+- Secrets in headers and URL parameters are redacted before they reach the agent. Response bodies are not redacted (yet), so use `OUTBOUND_BODIES=off` for sensitive integrations.
 
-## Dokumentacja
-- [`llms.txt`](llms.txt): instrukcja integracji i użycia dla agentów AI
-- [Pełna analiza: problem, alternatywy (proxy, OpenTelemetry/Jaeger), WebMCP, rekomendacje](docs/analysis.md)
-- [Wyniki testów](docs/test-results.md)
-- [Changelog](CHANGELOG.md)
+## Documentation
+- [`llms.txt`](llms.txt): integration and usage guide for AI agents
+- The documents below are in Polish:
+  - [Full analysis: the problem, alternatives (proxy, OpenTelemetry/Jaeger), WebMCP, recommendations](docs/analysis.md)
+  - [Test results](docs/test-results.md)
+  - [Changelog](CHANGELOG.md)
 
-## Licencja
+## License
 [MIT](LICENSE) © 2026 Jakub Prill

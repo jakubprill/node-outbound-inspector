@@ -5,7 +5,8 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/), wersj
 ## [Unreleased]
 
 ### Dodane
-- `llms.txt`: instrukcja dla agentów AI (integracja z projektem, także z własnym skryptem spawnującym aplikacje, weryfikacja, narzędzia, pułapki).
+- `llms.txt` (po angielsku): instrukcja dla agentów AI (integracja z projektem, także z własnym skryptem spawnującym aplikacje, weryfikacja, narzędzia, pułapki).
+- README po angielsku (`README.md`) i po polsku (`README.pl.md`) z przełącznikiem języka.
 
 ### Zmienione
 - **Minimalna wersja Node to 24** (`engines`, CI na 24 i najnowszej). Wsparcie dla Node 22 zostało usunięte:
