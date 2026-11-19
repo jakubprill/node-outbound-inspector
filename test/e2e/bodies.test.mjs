@@ -5,7 +5,6 @@ import assert from 'node:assert/strict';
 import { startMcp } from '../helpers/mcp-client.mjs';
 import { startScenario, sleep } from '../helpers/scenario.mjs';
 
-const NODE_MAJOR = Number(process.versions.node.split('.')[0]);
 const app = () => ({ name: '@acme/web', dir: 'web', script: 'bodies-app.mjs' }); // porty przydziela startScenario
 
 async function withApp(a, env, fn) {
@@ -25,16 +24,8 @@ test('fetch i node:http: treść albo jawny powód jej braku', () => withApp(app
   assert.equal(viaHttp.body_state, 'available');
   assert.equal(viaHttp.body, '{"service":"/small"}');
   const viaFetch = await get('/fetch');
-  if (NODE_MAJOR >= 24) {
-    assert.equal(viaFetch.body_state, 'available');
-    assert.equal(viaFetch.body, '{"service":"/small"}');
-  } else {
-    assert.equal(viaFetch.body_state, 'unavailable', 'zamiast pustego łańcucha');
-    assert.equal(viaFetch.body, null);
-    assert.match(viaFetch.body_reason, /Node 2\d/);
-    const [s] = (await m.call('inspector_status')).apps;
-    assert.ok(s.warnings.some(w => /^Node \d+: /.test(w)), 'ostrzeżenie w statusie');
-  }
+  assert.equal(viaFetch.body_state, 'available');
+  assert.equal(viaFetch.body, '{"service":"/small"}');
   assert.ok(viaFetch.ttfb_ms >= 0 && viaFetch.ttfb_ms <= viaFetch.duration_ms);
 }));
 

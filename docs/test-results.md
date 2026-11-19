@@ -64,3 +64,12 @@ Ten sam URL (`/user`) wołany w tej samej chwili przez obie aplikacje i przez dw
 - **Limit bufora:** przy limicie 32 MB najstarsza z 40 odpowiedzi po 2 MB znika z procesu aplikacji (tryb `lazy` → `evicted`), a w trybie `eager` jej treść zostaje pobrana wcześniej. Działa na Node 22 i 26.
 - **Wyścig ujawniony na Macu:** status mógł pokazać proces przed zakończeniem jego identyfikacji. Naprawione polem `ready`.
 - **Pułapka w testach:** porty 5060/5061 są blokowane przez `fetch` (SIP). Testy ich nie używają.
+
+## 6. Node 24 jako minimum (2026-11-19)
+
+| Środowisko | Testy | Wynik |
+|---|---|---|
+| Linux, Node 24.22.3 | 160 | 158 zielonych, 2 `todo` (wady 1 i 5 → M4, M6), dwa kolejne przebiegi |
+
+- **Błąd Node nodejs/node#66551:** aplikacja czytająca odpowiedź `node:http` po `res.setEncoding()` przy podłączonym kolektorze dostawała `TypeError: Missing dataLength in event` i nie dostawała odpowiedzi. Test `test/e2e/node-fixes.test.mjs` bez obejścia kończy się przekroczeniem czasu, z obejściem przechodzi (proces żyje, treść `available`, `node_workarounds: ["nodejs/node#66551"]`).
+- Niezweryfikowane po zmianie: kodowanie znaków przy gzip w `fetch` na Node ≥ 24 (wcześniej sprawdzone tylko na Node 22).

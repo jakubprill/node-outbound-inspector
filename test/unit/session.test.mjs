@@ -16,8 +16,8 @@ test('flaga sieciowa z execArgv: Network.enable bez flagi nie wystarcza (wada 2)
   assert.equal(noFlag.networkInspection, false);
   assert.match(noFlag.warnings[0], /bez --experimental-network-inspection/);
   const ok = processWarnings({ execArgv: ['--experimental-network-inspection'], node: 'v24.1.0', networkEnabled: true });
-  assert.deepEqual(ok, { networkInspection: true, nodeMajor: 24, warnings: [] });
+  assert.deepEqual(ok, { networkInspection: true, warnings: [] });
   const node22 = processWarnings({ execArgv: ['--experimental-network-inspection'], node: 'v22.23.5', networkEnabled: true });
-  assert.equal(node22.networkInspection, true);
-  assert.match(node22.warnings[0], /^Node 22: /);
+  assert.equal(node22.networkInspection, false, 'Node < 24 nie jest podsłuchiwany');
+  assert.match(node22.warnings[0], /Node 22\.23\.5, a wymagany jest Node ≥ 24/);
 });

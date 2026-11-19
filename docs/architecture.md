@@ -677,8 +677,8 @@ Nagrania powstają skryptem `scripts/record-fixture.mjs`, który zapisuje surowy
 
 | Element | Minimum | Zalecane | Uwagi |
 |---|---|---|---|
-| Kolektor i launcher | Node 22 | Node 24+ | wbudowany `WebSocket`, `util.parseArgs` |
-| Proces aplikacji | Node 22.6 **[D]** | Node 24+ | treść odpowiedzi `fetch` dopiero od 24 **[Z, E5]** |
+| Kolektor i launcher | Node 24 | Node 24+ | na starszym odmawiają startu |
+| Proces aplikacji | Node 24 | Node 24+ | starszy proces nie jest podsłuchiwany (powód w `inspector_status`); na 24 kolektor instaluje obejście nodejs/node#66551 |
 | Next.js | 16.1 (`next dev --inspect`) **[D]** | 16.4 **[U]** | |
 | Bun | tylko menedżer pakietów i skrypty **[Z, E21]** | | runtime nieobsługiwany **[U]** |
 
@@ -898,7 +898,7 @@ Tych rzeczy nie dało się sprawdzić bez Next.js. Każda zajmuje kilka minut na
 5. **`experimental.requestInsights` w Next 16.4.** Czy ocenić je jako uzupełnienie (trafienia w cache) przed M6?
 6. **Język wyników.** Werdykty są dziś po polsku. Zostają, czy przechodzimy na angielski z kodami maszynowymi (`verdict_code`)?
 7. **Zakres.** Czy ktoś używa `next dev --webpack` albo klientów na `node:http` (axios, got) na tyle, żeby miejsce wywołania było tam potrzebne?
-8. **Wersja Node.** ~~Czy wszyscy mają Node ≥ 24?~~ **Rozstrzygnięte (2026-11-19):** docelowo Node ≥ 24. `engines >= 24`, CI na 24 i najnowszej; Node 22 tylko jako łagodna degradacja (ostrzeżenie, `unavailable`), bez testów w CI.
+8. **Wersja Node.** ~~Czy wszyscy mają Node ≥ 24?~~ **Rozstrzygnięte (2026-11-19):** docelowo Node ≥ 24. `engines >= 24`, CI na 24 i najnowszej; Wsparcie Node 22 usunięte: kolektor i `outbound-next` nie startują na Node < 24, a proces aplikacji na Node < 24 nie jest podsłuchiwany. Przy weryfikacji na 24.22.3 znaleziony błąd nodejs/node#66551 (`res.setEncoding()` przy włączonej inspekcji sieci niszczy połączenie); kolektor instaluje obejście w procesie aplikacji (`src/hook/node-fixes.mjs`).
 9. **Podgląd dla ludzi.** Czy `outbound tail` w terminalu jest potrzebne, czy wystarcza Chrome DevTools?
 
 ---

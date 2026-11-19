@@ -4,18 +4,15 @@ import zlib from 'node:zlib';
 import { classifyBody, enforceBodyBudget, parseCodings } from '../../src/bodies.mjs';
 
 const json = { type: 'Fetch', mimeType: 'application/json', responseHeaders: { 'content-type': 'application/json', 'content-length': '19' } };
-const opts = (o = {}) => ({ nodeMajor: 24, maxStoredBytes: 1000, missingState: 'unavailable', ...o });
+const opts = (o = {}) => ({ maxStoredBytes: 1000, missingState: 'unavailable', ...o });
 
 test('pełna treść', () => {
   assert.deepEqual(classifyBody({ body: '{"service":"/user"}', base64Encoded: false }, json, opts()), { state: 'available', data: '{"service":"/user"}', bytes: 19 });
 });
 
-test('Node 22: pusty łańcuch dla fetch → unavailable (wada 4)', () => {
-  const b = classifyBody({ body: '', base64Encoded: false }, json, opts({ nodeMajor: 22 }));
-  assert.equal(b.state, 'unavailable');
-  assert.match(b.reason, /Node 22/);
-  assert.equal(classifyBody({ body: '', base64Encoded: false }, { ...json, responseHeaders: { 'content-length': '0' } }, opts({ nodeMajor: 22 })).state, 'available', 'naprawdę pusta odpowiedź');
-  assert.equal(classifyBody({ body: '', base64Encoded: false }, { type: 'Other', responseHeaders: {} }, opts({ nodeMajor: 22 })).state, 'available', 'node:http: pusta treść bez content-length to pusta odpowiedź');
+test('pusta treść to pusta odpowiedź (Node ≥ 24 zwraca treść fetch)', () => {
+  assert.deepEqual(classifyBody({ body: '', base64Encoded: false }, json, opts()), { state: 'truncated', data: '', bytes: 0, reason: 'bufor inspektora obciął treść (0 z 19 B)' });
+  assert.equal(classifyBody({ body: '', base64Encoded: false }, { ...json, responseHeaders: { 'content-length': '0' } }, opts()).state, 'available');
 });
 
 test('brak treści w inspektorze: evicted (lazy) albo unavailable', () => {
@@ -122,8 +119,6 @@ test('dekompresja: treść binarna nie jest rozpakowywana; pusta treść i tekst
   const b = classifyBody({ body: png.toString('base64'), base64Encoded: true }, { responseHeaders: { 'content-type': 'image/png', 'content-encoding': 'gzip' } }, opts());
   assert.deepEqual(b, { state: 'skipped', encoding: 'gzip', encodedBytes: png.length, reason: 'treść binarna (image/png)' });
   assert.equal(classifyBody({ body: '', base64Encoded: true }, { type: 'Other', responseHeaders: { 'content-type': 'application/json', 'content-encoding': 'gzip' } }, opts()).state, 'available', 'pusta odpowiedź (np. 204, HEAD)');
-  const fetch22 = classifyBody({ body: '', base64Encoded: true }, { type: 'Fetch', responseHeaders: { 'content-type': 'application/json', 'content-encoding': 'gzip', 'content-length': '54' } }, opts({ nodeMajor: 22 }));
-  assert.equal(fetch22.state, 'unavailable', 'fetch na Node 22 nadal bez treści');
   // charset=utf-8: inspektor Node oddaje bajty jako tekst UTF-8 (sprawdzone na Node 22), gzip jest wtedy zniekształcony
   const mangled = zlib.gzipSync(Buffer.from(JSON_TEXT)).toString('utf8');
   const m = classifyBody({ body: mangled, base64Encoded: false }, { responseHeaders: { 'content-type': 'application/json; charset=utf-8', 'content-encoding': 'gzip' } }, opts());

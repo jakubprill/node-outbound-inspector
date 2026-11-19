@@ -1,6 +1,5 @@
-// Aplikacja testowa dla zależności danych (issue #6). Zapytania przez node:http, bo na Node 22 inspektor
-// nie daje treści odpowiedzi fetch. Osobny plik, żeby nie przesuwać linii fake-app.mjs (występują w golden).
-// Treść zbierana jako Buffer: po res.setEncoding() inspektor Node 22 zwraca pustą treść.
+// Aplikacja testowa dla zależności danych (issue #6), zapytania przez node:http. Osobny plik, żeby nie przesuwać
+// linii fake-app.mjs (występują w golden). Treść zbierana jako Buffer, bez setEncoding() (nodejs/node#66551).
 import http from 'node:http';
 const SVC = `http://127.0.0.1:${process.env.SERVICES_PORT || 4711}`;
 const call = (method, path, headers = {}) => new Promise((ok, err) => {

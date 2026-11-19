@@ -31,6 +31,11 @@ import { createCollector } from './collector.mjs';
 import { createTools } from './mcp/tools.mjs';
 import { createMcpServer, serveStdio } from './mcp/server.mjs';
 
+if (Number(process.versions.node.split('.')[0]) < 24) {
+  process.stderr.write(`[outbound-mcp] Node ${process.versions.node} nie jest wspierany. Wymagany Node ≥ 24.\n`);
+  process.exit(1);
+}
+
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const SERVER_INFO = { name: pkg.name, version: pkg.version };
 const INSTRUCTIONS = [

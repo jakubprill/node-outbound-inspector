@@ -25,10 +25,10 @@ test('details: przycięcie treści', () => {
 });
 
 test('details: treść niedostępna → body null i powód', () => {
-  const d = details({ ...r, body: { state: 'unavailable', bytes: 0, reason: 'Node 22 …' } }, 100);
+  const d = details({ ...r, body: { state: 'unavailable', bytes: 0, reason: 'inspektor nie zwrócił treści' } }, 100);
   assert.equal(d.body, null);
   assert.equal(d.body_state, 'unavailable');
-  assert.equal(d.body_reason, 'Node 22 …');
+  assert.equal(d.body_reason, 'inspektor nie zwrócił treści');
 });
 
 test('row: pusty errorText → czytelny status zamiast "FAILED: " (issue #3)', () => {

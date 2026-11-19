@@ -3,22 +3,32 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { connectCdp } from './cdp-client.mjs';
 import { INSTALL_EXPRESSION, DRAIN_EXPRESSION } from './hook/hook.mjs';
+import { NODE_FIXES_EXPRESSION } from './hook/node-fixes.mjs';
 
 const IDENTITY_EXPRESSION = 'JSON.stringify({ cwd: process.cwd(), pkg: process.env.npm_package_name || null, pid: process.pid, argv: process.argv.slice(1).join(" "), execArgv: process.execArgv, node: process.version })';
 const NETWORK_FLAG = '--experimental-network-inspection';
+
+export const MIN_NODE_MAJOR = 24;
+
+/** Czy proces aplikacji działa na wspieranej wersji Node (≥ 24). Nieznana wersja = wspierana. */
+export function supportedNode(node) {
+  const major = Number(String(node ?? '').replace(/^v/, '').split('.')[0]);
+  return !major || major >= MIN_NODE_MAJOR;
+}
 
 /**
  * Ostrzeżenia dla procesu na podstawie tożsamości. `Network.enable` odpowiada sukcesem także bez flagi
  * (wada 2), więc o dostępności inspekcji sieci decyduje obecność flagi w execArgv.
  */
 export function processWarnings({ execArgv = [], node = '', networkEnabled }) {
+  if (!supportedNode(node)) {
+    return { networkInspection: false, warnings: [`Proces działa na Node ${String(node).replace(/^v/, '')}, a wymagany jest Node ≥ ${MIN_NODE_MAJOR}: proces nie jest podsłuchiwany. Uruchom aplikację na Node ${MIN_NODE_MAJOR} lub nowszym.`] };
+  }
   const warnings = [];
   const hasFlag = execArgv.includes(NETWORK_FLAG);
   if (!hasFlag) warnings.push(`Proces działa bez ${NETWORK_FLAG}: zapytania wychodzące nie będą widoczne. Dodaj flagę bezpośrednio do polecenia node (NODE_OPTIONS jej nie przyjmuje).`);
   else if (!networkEnabled) warnings.push('Network.enable nie odpowiedział — inspekcja sieci niedostępna.');
-  const major = Number(String(node).replace(/^v/, '').split('.')[0]);
-  if (hasFlag && major && major < 24) warnings.push(`Node ${major}: wersja niewspierana (wymagany ≥ 24) — treści odpowiedzi fetch są niedostępne (body_state: unavailable).`);
-  return { networkInspection: hasFlag && !!networkEnabled, nodeMajor: major || null, warnings };
+  return { networkInspection: hasFlag && !!networkEnabled, warnings };
 }
 
 /** Nazwa aplikacji: APP_NAMES → npm_package_name → name z package.json w cwd → nazwa katalogu → port. */
@@ -47,10 +57,21 @@ export function openSession(target, port, { config, log, onNetwork, onClose, pro
     try { info = JSON.parse(res?.result?.value ?? '{}'); } catch {}
     session.pid = info.pid; session.cwd = info.cwd; session.argv = info.argv; session.node = info.node;
     session.app = resolveAppName({ port, appNames: config.appNames, pkg: info.pkg, pkgName: readPackageName(info.cwd), cwd: info.cwd });
+    // Node < 24 nie jest wspierany: bez Network.enable i bez haka — status podaje powód
+    if (!supportedNode(info.node)) {
+      const check = processWarnings({ node: info.node });
+      session.networkOk = false; session.warnings = check.warnings;
+      session.ready = true;
+      log(`pominięto app="${session.app}" port=${port} pid=${session.pid}: ${check.warnings[0]}`);
+      return;
+    }
+    // obejścia błędów Node w inspekcji sieci — przed Network.enable (np. nodejs/node#66551: setEncoding wywraca aplikację)
+    const fixes = await session.send('Runtime.evaluate', { expression: NODE_FIXES_EXPRESSION, returnByValue: true });
+    try { session.nodeWorkarounds = JSON.parse(fixes?.result?.value ?? '[]'); } catch { session.nodeWorkarounds = []; }
     // własne limity bufora treści w procesie aplikacji (Node buforuje osobno dla każdej sesji CDP)
     const enabled = !!(await session.send('Network.enable', { maxTotalBufferSize: config.inspectorBufferTotal, maxResourceBufferSize: config.inspectorBufferResource }));
     const check = processWarnings({ execArgv: info.execArgv, node: info.node, networkEnabled: enabled });
-    session.networkOk = check.networkInspection; session.nodeMajor = check.nodeMajor; session.warnings = check.warnings;
+    session.networkOk = check.networkInspection; session.warnings = check.warnings;
     session.pendingPages = [];
     if (config.pageCorrelation) {
       const r = await session.send('Runtime.evaluate', { expression: INSTALL_EXPRESSION, returnByValue: true });

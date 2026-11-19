@@ -15,7 +15,6 @@ test('jest co najmniej jedno nagranie', () => assert.ok(files.length >= 1));
 for (const file of files) {
   const entries = readRecording(DIR + file);
   const node = entries.find(e => e.kind === 'session')?.node ?? '';
-  const major = Number(node.replace(/^v/, '').split('.')[0]);
 
   test(`${file} (${node}): przypisanie do stron i werdykty jak w scenariuszu e2e`, () => {
     const { store } = replay(entries);
@@ -37,8 +36,7 @@ for (const file of files) {
     assert.ok(http.length >= 1 && viaFetch.length >= 1);
     for (const r of http) assert.equal(r.body.state, 'available', r.url);
     for (const r of viaFetch) {
-      if (major >= 24) assert.equal(r.body.state, 'available', r.url);
-      else { assert.equal(r.body.state, 'unavailable', r.url); assert.match(r.body.reason, /Node 2\d/); }
+      assert.equal(r.body.state, 'available', r.url);
     }
   });
 
@@ -47,7 +45,7 @@ for (const file of files) {
     const seq = analyze(store.select(), {})['@acme/web'].by_page_request.find(x => x.page === 'GET /seq');
     const [ch] = seq.sequential_chains;
     assert.deepEqual(ch.dependencies, [], 'zapytania /user, /orders, /offers nie przekazują sobie danych');
-    assert.equal(ch.dependency_check.status, major >= 24 ? 'complete' : 'unavailable');
+    assert.equal(ch.dependency_check.status, 'complete');
     assert.ok(ch.potential_saving_ms > 250, 'brak dowodu zależności — oszczędność jak dawniej');
   });
 }

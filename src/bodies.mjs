@@ -5,7 +5,7 @@
 //   none        — jeszcze nie pobrano (tryb lazy) albo zapytanie bez odpowiedzi
 //   available   — pełna treść tekstowa w body.data
 //   truncated   — część treści (limit kolektora, bufor inspektora, urwany strumień); body.reason mówi który
-//   unavailable — inspektor nie udostępnia treści (np. fetch na Node < 24 zwraca pusty łańcuch)
+//   unavailable — inspektor nie udostępnia treści (np. treść zniekształcona przez inspektor)
 //   evicted     — treść usunięta (z bufora inspektora albo z budżetu kolektora)
 //   skipped     — nie pokazana jako tekst: treść binarna, tryb off albo kodowanie, którego nie da się
 //                 zdekodować (wtedy body.data to surowe bajty w base64, a body.reason to mówi)
@@ -85,10 +85,10 @@ export function decodeContent(raw, codings, limit) {
 /**
  * @param {any} res wynik Network.getResponseBody albo null (błąd / brak treści w inspektorze)
  * @param {{ type?: string, mimeType?: string, responseHeaders?: object }} record
- * @param {{ nodeMajor: number, maxStoredBytes: number, missingState: 'evicted' | 'unavailable' }} opts
+ * @param {{ maxStoredBytes: number, missingState: 'evicted' | 'unavailable' }} opts
  * @returns {{ state: string, data?: string, bytes?: number, encodedBytes?: number, encoding?: string, reason?: string }}
  */
-export function classifyBody(res, record, { nodeMajor, maxStoredBytes, missingState }) {
+export function classifyBody(res, record, { maxStoredBytes, missingState }) {
   if (!res) return { state: missingState, reason: missingState === 'evicted' ? 'treść nie jest już dostępna w inspektorze' : 'inspektor nie zwrócił treści' };
   const contentType = header(record.responseHeaders, 'content-type') ?? record.mimeType ?? '';
   const declared = Number(header(record.responseHeaders, 'content-length')); // bajty na łączu, czyli po kompresji
@@ -119,9 +119,6 @@ export function classifyBody(res, record, { nodeMajor, maxStoredBytes, missingSt
   }
   const wireBytes = raw ? raw.length : (encoding ? null : bytes); // treść tekstowa z kodowaniem: rozmiar na łączu nieznany
 
-  if (wireBytes === 0 && record.type === 'Fetch' && nodeMajor < 24 && !(declared === 0)) {
-    return { state: 'unavailable', bytes: 0, reason: `Node ${nodeMajor} nie udostępnia treści odpowiedzi fetch (wymagany Node ≥ 24)` };
-  }
   if (over) {
     return { state: 'truncated', data: text, ...enc, reason: `limit kolektora ${maxStoredBytes} B po dekompresji (skompresowana treść: ${raw.length} B)` };
   }

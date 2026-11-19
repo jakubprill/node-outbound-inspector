@@ -5,7 +5,14 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/), wersj
 ## [Unreleased]
 
 ### Zmienione
-- **Minimalna wersja Node to 24** (`engines`, CI na 24 i najnowszej). Na starszym Node narzędzie działa dalej w ograniczonym zakresie, z ostrzeżeniem, a `outbound-next` ostrzega przy starcie. Nagranie zdarzeń z Node 24 zostało dodane do testów.
+- **Minimalna wersja Node to 24** (`engines`, CI na 24 i najnowszej). Wsparcie dla Node 22 zostało usunięte:
+  - kolektor (`outbound-mcp`) i `outbound-next` odmawiają startu na Node < 24;
+  - proces aplikacji na Node < 24 nie jest podsłuchiwany, a powód jest w `inspector_status`;
+  - kod i nagranie zdarzeń dla Node 22 zostały usunięte;
+  - doszło nagranie zdarzeń z Node 24.
+
+### Naprawione
+- **Podłączenie kolektora wywracało połączenia aplikacji** czytającej odpowiedzi `node:http` po `res.setEncoding()`. To błąd Node [#66551](https://github.com/nodejs/node/issues/66551), zweryfikowany na Node 24.22.3: `TypeError: Missing dataLength in event`, a aplikacja nie dostaje odpowiedzi. Kolektor instaluje w procesie aplikacji obejście przed `Network.enable` (`src/hook/node-fixes.mjs`), a `inspector_status` pokazuje je w nowym polu `node_workarounds`.
 
 ### Naprawione (zgłoszenia #1–#6)
 - **#1** Treści z `content-encoding` (gzip, x-gzip, br, deflate zlib/raw, zstd) są dekompresowane. Wieloetapowe kodowanie i wielkość liter są obsługiwane, a limit wyniku chroni przed bombą dekompresyjną (stan `truncated`). Obcięcie jest wykrywane po bajtach skompresowanych. Dochodzą pola `body_encoding` i `body_encoded_bytes`. Uszkodzone lub nieznane kodowanie daje stan `skipped` z powodem. Odpowiedź z `charset` w `content-type`, którą inspektor Node zamienia na zniekształcony tekst, ma stan `unavailable`.
@@ -17,7 +24,6 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/), wersj
 
 ### Znane ograniczenia (znalezione przy zgłoszeniach)
 - `node:http`: gdy połączenie zerwie się w trakcie odbierania treści, inspektor Node nie wysyła ani `loadingFinished`, ani `loadingFailed`, więc zapytanie zostaje w toku.
-- `node:http` na Node 22: po `res.setEncoding()` inspektor zwraca pustą treść.
 
 ### Naprawione (M2 — poprawność i bezpieczeństwo rdzenia)
 - **Wada 2:** proces bez `--experimental-network-inspection` nie jest już raportowany jako działający. `inspector_status` sprawdza flagę w `process.execArgv` (bo `Network.enable` odpowiada sukcesem także bez niej) i podaje powód w `warnings`.

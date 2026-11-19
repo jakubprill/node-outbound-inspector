@@ -123,7 +123,8 @@ Minimalny klient CDP (to, co robi zakładka Network): [`examples/cdp-network-pro
 - Edge runtime nie jest objęty.
 - `outbound-mcp` wstrzykuje do procesu kod (`diagnostics_channel` i `AsyncLocalStorage`). Używaj wyłącznie lokalnie, z inspektorem na `127.0.0.1`.
 - Treści z `content-encoding` (gzip, br, deflate, zstd) są dekompresowane (`body_encoding`, `body_encoded_bytes`). Gdy `content-type` ma `charset`, inspektor Node oddaje skompresowane bajty jako zniekształcony tekst i treść ma stan `unavailable`.
-- Zachowania inspektora Node, na które narzędzie nie ma wpływu: gdy połączenie `node:http` zerwie się w trakcie odbierania treści, zapytanie zostaje w toku (brak zdarzenia końcowego), a na Node 22 po `res.setEncoding()` treść `node:http` jest pusta.
+- **Błąd Node [#66551](https://github.com/nodejs/node/issues/66551):** gdy aplikacja czyta odpowiedź `node:http` po `res.setEncoding()` (robi tak wiele bibliotek), a do procesu jest podłączony klient z inspekcją sieci, Node rzuca `Missing dataLength in event` i niszczy połączenie. Aplikacja dostaje wtedy błąd albo nie dostaje odpowiedzi wcale. `outbound-mcp` instaluje w procesie aplikacji obejście przed włączeniem inspekcji (`node_workarounds` w `inspector_status`). **Same Chrome DevTools (bez kolektora) nadal wywołują ten błąd.**
+- Zachowanie inspektora Node, na które narzędzie nie ma wpływu: gdy połączenie `node:http` zerwie się w trakcie odbierania treści, zapytanie zostaje w toku (brak zdarzenia końcowego).
 - Sekrety w nagłówkach i parametrach URL są redagowane, zanim trafią do agenta. Treści odpowiedzi nie są redagowane (na razie), więc przy wrażliwych integracjach użyj `OUTBOUND_BODIES=off`.
 
 ## Dokumentacja

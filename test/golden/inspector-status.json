@@ -6,6 +6,9 @@
       "cwd": "<root>/test/fixtures/apps/admin",
       "network_inspection": true,
       "node": "<str>",
+      "node_workarounds": [
+        "nodejs/node#66551"
+      ],
       "page_correlation": true,
       "pid": "<num>",
       "port": "<num>",
@@ -19,6 +22,9 @@
       "cwd": "<root>/test/fixtures/apps/web",
       "network_inspection": true,
       "node": "<str>",
+      "node_workarounds": [
+        "nodejs/node#66551"
+      ],
       "page_correlation": true,
       "pid": "<num>",
       "port": "<num>",

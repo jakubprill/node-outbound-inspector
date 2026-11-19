@@ -70,11 +70,11 @@ test('wartość znana przed końcem A (URL A, przekazany nagłówek, adres stron
 });
 
 test('brak treści odpowiedzi = stan nieznany, nie „niezależne”; oszczędność jak dawniej', () => {
-  const unavailable = { state: 'unavailable', bytes: 0, reason: 'Node 22 nie udostępnia treści odpowiedzi fetch (wymagany Node ≥ 24)' };
+  const unavailable = { state: 'unavailable', bytes: 0, reason: 'inspektor nie zwrócił treści)' };
   const ch = chainOf([req(0, 0.1, { body: unavailable }), req(0.101, 0.2, { url: `http://svc/s?orderId=${ORDER}` })]);
   assert.deepEqual(ch.dependencies, []);
   assert.equal(ch.dependency_check.status, 'unavailable');
-  assert.match(ch.dependency_check.reason, /Node 22/);
+  assert.match(ch.dependency_check.reason, /inspektor nie zwrócił treści/);
   assert.equal(ch.potential_saving_ms, 100);
   assert.equal(ch.hint, HINTS.independent, 'wskazówka warunkowa — „jeśli nie zależą od siebie”');
   // trzy kroki: treść pierwszego niedostępna, drugiego dostępna → sprawdzenie częściowe

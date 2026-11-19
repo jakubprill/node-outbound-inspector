@@ -18,11 +18,11 @@ export function replay(entries, { maxRequests = 5000, ignoreHosts = ['registry.n
     return sessions.get(port);
   };
   for (const e of entries) {
-    if (e.kind === 'session') Object.assign(sessionFor(e.port), { pid: e.pid, app: e.app, nodeMajor: Number(String(e.node ?? 'v24').slice(1).split('.')[0]) });
+    if (e.kind === 'session') Object.assign(sessionFor(e.port), { pid: e.pid, app: e.app });
     else if (e.kind === 'network') applyNetworkEvent(store, sessionFor(e.port), e.method, e.params, { ignoreHosts, inspectorPorts, nowMs: e.nowMs, redact, bodies });
     else if (e.kind === 'body') {
       const s = sessionFor(e.port), r = store.get(`${s.processId}:${e.requestId}`);
-      if (r) r.body = classifyBody(e.res, r, { nodeMajor: s.nodeMajor ?? 24, maxStoredBytes: 256 * 1024, missingState: 'unavailable' });
+      if (r) r.body = classifyBody(e.res, r, { maxStoredBytes: 256 * 1024, missingState: 'unavailable' });
     }
     else if (e.kind === 'hook') {
       const s = sessionFor(e.port);
