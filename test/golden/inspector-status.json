@@ -5,26 +5,35 @@
       "buffered_requests": 7,
       "cwd": "<root>/test/fixtures/apps/admin",
       "network_inspection": true,
+      "node": "<str>",
       "page_correlation": true,
       "pid": "<num>",
       "port": "<num>",
-      "since": "<str>"
+      "ready": true,
+      "since": "<str>",
+      "warnings": []
     },
     {
       "app": "@acme/web",
       "buffered_requests": 4,
       "cwd": "<root>/test/fixtures/apps/web",
       "network_inspection": true,
+      "node": "<str>",
       "page_correlation": true,
       "pid": "<num>",
       "port": "<num>",
-      "since": "<str>"
+      "ready": true,
+      "since": "<str>",
+      "warnings": []
     }
   ],
+  "bodies": "eager",
   "buffered_requests_total": 11,
   "ignored_hosts": [
     "registry.npmjs.org"
   ],
   "last_id": "<num>",
-  "ports_scanned": "9431-9441 (2)"
+  "ports_scanned": "9431-9441 (2)",
+  "redaction": true,
+  "warnings": []
 }

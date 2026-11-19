@@ -22,6 +22,7 @@
           }
         ],
         "verdict": "pojedyncze zapytanie",
+        "verdict_code": "single",
         "wall_ms": "<num>"
       },
       {
@@ -80,6 +81,7 @@
           }
         ],
         "verdict": "SEKWENCYJNIE (waterfall) — każde zapytanie czeka na poprzednie",
+        "verdict_code": "sequential",
         "wall_ms": "<num>"
       }
     ],
@@ -95,6 +97,7 @@
         "url": "http://127.0.0.1:<port>/payments?ms=60&status=500"
       }
     ],
+    "in_flight": 0,
     "total_requests": 4,
     "unattributed": []
   }

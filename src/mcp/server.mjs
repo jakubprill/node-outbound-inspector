@@ -1,9 +1,15 @@
 // Serwer MCP: JSON-RPC 2.0, jedna wiadomość na linię (stdio). `handle` nie dotyka strumieni.
 
+/** Wspierane wersje protokołu MCP (era z `initialize`), od najnowszej. */
+export const SUPPORTED_PROTOCOL_VERSIONS = Object.freeze(['2025-06-18', '2025-03-26', '2024-11-05']);
+
+/** Wersja wybrana dla klienta: jego, jeśli ją znamy; w przeciwnym razie najnowsza nasza. */
+export const negotiateVersion = requested => SUPPORTED_PROTOCOL_VERSIONS.includes(requested) ? requested : SUPPORTED_PROTOCOL_VERSIONS[0];
+
 /**
- * @param {{ info: { name: string, version: string }, tools: Record<string, { description: string, inputSchema: object, run: Function }>, beforeCall?: () => Promise<unknown> }} opts
+ * @param {{ info: { name: string, version: string }, instructions?: string, tools: Record<string, { description: string, inputSchema: object, run: Function }>, beforeCall?: () => Promise<unknown> }} opts
  */
-export function createMcpServer({ info, tools, beforeCall = async () => {} }) {
+export function createMcpServer({ info, instructions, tools, beforeCall = async () => {} }) {
   /** @returns {Promise<object | null>} odpowiedź albo null (notyfikacja lub nieczytelna wiadomość) */
   async function handle(msg) {
     const { id, method, params } = msg;
@@ -11,9 +17,10 @@ export function createMcpServer({ info, tools, beforeCall = async () => {} }) {
     try {
       let result;
       if (method === 'initialize') result = {
-        protocolVersion: params?.protocolVersion || '2025-06-18',
+        protocolVersion: negotiateVersion(params?.protocolVersion),
         capabilities: { tools: {} },
         serverInfo: { name: info.name, version: info.version },
+        ...(instructions ? { instructions } : {}),
       };
       else if (method === 'ping') result = {};
       else if (method === 'tools/list') result = { tools: Object.entries(tools).map(([name, t]) => ({ name, description: t.description, inputSchema: t.inputSchema })) };

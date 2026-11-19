@@ -11,7 +11,7 @@ const sel = {
 };
 
 /**
- * @param {{ store: any, status: () => object, now: () => number }} collector
+ * @param {{ store: any, status: () => object, now: () => number, ensureBody: (r: any) => Promise<any> }} collector
  */
 export function createTools(collector) {
   const { store } = collector;
@@ -29,10 +29,10 @@ export function createTools(collector) {
     get_server_request: {
       description: 'Szczegóły jednego zapytania: nagłówki żądania i odpowiedzi, treść odpowiedzi, stos wywołań.',
       inputSchema: { type: 'object', properties: { id: { type: 'number' }, max_body_chars: { type: 'number' } }, required: ['id'] },
-      run: ({ id, max_body_chars = 4000 }) => {
+      run: async ({ id, max_body_chars = 4000 }) => {
         const r = store.byId(id);
         if (!r) throw new Error(`Brak zapytania o id ${id}`);
-        return details(r, max_body_chars);
+        return details(await collector.ensureBody(r), max_body_chars);
       },
     },
     analyze_server_timeline: {

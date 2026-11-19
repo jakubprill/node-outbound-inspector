@@ -3,7 +3,7 @@
 // który testy jednostkowe odtwarzają bez procesów i sieci (test/helpers/replay.mjs).
 //
 //   node scripts/record-fixture.mjs --ports 9231,9241 --out nagranie.ndjson [--ms 5000]
-//   node scripts/record-fixture.mjs --scenario --out test/fixtures/recordings/two-apps-node22.ndjson
+//   node scripts/record-fixture.mjs --scenario   (→ test/fixtures/recordings/two-apps-node<wersja>.ndjson)
 //
 // --scenario uruchamia aplikacje testowe (test/fixtures) i generuje na nich ruch.
 // Uwaga: nagranie z prawdziwej aplikacji może zawierać sekrety (nagłówki, adresy) — przejrzyj przed commitem.
@@ -17,6 +17,7 @@ const { values: opt } = parseArgs({ options: {
   ports: { type: 'string', default: '9229-9249' }, out: { type: 'string' }, ms: { type: 'string', default: '5000' },
   scenario: { type: 'boolean', default: false },
 } });
+if (!opt.out && opt.scenario) opt.out = new URL(`../test/fixtures/recordings/two-apps-node${process.versions.node.split('.')[0]}.ndjson`, import.meta.url).pathname;
 if (!opt.out) { console.error('Podaj --out <plik.ndjson>'); process.exit(1); }
 
 const lines = [];
@@ -36,12 +37,18 @@ if (opt.scenario) {
 
 const config = loadConfig({ env: { INSPECTOR_PORTS: opt.ports, IGNORE_HOSTS: process.env.IGNORE_HOSTS } });
 const sessions = new Map();
+let processSeq = 0;
 const discovery = createDiscovery(config, {
   isKnown: url => sessions.has(url),
   onTarget: (target, port) => {
     const s = openSession(target, port, {
-      config, log: m => console.error('[record]', m),
-      onNetwork: (session, method, params) => write({ kind: 'network', port: session.port, method, params }),
+      config, log: m => console.error('[record]', m), processId: ++processSeq,
+      onNetwork: (session, method, params) => {
+        write({ kind: 'network', port: session.port, method, params });
+        // treść odpowiedzi tak, jak zwraca ją inspektor (null = błąd) — do testów klasyfikacji treści
+        if (method === 'Network.loadingFinished') session.send('Network.getResponseBody', { requestId: params.requestId })
+          .then(res => write({ kind: 'body', port: session.port, requestId: params.requestId, res }));
+      },
       onClose: x => sessions.delete(x.url),
     });
     sessions.set(s.url, s);
@@ -51,7 +58,7 @@ discovery.start();
 
 const ready = () => [...sessions.values()].filter(s => s.networkOk !== undefined && (!config.pageCorrelation || s.pageCorrelation !== undefined));
 for (let i = 0; i < 100 && ready().length < (scenario ? SCENARIO_APPS.length : 1); i++) await sleep(100);
-for (const s of ready()) write({ kind: 'session', port: s.port, pid: s.pid, app: s.app, cwd: s.cwd ? '<cwd>' : null });
+for (const s of ready()) write({ kind: 'session', port: s.port, pid: s.pid, app: s.app, cwd: s.cwd ? '<cwd>' : null, node: s.node });
 
 const drain = async () => {
   for (const s of ready()) { const entries = await s.drainHookLog(); if (entries.length) write({ kind: 'hook', port: s.port, entries }); }

@@ -18,6 +18,13 @@ test('initialize odsyła wersję protokołu klienta', async () => {
   assert.deepEqual(res.result, { protocolVersion: '2025-03-26', capabilities: { tools: {} }, serverInfo: { name: 'x', version: '1' } });
 });
 
+test('nieznana wersja protokołu → najnowsza wspierana; instructions', async () => {
+  const s2 = createMcpServer({ info: { name: 'x', version: '1' }, instructions: 'Używaj ostrożnie.', tools: {} });
+  const res = await s2.handle({ id: 1, method: 'initialize', params: { protocolVersion: '1999-01-01' } });
+  assert.equal(res.result.protocolVersion, '2025-06-18');
+  assert.equal(res.result.instructions, 'Używaj ostrożnie.');
+});
+
 test('ping, tools/list, notyfikacje', async () => {
   assert.deepEqual((await server.handle({ id: 2, method: 'ping' })).result, {});
   assert.deepEqual((await server.handle({ id: 3, method: 'tools/list' })).result.tools.map(t => t.name), ['ok', 'boom']);

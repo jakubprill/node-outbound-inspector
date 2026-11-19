@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { row, details, NO_ORIGIN } from '../../src/mcp/render.mjs';
 
-const r = { id: 7, app: 'web', page: { method: 'GET', url: '/seq' }, method: 'GET', url: 'http://svc/a', status: 200, tsStart: 1, tsEnd: 1.15, origin: [], port: 9231, pid: 1, wallStart: 0, body: 'abcdef' };
+const r = { id: 7, app: 'web', page: { method: 'GET', url: '/seq' }, method: 'GET', url: 'http://svc/a', status: 200, tsStart: 1, tsResponse: 1.04, tsEnd: 1.15, origin: [], port: 9231, pid: 1, wallStart: 0, body: { state: 'available', data: 'abcdef', bytes: 6 } };
 
 test('row: czas, strona, brak ramki', () => {
   assert.deepEqual(row(r, 0.9), { id: 7, app: 'web', page: 'GET /seq', method: 'GET', url: 'http://svc/a', status: 200, start_ms: 100, duration_ms: 150, origin: NO_ORIGIN });
@@ -20,4 +20,13 @@ test('details: przycięcie treści', () => {
   assert.equal(d.body, 'abc');
   assert.equal(d.body_truncated, true);
   assert.equal(d.wallStart, '1970-01-01T00:00:00.000Z');
+  assert.equal(d.body_state, 'available');
+  assert.equal(d.ttfb_ms, 40);
+});
+
+test('details: treść niedostępna → body null i powód', () => {
+  const d = details({ ...r, body: { state: 'unavailable', bytes: 0, reason: 'Node 22 …' } }, 100);
+  assert.equal(d.body, null);
+  assert.equal(d.body_state, 'unavailable');
+  assert.equal(d.body_reason, 'Node 22 …');
 });

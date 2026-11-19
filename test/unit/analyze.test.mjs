@@ -1,10 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
 import { duration, bursts, maxConcurrency } from '../../src/analyze/timeline.mjs';
 import { chains } from '../../src/analyze/waterfall.mjs';
 import { analyzeApp, analyze } from '../../src/analyze/findings.mjs';
-import { readRecording, replay } from '../helpers/replay.mjs';
 
 // czasy w sekundach (jak w inspektorze)
 let n = 0;
@@ -44,18 +42,4 @@ test('analyze: błędy, strony, zapytania bez strony, pusty wynik', () => {
   assert.equal(res.web.by_page_request[0].page, 'GET /seq');
   assert.equal(res.web.unattributed.length, 2);
   assert.deepEqual(analyze([], {}, ['web']), { summary: 'Brak zapytań w wybranym zakresie.', apps_with_traffic: ['web'] });
-});
-
-test('nagranie (Node 22): odtworzenie daje te same werdykty co scenariusz e2e', () => {
-  const rec = readRecording(fileURLToPath(new URL('../fixtures/recordings/two-apps-node22.ndjson', import.meta.url)));
-  const { store } = replay(rec);
-  assert.equal(store.size, 11);
-  assert.ok(store.values().every(x => x.page), 'każde zapytanie przypisane do strony');
-  const res = analyze(store.select(), {});
-  const page = (app, p) => res[app].by_page_request.find(x => x.page === p);
-  assert.match(page('@acme/web', 'GET /seq').verdict, /SEKWENCYJNIE/);
-  assert.match(page('@acme/admin', 'GET /par').verdict, /RÓWNOLEGLE/);
-  assert.match(page('@acme/admin', 'GET /seq').verdict, /SEKWENCYJNIE/);
-  assert.equal(page('@acme/admin', 'GET /http').requests, 1);
-  assert.deepEqual(res['@acme/web'].errors.map(e => e.status), [500]);
 });

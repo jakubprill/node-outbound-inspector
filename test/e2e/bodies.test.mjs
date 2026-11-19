@@ -1,0 +1,69 @@
+// Treści odpowiedzi (wada 4): jawny stan zamiast pustego łańcucha, zależność od wersji Node,
+// limity bufora inspektora w procesie aplikacji i tryby eager/lazy.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { startMcp } from '../helpers/mcp-client.mjs';
+import { startScenario, sleep } from '../helpers/scenario.mjs';
+
+const NODE_MAJOR = Number(process.versions.node.split('.')[0]);
+const app = (port, inspect) => ({ name: '@acme/web', dir: 'web', port, inspect, script: 'bodies-app.mjs' });
+
+async function withApp(a, env, fn) {
+  const sc = await startScenario({ servicesPort: a.port - 1, apps: [a] });
+  const m = await startMcp({ env: { INSPECTOR_PORTS: String(a.inspect), ...env }, stderr: 'ignore' });
+  try { await m.waitForApps(1); return await fn(sc, m); } finally { m.close(); sc.stop(); }
+}
+
+test('fetch i node:http: treść albo jawny powód jej braku', () => withApp(app(4781, 9681), {}, async (sc, m) => {
+  await sc.hit(sc.apps[0], '/fetch'); await sc.hit(sc.apps[0], '/http'); await sleep(400);
+  const get = async path => {
+    const rows = await m.call('list_server_requests', { url_contains: '/small' });
+    const r = rows.find(x => x.page === `GET ${path}`) ?? rows[path === '/fetch' ? 0 : 1];
+    return m.call('get_server_request', { id: r.id });
+  };
+  const viaHttp = await get('/http');
+  assert.equal(viaHttp.body_state, 'available');
+  assert.equal(viaHttp.body, '{"service":"/small"}');
+  const viaFetch = await get('/fetch');
+  if (NODE_MAJOR >= 24) {
+    assert.equal(viaFetch.body_state, 'available');
+    assert.equal(viaFetch.body, '{"service":"/small"}');
+  } else {
+    assert.equal(viaFetch.body_state, 'unavailable', 'zamiast pustego łańcucha');
+    assert.equal(viaFetch.body, null);
+    assert.match(viaFetch.body_reason, /Node 2\d/);
+    const [s] = (await m.call('inspector_status')).apps;
+    assert.ok(s.warnings.some(w => /^Node \d+: /.test(w)), 'ostrzeżenie w statusie');
+  }
+  assert.ok(viaFetch.ttfb_ms >= 0 && viaFetch.ttfb_ms <= viaFetch.duration_ms);
+}));
+
+test('limit bufora inspektora: najstarsza z 40 odpowiedzi po 2 MB znika z Node (tryb lazy → evicted)',
+  () => withApp(app(4791, 9691), { OUTBOUND_BODIES: 'lazy', OUTBOUND_INSPECTOR_BUFFER_MB: '32', OUTBOUND_INSPECTOR_RESOURCE_MB: '3' }, async (sc, m) => {
+    await sc.hit(sc.apps[0], '/big?n=40'); await sleep(500);
+    const rows = await m.call('list_server_requests', { url_contains: '/big', limit: 100 });
+    assert.equal(rows.length, 40);
+    const oldest = await m.call('get_server_request', { id: rows[0].id, max_body_chars: 10 });
+    const newest = await m.call('get_server_request', { id: rows.at(-1).id, max_body_chars: 10 });
+    assert.equal(newest.body_state, 'truncated', 'najnowsza dostępna, przycięta limitem kolektora 256 KB');
+    assert.ok(newest.body_bytes > 2_000_000, String(newest.body_bytes));
+    assert.equal(oldest.body_state, 'evicted', 'limit 32 MB dotarł do procesu aplikacji');
+  }));
+
+test('tryb eager: treść najstarszej odpowiedzi pobrana od razu, zanim Node ją usunie',
+  () => withApp(app(4801, 9701), { OUTBOUND_INSPECTOR_BUFFER_MB: '32', OUTBOUND_INSPECTOR_RESOURCE_MB: '3' }, async (sc, m) => {
+    await sc.hit(sc.apps[0], '/big?n=40'); await sleep(800);
+    const rows = await m.call('list_server_requests', { url_contains: '/big', limit: 100 });
+    const oldest = await m.call('get_server_request', { id: rows[0].id, max_body_chars: 10 });
+    assert.equal(oldest.body_state, 'truncated');
+    assert.ok(oldest.body_bytes > 2_000_000, String(oldest.body_bytes));
+    assert.equal(oldest.body, '{"service"');
+  }));
+
+test('tryb off: treści nie są pobierane', () => withApp(app(4811, 9711), { OUTBOUND_BODIES: 'off' }, async (sc, m) => {
+  await sc.hit(sc.apps[0], '/http'); await sleep(300);
+  const [r] = await m.call('list_server_requests', { url_contains: '/small' });
+  const d = await m.call('get_server_request', { id: r.id });
+  assert.equal(d.body_state, 'skipped');
+  assert.equal(d.body, null);
+}));

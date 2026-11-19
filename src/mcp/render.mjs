@@ -14,12 +14,19 @@ export function row(r, t0) {
   };
 }
 
-/** Szczegóły jednego zapytania (narzędzie get_server_request). */
+/** Czas do pierwszego bajtu odpowiedzi w ms. */
+export const ttfb = r => (r.tsResponse != null && r.tsStart != null) ? Math.round((r.tsResponse - r.tsStart) * 1000) : null;
+
+/** Szczegóły jednego zapytania (narzędzie get_server_request). Nagłówki są już zredagowane przy przyjęciu. */
 export function details(r, maxBodyChars) {
+  const data = r.body?.data;
   return {
     ...row(r), port: r.port, pid: r.pid, statusText: r.statusText, mimeType: r.mimeType,
     requestHeaders: r.requestHeaders, responseHeaders: r.responseHeaders,
-    body: r.body?.slice(0, maxBodyChars), body_truncated: (r.body?.length ?? 0) > maxBodyChars,
+    body: data == null ? null : data.slice(0, maxBodyChars), body_truncated: (data?.length ?? 0) > maxBodyChars,
     error: r.error, call_stack: r.origin, wallStart: new Date(r.wallStart).toISOString(),
+    // M2: stan treści zamiast pustego łańcucha; czas do pierwszego bajtu
+    body_state: r.body?.state ?? 'none', body_bytes: r.body?.bytes ?? null, body_reason: r.body?.reason ?? null,
+    ttfb_ms: ttfb(r),
   };
 }

@@ -23,6 +23,14 @@ export function loadConfig({ env = {} } = {}) {
     ignoreHosts: Object.freeze((env.IGNORE_HOSTS ?? 'registry.npmjs.org').split(',').filter(Boolean)),
     maxRequests: Number(env.MAX_REQUESTS || 5000),
     pageCorrelation: env.PAGE_CORRELATION !== '0',
+    redact: env.OUTBOUND_REDACT !== '0',
+    redactHeaders: Object.freeze(String(env.OUTBOUND_REDACT_HEADERS || '').split(',').map(s => s.trim()).filter(Boolean)),
+    // treści odpowiedzi: eager (pobieraj od razu), lazy (przy get_server_request), off (nigdy)
+    bodies: ['eager', 'lazy', 'off'].includes(env.OUTBOUND_BODIES) ? env.OUTBOUND_BODIES : 'eager',
+    bodyMaxBytes: Number(env.OUTBOUND_BODY_MAX_KB || 256) * 1024,            // na odpowiedź w kolektorze
+    bodiesTotalBytes: Number(env.OUTBOUND_BODIES_TOTAL_MB || 32) * 1024 ** 2, // wszystkie treści w kolektorze
+    inspectorBufferTotal: Number(env.OUTBOUND_INSPECTOR_BUFFER_MB || 32) * 1024 ** 2, // Network.enable w procesie aplikacji
+    inspectorBufferResource: Number(env.OUTBOUND_INSPECTOR_RESOURCE_MB || 2) * 1024 ** 2,
     scanIntervalMs: 1500,
     pollIntervalMs: 1000,
     listTimeoutMs: 500,

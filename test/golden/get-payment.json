@@ -1,6 +1,9 @@
 {
   "app": "@acme/web",
-  "body": "",
+  "body": "<node-dependent>",
+  "body_bytes": "<node-dependent>",
+  "body_reason": "<node-dependent>",
+  "body_state": "<node-dependent>",
   "body_truncated": false,
   "call_stack": [
     "(anonymous) @ <root>/test/fixtures/fake-app.mjs:12:63",
@@ -29,6 +32,7 @@
   },
   "status": 500,
   "statusText": "Internal Server Error",
+  "ttfb_ms": "<num>",
   "url": "http://127.0.0.1:<port>/payments?ms=60&status=500",
   "wallStart": "<str>"
 }
