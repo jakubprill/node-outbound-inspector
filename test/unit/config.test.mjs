@@ -31,3 +31,10 @@ test('loadConfig: zmienne środowiskowe', () => {
   assert.equal(c.maxRequests, 10);
   assert.equal(c.appNames[9231], 'web');
 });
+
+test('loadConfig: OUTBOUND_LIBRARY_PATHS', () => {
+  assert.deepEqual([...loadConfig({ env: {} }).libraryPaths], []);
+  const c = loadConfig({ env: { OUTBOUND_LIBRARY_PATHS: ' packages/http-client/ ,, @acme_tracing_ ' } });
+  assert.deepEqual([...c.libraryPaths], ['packages/http-client/', '@acme_tracing_']);
+  assert.ok(Object.isFrozen(c.libraryPaths));
+});

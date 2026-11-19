@@ -31,7 +31,7 @@ export function createCollector(config, { log = () => {}, now = Date.now } = {})
 
   function onNetwork(session, method, params) {
     const effects = applyNetworkEvent(store, session, method, params,
-      { ignoreHosts: config.ignoreHosts, inspectorPorts: config.ports, nowMs: now(), redact, bodies: config.bodies });
+      { ignoreHosts: config.ignoreHosts, inspectorPorts: config.ports, nowMs: now(), redact, bodies: config.bodies, libraryPaths: config.libraryPaths });
     for (const e of effects) {
       if (e.type === 'fetch-body') { const r = store.get(e.key); if (r) fetchBody(r, 'unavailable'); }
     }
