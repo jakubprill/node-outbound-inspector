@@ -78,3 +78,16 @@ test('normalizacja wallTime: ms, sekundy, brak', () => {
   assert.equal(normalizeWallTime(1795097716.628, 1), 1795097716628);
   assert.equal(normalizeWallTime(undefined, 42), 42);
 });
+
+test('origin: ramki bibliotek pomijane, dodatkowe ścieżki z ctx.libraryPaths', () => {
+  const s = createStore({ maxRequests: 10 });
+  const initiator = { stack: { callFrames: [
+    { url: 'file:///repo/.next/dev/server/chunks/node_modules_@vercel_otel_dist_node_07k8e6v._.js', functionName: 'fetch', lineNumber: 11460, columnNumber: 30 },
+    { url: 'file:///repo/packages/http-client/index.js', functionName: 'apiFetch', lineNumber: 0, columnNumber: 0 },
+    { url: 'file:///repo/app/page.js', functionName: 'Page', lineNumber: 4, columnNumber: 19 },
+  ] } };
+  applyNetworkEvent(s, session, ...willBeSent('r1', 'http://svc/a', { initiator }), ctx);
+  applyNetworkEvent(s, session, ...willBeSent('r2', 'http://svc/b', { initiator }), { ...ctx, libraryPaths: ['packages/http-client/'] });
+  assert.deepEqual(s.get('3:r1').origin, ['apiFetch @ /repo/packages/http-client/index.js:1:1', 'Page @ /repo/app/page.js:5:20']);
+  assert.deepEqual(s.get('3:r2').origin, ['Page @ /repo/app/page.js:5:20']);
+});

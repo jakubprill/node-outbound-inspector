@@ -24,6 +24,8 @@ export function loadConfig({ env = {} } = {}) {
     maxRequests: Number(env.MAX_REQUESTS || 5000),
     pageCorrelation: env.PAGE_CORRELATION !== '0',
     redact: env.OUTBOUND_REDACT !== '0',
+    // dodatkowe fragmenty ścieżek traktowane jak biblioteki przy wyborze miejsca wywołania (frames.mjs)
+    libraryPaths: Object.freeze(String(env.OUTBOUND_LIBRARY_PATHS || '').split(',').map(s => s.trim()).filter(Boolean)),
     redactHeaders: Object.freeze(String(env.OUTBOUND_REDACT_HEADERS || '').split(',').map(s => s.trim()).filter(Boolean)),
     // treści odpowiedzi: eager (pobieraj od razu), lazy (przy get_server_request), off (nigdy)
     bodies: ['eager', 'lazy', 'off'].includes(env.OUTBOUND_BODIES) ? env.OUTBOUND_BODIES : 'eager',

@@ -72,6 +72,7 @@ Przykładowy przebieg pracy agenta: `clear_server_requests` → otwarcie strony 
 | `OUTBOUND_BODIES` | `eager` | Treści odpowiedzi: `eager` (od razu), `lazy` (przy `get_server_request`), `off` (nigdy) |
 | `OUTBOUND_BODY_MAX_KB` / `OUTBOUND_BODIES_TOTAL_MB` | `256` / `32` | Limit treści jednej odpowiedzi i wszystkich treści w kolektorze |
 | `OUTBOUND_INSPECTOR_BUFFER_MB` / `OUTBOUND_INSPECTOR_RESOURCE_MB` | `32` / `2` | Limity bufora treści w procesie aplikacji (na sesję) |
+| `OUTBOUND_LIBRARY_PATHS` | — | Dodatkowe fragmenty ścieżek pomijane przy ustalaniu miejsca wywołania (`origin`), np. własny wrapper `fetch` w workspace: `packages/http-client/,@acme_tracing_` |
 | `IGNORE_HOSTS` | `registry.npmjs.org` | Hosty pomijane (Next sam sprawdza aktualizacje) |
 | `MAX_REQUESTS` | `5000` | Rozmiar bufora |
 

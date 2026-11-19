@@ -14,10 +14,11 @@ export function normalizeWallTime(wallTime, nowMs) {
  * @param {string} method
  * @param {any} p parametry zdarzenia
  * @param {{ ignoreHosts: readonly string[], inspectorPorts: readonly number[], nowMs: number,
- *           redact: ReturnType<import('./redact.mjs').createRedactor>, bodies: 'eager' | 'lazy' | 'off' }} ctx
+ *           redact: ReturnType<import('./redact.mjs').createRedactor>, bodies: 'eager' | 'lazy' | 'off',
+ *           libraryPaths?: readonly string[] }} ctx
  * @returns {{ type: 'fetch-body', key: string, requestId: string }[]}
  */
-export function applyNetworkEvent(store, session, method, p, { ignoreHosts, inspectorPorts, nowMs, redact, bodies = 'eager' }) {
+export function applyNetworkEvent(store, session, method, p, { ignoreHosts, inspectorPorts, nowMs, redact, bodies = 'eager', libraryPaths = [] }) {
   const key = `${session.processId}:${p.requestId}`;
   if (method === 'Network.requestWillBeSent') {
     let host = '';
@@ -28,7 +29,7 @@ export function applyNetworkEvent(store, session, method, p, { ignoreHosts, insp
       key, processId: session.processId, app: session.app, port: session.port, pid: session.pid, requestId: p.requestId,
       method: p.request.method, url: redact.url(p.request.url), requestHeaders: redact.headers(p.request.headers),
       wallStart: normalizeWallTime(p.wallTime, nowMs), tsStart: p.timestamp,
-      origin: userFrames(p.initiator),
+      origin: userFrames(p.initiator, { libraryPaths }),
       body: { state: 'none' },
     });
     return [];
