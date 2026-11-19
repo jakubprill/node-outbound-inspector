@@ -67,3 +67,21 @@ test('tryb off: treści nie są pobierane', () => withApp(app(4811, 9711), { OUT
   assert.equal(d.body_state, 'skipped');
   assert.equal(d.body, null);
 }));
+
+test('node:http: treść gzip, br i deflate czytelna po dekompresji (issue #1)', () => withApp(app(4851, 9751), {}, async (sc, m) => {
+  await sc.hit(sc.apps[0], '/gzip'); await sleep(400);
+  const rows = await m.call('list_server_requests', { url_contains: '/packed' });
+  assert.equal(rows.length, 4);
+  const [gzip, br, deflate, charset] = await Promise.all(rows.map(r => m.call('get_server_request', { id: r.id })));
+  for (const [d, enc] of [[gzip, 'gzip'], [br, 'br'], [deflate, 'deflate']]) {
+    assert.equal(d.body_state, 'available', enc);
+    assert.equal(d.body, '{"service":"/packed"}', enc);
+    assert.equal(d.body_bytes, 21, `${enc}: rozmiar po dekompresji`);
+    assert.equal(d.body_encoding, enc);
+    assert.equal(d.body_encoded_bytes, Number(d.responseHeaders['content-length']), `${enc}: rozmiar na łączu`);
+  }
+  // content-type z charset: inspektor Node oddaje skompresowane bajty jako tekst UTF-8 (nieodwracalnie)
+  assert.equal(charset.body_state, 'unavailable');
+  assert.match(charset.body_reason, /zniekształcone/);
+  assert.equal(charset.body, null);
+}));

@@ -27,6 +27,8 @@ export function details(r, maxBodyChars) {
     error: r.error, call_stack: r.origin, wallStart: new Date(r.wallStart).toISOString(),
     // M2: stan treści zamiast pustego łańcucha; czas do pierwszego bajtu
     body_state: r.body?.state ?? 'none', body_bytes: r.body?.bytes ?? null, body_reason: r.body?.reason ?? null,
+    // tylko dla treści z content-encoding (bez klucza w pozostałych): kodowanie i rozmiar przed dekompresją
+    body_encoding: r.body?.encoding, body_encoded_bytes: r.body?.encodedBytes,
     ttfb_ms: ttfb(r),
   };
 }
