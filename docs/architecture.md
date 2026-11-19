@@ -764,7 +764,7 @@ Tych rzeczy nie dało się sprawdzić bez Next.js. Każda zajmuje kilka minut na
 - zrzuty golden są identyczne przed refaktorem i po nim;
 - zmienne środowiskowe, nazwy narzędzi, `serverInfo` i ścieżka `src/outbound-mcp.mjs` bez zmian (README pozostaje prawdziwe);
 - żaden moduł nie przekracza około 250 linii; import wszystkich modułów w jednym procesie nie zostawia otwartych uchwytów (test);
-- CI: macierz Node 22, 24 i bieżący.
+- CI: macierz Node 24 i bieżący (pierwotnie także 22; wsparcie dla 22 wycofane 2026-11-19).
 
 ### M2. Poprawność i bezpieczeństwo rdzenia (M)
 
@@ -898,7 +898,7 @@ Tych rzeczy nie dało się sprawdzić bez Next.js. Każda zajmuje kilka minut na
 5. **`experimental.requestInsights` w Next 16.4.** Czy ocenić je jako uzupełnienie (trafienia w cache) przed M6?
 6. **Język wyników.** Werdykty są dziś po polsku. Zostają, czy przechodzimy na angielski z kodami maszynowymi (`verdict_code`)?
 7. **Zakres.** Czy ktoś używa `next dev --webpack` albo klientów na `node:http` (axios, got) na tyle, żeby miejsce wywołania było tam potrzebne?
-8. **Wersja Node.** Czy wszyscy mają Node ≥ 24? Jeśli tak, można podnieść `engines` i usunąć ścieżki dla Node 22.
+8. **Wersja Node.** ~~Czy wszyscy mają Node ≥ 24?~~ **Rozstrzygnięte (2026-11-19):** docelowo Node ≥ 24. `engines >= 24`, CI na 24 i najnowszej; Node 22 tylko jako łagodna degradacja (ostrzeżenie, `unavailable`), bez testów w CI.
 9. **Podgląd dla ludzi.** Czy `outbound tail` w terminalu jest potrzebne, czy wystarcza Chrome DevTools?
 
 ---

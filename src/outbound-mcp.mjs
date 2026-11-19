@@ -2,7 +2,7 @@
 // outbound-mcp: serwer MCP (stdio) dający agentowi wgląd w ruch sieciowy procesów Node
 // uruchomionych z `--inspect=<port> --experimental-network-inspection` — także kilku naraz
 // (np. monorepo z kilkoma aplikacjami Next.js uruchamianymi równolegle).
-// Bez zależności: MCP (JSON-RPC 2.0 po stdio) + klient CDP po WebSocket. Wymaga Node >= 22.
+// Bez zależności: MCP (JSON-RPC 2.0 po stdio) + klient CDP po WebSocket. Wymaga Node >= 24.
 // Repozytorium: https://github.com/jakubprill/node-outbound-inspector
 //
 // Podłączenie do agenta:  claude mcp add outbound -- node /ścieżka/src/outbound-mcp.mjs

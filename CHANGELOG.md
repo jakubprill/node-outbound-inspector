@@ -4,6 +4,9 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/), wersj
 
 ## [Unreleased]
 
+### Zmienione
+- **Minimalna wersja Node to 24** (`engines`, CI na 24 i najnowszej). Na starszym Node narzędzie działa dalej w ograniczonym zakresie, z ostrzeżeniem, a `outbound-next` ostrzega przy starcie. Nagranie zdarzeń z Node 24 zostało dodane do testów.
+
 ### Naprawione (zgłoszenia #1–#6)
 - **#1** Treści z `content-encoding` (gzip, x-gzip, br, deflate zlib/raw, zstd) są dekompresowane. Wieloetapowe kodowanie i wielkość liter są obsługiwane, a limit wyniku chroni przed bombą dekompresyjną (stan `truncated`). Obcięcie jest wykrywane po bajtach skompresowanych. Dochodzą pola `body_encoding` i `body_encoded_bytes`. Uszkodzone lub nieznane kodowanie daje stan `skipped` z powodem. Odpowiedź z `charset` w `content-type`, którą inspektor Node zamienia na zniekształcony tekst, ma stan `unavailable`.
 - **#2** Miejsce wywołania (`origin`) pomija ramki dowolnych bibliotek: każdy `node_modules/`, pnpm, Yarn PnP i chunki Turbopacka z bibliotekami (`node_modules_…`, `…__pnpm_…`, `[turbopack]_runtime`, `[externals]_…`, `__next-internal_`). Pomija też `vendor-chunks/` i runtime webpacka, a ścieżki Windows są normalizowane. Chunki `[root-of-the-server]__…` zostają, bo zawierają kod aplikacji (sprawdzone na Next 16.4). Doszła nowa zmienna `OUTBOUND_LIBRARY_PATHS`.

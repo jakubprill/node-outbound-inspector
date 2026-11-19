@@ -17,7 +17,7 @@ export function processWarnings({ execArgv = [], node = '', networkEnabled }) {
   if (!hasFlag) warnings.push(`Proces działa bez ${NETWORK_FLAG}: zapytania wychodzące nie będą widoczne. Dodaj flagę bezpośrednio do polecenia node (NODE_OPTIONS jej nie przyjmuje).`);
   else if (!networkEnabled) warnings.push('Network.enable nie odpowiedział — inspekcja sieci niedostępna.');
   const major = Number(String(node).replace(/^v/, '').split('.')[0]);
-  if (hasFlag && major && major < 24) warnings.push(`Node ${major}: treści odpowiedzi fetch są niedostępne (body_state: unavailable). Zalecany Node ≥ 24.`);
+  if (hasFlag && major && major < 24) warnings.push(`Node ${major}: wersja niewspierana (wymagany ≥ 24) — treści odpowiedzi fetch są niedostępne (body_state: unavailable).`);
   return { networkInspection: hasFlag && !!networkEnabled, nodeMajor: major || null, warnings };
 }
 

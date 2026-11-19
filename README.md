@@ -8,7 +8,7 @@ Inspekcja **wychodzącego ruchu HTTP** procesów Node.js, np. serwera Next.js wo
 - 🧩 **Wiele aplikacji naraz** (monorepo): każda wykrywana i nazywana automatycznie.
 - 🧭 **Przypisanie do żądania strony**: wiadomo, które wejście na `/checkout` wywołało które zapytania, nawet gdy kilka stron renderuje się równolegle.
 - 🌊 **Wykrywanie zapytań sekwencyjnych (waterfall)** i wyliczanie zysku z `Promise.all`, a także wykrywanie błędów 4xx/5xx.
-- 📦 Zero zależności: jeden plik `src/outbound-mcp.mjs`, Node ≥ 22 (zalecany ≥ 24).
+- 📦 Zero zależności, **Node ≥ 24** (kolektor i aplikacje).
 
 > Narzędzie tylko do **lokalnego developmentu**: inspektor Node daje pełną kontrolę nad procesem.
 
@@ -116,7 +116,7 @@ Skrypty `dev:inspect` aplikacji są przenośne (`outbound-next`). Skrypty zbiorc
 Minimalny klient CDP (to, co robi zakładka Network): [`examples/cdp-network-probe.mjs`](examples/cdp-network-probe.mjs).
 
 ## Ograniczenia
-- Funkcja Node jest **eksperymentalna**. Wymagany Node ≥ 24, bo na 22 brakuje treści odpowiedzi z `fetch`.
+- Funkcja Node jest **eksperymentalna**. Wymagany Node ≥ 24 (testowane w CI na 24 i najnowszej wersji). Na starszym Node narzędzie działa w ograniczonym zakresie: brak treści odpowiedzi `fetch`, ostrzeżenie w `inspector_status`.
 - **Bun** jako runtime nie jest obsługiwany (WebKit Inspector zamiast CDP). Działa, jeśli Bun służy tylko do instalowania pakietów i uruchamiania skryptów, a aplikacja działa na Node.
 - W Next.js `fetch` jest opakowany przez sam Next, więc stos wywołań nie pokazuje linii strony. Kod znajduje się po URL-u i przypisanej stronie.
 - Zapytania poza kontekstem żądania strony (start serwera, zadania w tle) trafiają do grupy „bez strony”.

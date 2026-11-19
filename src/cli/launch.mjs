@@ -108,7 +108,8 @@ export async function runNext({ argv = process.argv.slice(2), env = process.env,
   const fail = msg => { proc.stderr.write(`${TAG} ${msg}\n`); return proc.exit(1); };
   if (proc.versions.bun) return fail('Bun jako runtime nie jest obsługiwany (WebKit Inspector zamiast CDP). Uruchom skrypt bez --bun; Bun może zostać menedżerem pakietów.');
   const [major, minor] = proc.versions.node.split('.').map(Number);
-  if (major < 22 || (major === 22 && minor < 6)) return fail(`Node ${proc.versions.node} nie ma flagi ${NETWORK_FLAG}. Wymagany Node ≥ 22.6 (zalecany ≥ 24).`);
+  if (major < 22 || (major === 22 && minor < 6)) return fail(`Node ${proc.versions.node} nie ma flagi ${NETWORK_FLAG}. Wymagany Node ≥ 24.`);
+  if (major < 24) proc.stderr.write(`${TAG} uwaga: Node ${proc.versions.node} nie jest wspierany (wymagany ≥ 24): treści odpowiedzi fetch będą niedostępne.\n`);
   let cli;
   try {
     cli = resolveCli({ cwd, env });
