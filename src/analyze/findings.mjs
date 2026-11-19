@@ -7,10 +7,10 @@ import { row } from '../mcp/render.mjs';
 const isError = r => r.state === 'failed' || r.status >= 400;
 
 const VERDICTS = {
-  single: 'pojedyncze zapytanie',
-  sequential: 'SEKWENCYJNIE (waterfall) — każde zapytanie czeka na poprzednie',
-  parallel: 'RÓWNOLEGLE — wszystkie zapytania naraz',
-  mixed: 'MIESZANE — część równolegle, część sekwencyjnie',
+  single: 'single request',
+  sequential: 'SEQUENTIAL (waterfall) — each request waits for the previous one',
+  parallel: 'PARALLEL — all requests at once',
+  mixed: 'MIXED — some in parallel, some sequential',
 };
 const verdictCode = (n, conc) => n === 1 ? 'single' : conc === 1 ? 'sequential' : conc === n ? 'parallel' : 'mixed';
 
@@ -44,7 +44,7 @@ export function analyzeApp(rs, { idle_gap_ms = 250, seq_gap_ms = 15 }) {
  * a zapytania bez strony dzielone na serie.
  */
 export function analyze(rs, args = {}, appsSeen = []) {
-  if (!rs.length) return { summary: 'Brak zapytań w wybranym zakresie.', apps_with_traffic: appsSeen };
+  if (!rs.length) return { summary: 'No requests in the selected range.', apps_with_traffic: appsSeen };
   const byApp = Map.groupBy(rs, r => r.app);
   return Object.fromEntries([...byApp].map(([app, list]) => {
     const withPage = list.filter(r => r.page), without = list.filter(r => !r.page);

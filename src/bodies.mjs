@@ -72,7 +72,7 @@ function decodeLayer(buf, [decode, flushOpts], limit) {
  */
 export function decodeContent(raw, codings, limit) {
   for (const c of codings) {
-    if (!DECODERS[c]) throw new Error(c === 'zstd' ? 'zstd wymaga Node ≥ 22.15' : `nieobsługiwane kodowanie ${c}`);
+    if (!DECODERS[c]) throw new Error(c === 'zstd' ? 'zstd requires Node ≥ 22.15' : `unsupported encoding ${c}`);
   }
   let out = raw, cut = false, over = false;
   for (const c of [...codings].reverse()) {
@@ -89,7 +89,7 @@ export function decodeContent(raw, codings, limit) {
  * @returns {{ state: string, data?: string, bytes?: number, encodedBytes?: number, encoding?: string, reason?: string }}
  */
 export function classifyBody(res, record, { maxStoredBytes, missingState }) {
-  if (!res) return { state: missingState, reason: missingState === 'evicted' ? 'treść nie jest już dostępna w inspektorze' : 'inspektor nie zwrócił treści' };
+  if (!res) return { state: missingState, reason: missingState === 'evicted' ? 'body is no longer available in the inspector' : 'the inspector returned no body' };
   const contentType = header(record.responseHeaders, 'content-type') ?? record.mimeType ?? '';
   const declared = Number(header(record.responseHeaders, 'content-length')); // bajty na łączu, czyli po kompresji
   const codings = parseCodings(header(record.responseHeaders, 'content-encoding'));
@@ -99,14 +99,14 @@ export function classifyBody(res, record, { maxStoredBytes, missingState }) {
   const enc = compressed ? { encoding, encodedBytes: raw.length } : {};
 
   if (raw && !TEXTUAL.test(contentType)) {
-    return { state: 'skipped', ...(compressed ? enc : { bytes: raw.length }), reason: `treść binarna (${contentType || 'nieznany typ'})` };
+    return { state: 'skipped', ...(compressed ? enc : { bytes: raw.length }), reason: `binary body (${contentType || 'unknown type'})` };
   }
   let text, bytes, cut = false, over = false;
   if (compressed) {
     let d;
     try { d = decodeContent(raw, codings, maxStoredBytes); } catch (e) {
       const data = raw.subarray(0, Math.floor(maxStoredBytes / 4) * 3).toString('base64');
-      return { state: 'skipped', data, ...enc, reason: `nie udało się zdekompresować treści (${encoding}: ${e.message}); body zawiera surowe bajty w base64` };
+      return { state: 'skipped', data, ...enc, reason: `could not decompress the body (${encoding}: ${e.message}); body holds the raw bytes in base64` };
     }
     ({ cut, over } = d); text = d.out.toString('utf8'); bytes = d.out.length;
   } else {
@@ -114,21 +114,21 @@ export function classifyBody(res, record, { maxStoredBytes, missingState }) {
     bytes = raw ? raw.length : Buffer.byteLength(text);
     // content-type z charset: inspektor oddaje bajty jako tekst UTF-8, skompresowane są wtedy nie do odzyskania
     if (!raw && encoding && MANGLED.test(text)) {
-      return { state: 'unavailable', encoding, reason: `inspektor Node zwrócił skompresowaną treść (${encoding}) jako tekst UTF-8 (content-type z charset); bajty są zniekształcone, dekompresja niemożliwa` };
+      return { state: 'unavailable', encoding, reason: `the Node inspector returned the compressed body (${encoding}) as UTF-8 text (content-type with charset); the bytes are garbled, decompression is impossible` };
     }
   }
   const wireBytes = raw ? raw.length : (encoding ? null : bytes); // treść tekstowa z kodowaniem: rozmiar na łączu nieznany
 
   if (over) {
-    return { state: 'truncated', data: text, ...enc, reason: `limit kolektora ${maxStoredBytes} B po dekompresji (skompresowana treść: ${raw.length} B)` };
+    return { state: 'truncated', data: text, ...enc, reason: `collector limit of ${maxStoredBytes} B after decompression (compressed body: ${raw.length} B)` };
   }
   if (bytes > maxStoredBytes) {
     return { state: 'truncated', data: Buffer.from(text).subarray(0, maxStoredBytes).toString('utf8'), bytes, reason: `limit kolektora ${maxStoredBytes} B` };
   }
   if (declared > 0 && wireBytes != null && wireBytes < declared) {
-    return { state: 'truncated', data: text, bytes, ...enc, reason: `bufor inspektora obciął treść (${wireBytes} z ${declared} B${compressed ? ' skompresowanych' : ''})` };
+    return { state: 'truncated', data: text, bytes, ...enc, reason: `the inspector buffer cut the body (${wireBytes} of ${declared}${compressed ? ' compressed' : ''} B)` };
   }
-  if (cut) return { state: 'truncated', data: text, bytes, ...enc, reason: `skompresowany strumień (${encoding}) jest niepełny` };
+  if (cut) return { state: 'truncated', data: text, bytes, ...enc, reason: `the compressed stream (${encoding}) is incomplete` };
   return { state: 'available', data: text, bytes, ...enc };
 }
 
@@ -148,7 +148,7 @@ export function enforceBodyBudget(records, { maxTotalBytes }) {
     if (total <= maxTotalBytes) break;
     total -= Buffer.byteLength(r.body.data);
     const { bytes, encoding, encodedBytes } = r.body;
-    r.body = { state: 'evicted', bytes, ...(encoding && { encoding, encodedBytes }), reason: 'budżet treści kolektora' };
+    r.body = { state: 'evicted', bytes, ...(encoding && { encoding, encodedBytes }), reason: 'collector body budget' };
     evicted++;
   }
   return evicted;

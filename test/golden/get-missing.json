@@ -4,7 +4,7 @@
   "result": {
     "content": [
       {
-        "text": "Brak zapytania o id 999999",
+        "text": "No request with id 999999",
         "type": "text"
       }
     ],

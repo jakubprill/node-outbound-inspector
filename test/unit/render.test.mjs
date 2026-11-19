@@ -25,15 +25,15 @@ test('details: przycięcie treści', () => {
 });
 
 test('details: treść niedostępna → body null i powód', () => {
-  const d = details({ ...r, body: { state: 'unavailable', bytes: 0, reason: 'inspektor nie zwrócił treści' } }, 100);
+  const d = details({ ...r, body: { state: 'unavailable', bytes: 0, reason: 'the inspector returned no body' } }, 100);
   assert.equal(d.body, null);
   assert.equal(d.body_state, 'unavailable');
-  assert.equal(d.body_reason, 'inspektor nie zwrócił treści');
+  assert.equal(d.body_reason, 'the inspector returned no body');
 });
 
 test('row: pusty errorText → czytelny status zamiast "FAILED: " (issue #3)', () => {
   for (const error of ['', '  ', undefined]) assert.equal(row({ ...r, state: 'failed', error }).status, FAILED_NO_TEXT);
-  assert.equal(FAILED_NO_TEXT, 'FAILED (brak opisu błędu od inspektora)');
+  assert.equal(FAILED_NO_TEXT, 'FAILED (no error text from the inspector)');
 });
 
 test('details: rodzaj błędu tylko dla nieudanych, wyjaśnienie tylko dla pustego opisu (issue #3)', () => {

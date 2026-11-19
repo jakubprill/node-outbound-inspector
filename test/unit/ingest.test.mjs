@@ -75,7 +75,7 @@ test('redakcja przy przyjęciu: nagłówki żądania i odpowiedzi, parametry URL
   applyNetworkEvent(s, session, 'Network.responseReceived', { requestId: 'r1', response: { status: 200, headers: { 'set-cookie': 'sid=SECRET2' } } }, ctx);
   const dump = JSON.stringify(s.values());
   for (const secret of ['SECRET', 'SECRET2', 'T0P']) assert.ok(!dump.includes(secret), secret);
-  assert.match(s.get('3:r1').requestHeaders.authorization, /Bearer · 13 zn\./);
+  assert.match(s.get('3:r1').requestHeaders.authorization, /Bearer · 13 chars/);
 });
 
 test('tryby treści i czas do pierwszego bajtu', () => {
@@ -88,7 +88,7 @@ test('tryby treści i czas do pierwszego bajtu', () => {
   assert.equal(run('eager').effects.length, 1);
   assert.equal(run('lazy').effects.length, 0);
   assert.equal(run('lazy').r.body.state, 'none');
-  assert.deepEqual(run('off').r.body, { state: 'skipped', reason: 'tryb treści: off' });
+  assert.deepEqual(run('off').r.body, { state: 'skipped', reason: 'body mode: off' });
   assert.equal(run('eager').r.tsResponse, 1.53);
 });
 

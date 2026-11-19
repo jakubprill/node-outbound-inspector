@@ -25,7 +25,7 @@ export function createCollector(config, { log = () => {}, now = Date.now } = {})
   /** Pobiera treść z inspektora i zapisuje ją w rekordzie z jawnym stanem. */
   async function fetchBody(r, missingState) {
     const session = byProcess.get(r.processId);
-    if (!session) { r.body = { state: missingState, reason: 'proces aplikacji rozłączony' }; return; }
+    if (!session) { r.body = { state: missingState, reason: 'app process disconnected' }; return; }
     const res = await session.send('Network.getResponseBody', { requestId: r.requestId }).catch(() => null);
     r.body = classifyBody(res, r, { maxStoredBytes: config.bodyMaxBytes, missingState });
     enforceBodyBudget(store.values(), { maxTotalBytes: config.bodiesTotalBytes });
@@ -67,7 +67,7 @@ export function createCollector(config, { log = () => {}, now = Date.now } = {})
   }
 
   const globalWarnings = () => [
-    ...(config.redact ? [] : ['Redakcja sekretów wyłączona (OUTBOUND_REDACT=0): nagłówki i parametry URL trafiają do agenta bez zmian.']),
+    ...(config.redact ? [] : ['Secret redaction is off (OUTBOUND_REDACT=0): headers and URL parameters reach the agent unchanged.']),
   ];
 
   return {

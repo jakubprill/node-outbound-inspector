@@ -78,5 +78,5 @@ scenario?.stop();
 // Ścieżki bezwzględne z ramek stosu → <root> (nagrania trafiają do repozytorium)
 const ROOT = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
 writeFileSync(opt.out, lines.join('\n').split(ROOT).join('<root>') + '\n');
-console.error(`[record] zapisano ${lines.length} wpisów do ${opt.out} (Node ${process.version})`);
+console.error(`[record] wrote ${lines.length} entries to ${opt.out} (Node ${process.version})`);
 process.exit(0);

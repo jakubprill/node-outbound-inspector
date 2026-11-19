@@ -25,10 +25,10 @@ test('waterfall: łańcuch sekwencyjny tylko bez nakładających się zapytań',
 
 test('analyzeApp: werdykty', () => {
   const v = rs => analyzeApp(rs, {}).bursts[0].verdict;
-  assert.match(v([r(0, 0.15), r(0.151, 0.3)]), /SEKWENCYJNIE/);
-  assert.match(v([r(0, 0.15), r(0.001, 0.15)]), /RÓWNOLEGLE/);
-  assert.match(v([r(0, 0.15), r(0.001, 0.15), r(0.151, 0.3)]), /MIESZANE/);
-  assert.equal(v([r(0, 0.1)]), 'pojedyncze zapytanie');
+  assert.match(v([r(0, 0.15), r(0.151, 0.3)]), /SEQUENTIAL/);
+  assert.match(v([r(0, 0.15), r(0.001, 0.15)]), /PARALLEL/);
+  assert.match(v([r(0, 0.15), r(0.001, 0.15), r(0.151, 0.3)]), /MIXED/);
+  assert.equal(v([r(0, 0.1)]), 'single request');
   const seq = analyzeApp([r(0, 0.15), r(0.151, 0.3), r(0.301, 0.45)], {}).bursts[0];
   assert.equal(seq.sequential_chains[0].potential_saving_ms, 300);
   assert.equal(seq.potential_saving_ms_if_fully_parallel, 300);
@@ -41,5 +41,5 @@ test('analyze: błędy, strony, zapytania bez strony, pusty wynik', () => {
   assert.equal(res.web.errors.length, 2);
   assert.equal(res.web.by_page_request[0].page, 'GET /seq');
   assert.equal(res.web.unattributed.length, 2);
-  assert.deepEqual(analyze([], {}, ['web']), { summary: 'Brak zapytań w wybranym zakresie.', apps_with_traffic: ['web'] });
+  assert.deepEqual(analyze([], {}, ['web']), { summary: 'No requests in the selected range.', apps_with_traffic: ['web'] });
 });

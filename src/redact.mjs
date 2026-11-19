@@ -19,11 +19,11 @@ export function createRedactor({ enabled = true, extraHeaders = [], key = random
   const hash = v => createHmac('sha256', key).update(String(v)).digest('hex').slice(0, 6);
   const isSensitive = name => names.has(name.toLowerCase()) || SENSITIVE_NAME.test(name);
 
-  /** Opis zastępujący wartość, np. „[zredagowano: Bearer · 12 zn. · #a1b2c3]”. */
+  /** Opis zastępujący wartość, np. „[redacted: Bearer · 12 chars · #a1b2c3]”. */
   function describe(value) {
     const v = String(value);
     const scheme = v.match(SCHEME)?.[1];
-    return `[zredagowano: ${scheme ? scheme + ' · ' : ''}${v.length} zn. · #${hash(v)}]`;
+    return `[redacted: ${scheme ? scheme + ' · ' : ''}${v.length} chars · #${hash(v)}]`;
   }
 
   function headers(h) {
@@ -38,7 +38,7 @@ export function createRedactor({ enabled = true, extraHeaders = [], key = random
     let parsed; try { parsed = new URL(u); } catch { return u; }
     let changed = false;
     for (const [name, value] of parsed.searchParams) {
-      if (isSensitive(name)) { parsed.searchParams.set(name, `[zredagowano · #${hash(value)}]`); changed = true; }
+      if (isSensitive(name)) { parsed.searchParams.set(name, `[redacted · #${hash(value)}]`); changed = true; }
     }
     return changed ? parsed.toString() : u;
   }

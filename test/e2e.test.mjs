@@ -60,13 +60,13 @@ test('wykrywa waterfall, równoległość i błędy osobno dla każdej strony', 
 
   const webSeq = page('@acme/web', 'GET /seq');
   assert.equal(webSeq.max_concurrency, 1);
-  assert.match(webSeq.verdict, /SEKWENCYJNIE/);
+  assert.match(webSeq.verdict, /SEQUENTIAL/);
   assert.equal(webSeq.sequential_chains[0].length, 3);
   assert.ok(webSeq.sequential_chains[0].potential_saving_ms > 250, 'oszczędność ok. 2 × 150 ms');
 
   const adminPar = page('@acme/admin', 'GET /par');
   assert.equal(adminPar.max_concurrency, 3);
-  assert.match(adminPar.verdict, /RÓWNOLEGLE/);
+  assert.match(adminPar.verdict, /PARALLEL/);
   assert.equal(adminPar.sequential_chains.length, 0);
 
   assert.deepEqual(res['@acme/web'].errors.map(e => [new URL(e.url).pathname, e.status]), [['/payments', 500]]);

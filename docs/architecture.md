@@ -596,7 +596,7 @@ Przykład podsumowania (wartości poglądowe). Nazwy pól, na których polega dz
                  "page": "GET /err", "origin": "apps/web/app/err/page.js:4" }],
     "by_page_request": [
       { "page": "GET /seq", "page_request_id": "1093-7", "requests": 3, "wall_ms": 469, "max_concurrency": 1,
-        "verdict": "SEKWENCYJNIE (waterfall) …", "verdict_code": "sequential",
+        "verdict": "SEQUENTIAL (waterfall) …", "verdict_code": "sequential",
         "sequential_chains": [{ "length": 3, "wall_ms": 469, "if_parallel_ms": 156, "potential_saving_ms": 313,
                                 "steps": ["GET …/user (153 ms)", "GET …/orders (152 ms)", "GET …/offers (151 ms)"],
                                 "origins": ["apps/web/app/seq/page.js:5", "…:6", "…:7"] }] }] },
@@ -631,7 +631,7 @@ Przykład podsumowania (wartości poglądowe). Nazwy pól, na których polega dz
 - **Tylko pętla zwrotna.** Kolektor łączy się wyłącznie z `127.0.0.1`. Launcher zawsze podaje `--inspect=127.0.0.1:<port>`. Jeśli proces słucha na innym adresie (np. `0.0.0.0`), `inspector_status` to zgłasza.
 - **Instrumentacja za zgodą.** Hak działa w procesie tylko wtedy, gdy deweloper sam go załadował (`outbound run` albo `--import`). Procesy znalezione skanowaniem portów są domyślnie tylko obserwowane; wstrzyknięcie wymaga `OUTBOUND_INJECT=1`. Wyłącznik awaryjny: `OUTBOUND_HOOK=0`.
 - **Minimalny ślad w CDP.** Kolektor używa `Network.*`, `Runtime.evaluate` (wyrażenia tylko do odczytu) i `Runtime.addBinding`. Nigdy nie włącza domen `Debugger` ani `Runtime` (zdarzenia konsoli).
-- **Redakcja przy przyjęciu.** Wartości nagłówków `authorization`, `proxy-authorization`, `cookie`, `set-cookie`, `x-api-key` oraz pasujących do wzorca nazw (`token`, `secret`, `password`, `session`, `key`) są zastępowane opisem `[zredagowano: Bearer · 142 zn. · #a1b2c3]` zanim trafią do magazynu. Skrót pozwala agentowi stwierdzić, czy dwa zapytania niosły ten sam sekret. To samo dla parametrów URL i pól JSON w treściach. Wyłączenie tylko jawnie (`OUTBOUND_REDACT=0`) i z ostrzeżeniem w `inspector_status`.
+- **Redakcja przy przyjęciu.** Wartości nagłówków `authorization`, `proxy-authorization`, `cookie`, `set-cookie`, `x-api-key` oraz pasujących do wzorca nazw (`token`, `secret`, `password`, `session`, `key`) są zastępowane opisem `[redacted: Bearer · 142 chars · #a1b2c3]` zanim trafią do magazynu. Skrót pozwala agentowi stwierdzić, czy dwa zapytania niosły ten sam sekret. To samo dla parametrów URL i pól JSON w treściach. Wyłączenie tylko jawnie (`OUTBOUND_REDACT=0`) i z ostrzeżeniem w `inspector_status`.
 - **Treści to dane, nie polecenia.** Odpowiedzi serwisów trafiają do modelu, więc mogą nieść wstrzyknięte instrukcje. Treść jest przycinana, wyraźnie oznaczona polem `body`, a `instructions` serwera mówi modelowi, żeby traktował ją jako dane. Zespół decyduje trybem treści (`eager`, `lazy`, `off`), ile danych integracji może wyjść poza maszynę.
 - **Rejestr.** Katalog 0700, pliki 0600. `wsUrl` zawiera identyfikator dający pełną kontrolę nad procesem.
 - **Konfiguracja bez kodu.** Plik konfiguracyjny to JSON; kolektor nie wykonuje kodu z repozytorium.

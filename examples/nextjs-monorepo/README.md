@@ -34,10 +34,10 @@ W monorepo z turbo równoległe uruchamianie zapewnia `turbo run dev:inspect`.
 
 Oczekiwany wynik `npm run demo` (wartości przybliżone):
 ```
-[@acme/web]   GET /seq  3 zap., ~470 ms → SEKWENCYJNIE (waterfall) | możliwa oszczędność ~310 ms
-[@acme/web]   GET /err  1 zap.          → błąd: POST …/payments → 500
-[@acme/admin] GET /par  3 zap., ~160 ms → RÓWNOLEGLE
-[@acme/admin] GET /seq  2 zap., ~320 ms → SEKWENCYJNIE (waterfall) | możliwa oszczędność ~160 ms
+[@acme/web]   GET /seq  3 req., ~470 ms → SEQUENTIAL (waterfall) | potential saving ~310 ms
+[@acme/web]   GET /err  1 req.          → error: POST …/payments → 500
+[@acme/admin] GET /par  3 req., ~160 ms → PARALLEL
+[@acme/admin] GET /seq  2 req., ~320 ms → SEQUENTIAL (waterfall) | potential saving ~160 ms
 ```
 
 Podgląd w Chrome: `chrome://inspect` → *Configure…* → dodaj `localhost:9231` i `localhost:9241` → **inspect** przy wybranej aplikacji → zakładka **Network**.

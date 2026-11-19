@@ -8,6 +8,9 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/), wersj
 - `llms.txt` (po angielsku): instrukcja dla agentów AI (integracja z projektem, także z własnym skryptem spawnującym aplikacje, weryfikacja, narzędzia, pułapki).
 - README po angielsku (`README.md`) i po polsku (`README.pl.md`) z przełącznikiem języka.
 
+### Zmienione (kontrakt narzędzi)
+- **Narzędzia MCP mówią po angielsku:** opisy narzędzi i parametrów, `instructions` serwera, werdykty (`SEQUENTIAL`/`PARALLEL`/`MIXED`/`single request`), wskazówki, powody stanu treści, ostrzeżenia, błędy oraz opis redakcji (`[redacted: Bearer · 19 chars · #a1b2c3]`). Komunikaty `outbound-next`, logi kolektora i skrypt demo też są po angielsku. Pola i kody (`verdict_code`, `body_state`, `error_kind`) bez zmian, więc logika oparta na kodach działa dalej.
+
 ### Zmienione
 - **Minimalna wersja Node to 24** (`engines`, CI na 24 i najnowszej). Wsparcie dla Node 22 zostało usunięte:
   - kolektor (`outbound-mcp`) i `outbound-next` odmawiają startu na Node < 24;

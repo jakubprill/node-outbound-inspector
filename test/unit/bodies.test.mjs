@@ -11,7 +11,7 @@ test('pełna treść', () => {
 });
 
 test('pusta treść to pusta odpowiedź (Node ≥ 24 zwraca treść fetch)', () => {
-  assert.deepEqual(classifyBody({ body: '', base64Encoded: false }, json, opts()), { state: 'truncated', data: '', bytes: 0, reason: 'bufor inspektora obciął treść (0 z 19 B)' });
+  assert.deepEqual(classifyBody({ body: '', base64Encoded: false }, json, opts()), { state: 'truncated', data: '', bytes: 0, reason: 'the inspector buffer cut the body (0 of 19 B)' });
   assert.equal(classifyBody({ body: '', base64Encoded: false }, { ...json, responseHeaders: { 'content-length': '0' } }, opts()).state, 'available');
 });
 
@@ -22,7 +22,7 @@ test('brak treści w inspektorze: evicted (lazy) albo unavailable', () => {
 
 test('treść binarna nie jest dekodowana', () => {
   const b = classifyBody({ body: Buffer.from([0, 1, 2, 255]).toString('base64'), base64Encoded: true }, { responseHeaders: { 'content-type': 'image/png' } }, opts());
-  assert.deepEqual(b, { state: 'skipped', bytes: 4, reason: 'treść binarna (image/png)' });
+  assert.deepEqual(b, { state: 'skipped', bytes: 4, reason: 'binary body (image/png)' });
   assert.equal(classifyBody({ body: Buffer.from('{"a":1}').toString('base64'), base64Encoded: true }, json, opts()).data, '{"a":1}', 'tekst w base64 jest dekodowany');
 });
 
@@ -30,7 +30,7 @@ test('obcięcie: limit kolektora i bufor inspektora', () => {
   const big = classifyBody({ body: 'x'.repeat(1500), base64Encoded: false }, { responseHeaders: {} }, opts());
   assert.equal(big.state, 'truncated'); assert.equal(big.data.length, 1000); assert.equal(big.bytes, 1500);
   const cut = classifyBody({ body: 'x'.repeat(10), base64Encoded: false }, { responseHeaders: { 'content-length': '100' } }, opts());
-  assert.equal(cut.state, 'truncated'); assert.match(cut.reason, /10 z 100/);
+  assert.equal(cut.state, 'truncated'); assert.match(cut.reason, /10 of 100/);
   assert.equal(classifyBody({ body: 'x'.repeat(10), base64Encoded: false }, { responseHeaders: { 'content-length': '5', 'content-encoding': 'gzip' } }, opts()).state, 'available');
 });
 
@@ -78,11 +78,11 @@ test('dekompresja: nieznane kodowanie i uszkodzone dane → base64 z powodem', (
   assert.equal(unknown.state, 'skipped');
   assert.equal(unknown.data, src.toString('base64'), 'surowe bajty zostają w base64');
   assert.equal(unknown.encodedBytes, src.length);
-  assert.match(unknown.reason, /nieobsługiwane kodowanie compress.*base64/);
+  assert.match(unknown.reason, /unsupported encoding compress.*base64/);
   const broken = zlib.gzipSync(src); broken[20] ^= 0xff; broken[21] ^= 0xff;
   const b = classifyBody(...packed('gzip', broken), opts());
   assert.equal(b.state, 'skipped');
-  assert.match(b.reason, /nie udało się zdekompresować treści \(gzip: /);
+  assert.match(b.reason, /could not decompress the body \(gzip: /);
   assert.equal(classifyBody(...packed('br', Buffer.from('to nie jest brotli, tylko tekst')), opts()).state, 'skipped');
   assert.ok(classifyBody(...packed('gzip', broken), opts({ maxStoredBytes: 16 })).data.length <= 16, 'base64 w limicie kolektora');
 });
@@ -96,7 +96,7 @@ test('dekompresja: bomba dekompresyjna → truncated w limicie kolektora', () =>
   assert.match(b.data, /^a+$/, 'początek treści po dekompresji');
   assert.equal(b.bytes, undefined, 'pełny rozmiar po dekompresji nieznany');
   assert.equal(b.encodedBytes, bomb.length);
-  assert.match(b.reason, /limit kolektora 10000 B po dekompresji/);
+  assert.match(b.reason, /collector limit of 10000 B after decompression/);
   const twice = classifyBody(...packed('gzip, br', zlib.brotliCompressSync(bomb)), opts({ maxStoredBytes: 10_000 }));
   assert.equal(twice.state, 'truncated', 'limit także na warstwie pośredniej');
   assert.match(twice.data, /^a+$/);
@@ -108,20 +108,20 @@ test('dekompresja: obcięcie liczone w bajtach skompresowanych', () => {
   rec.responseHeaders['content-length'] = String(full.length);
   const b = classifyBody(res, rec, opts({ maxStoredBytes: 1e6 }));
   assert.equal(b.state, 'truncated');
-  assert.match(b.reason, new RegExp(`${full.length >> 1} z ${full.length} B skompresowanych`));
+  assert.match(b.reason, new RegExp(`${full.length >> 1} of ${full.length} compressed B`));
   assert.ok(JSON_TEXT.repeat(20).startsWith(b.data) && b.data.length > 0, 'zdekodowany początek');
   delete rec.responseHeaders['content-length'];
-  assert.match(classifyBody(res, rec, opts({ maxStoredBytes: 1e6 })).reason, /strumień \(gzip\) jest niepełny/, 'bez content-length');
+  assert.match(classifyBody(res, rec, opts({ maxStoredBytes: 1e6 })).reason, /stream \(gzip\) is incomplete/, 'bez content-length');
 });
 
 test('dekompresja: treść binarna nie jest rozpakowywana; pusta treść i tekst z charset', () => {
   const png = zlib.gzipSync(Buffer.from([0, 1, 2, 255]));
   const b = classifyBody({ body: png.toString('base64'), base64Encoded: true }, { responseHeaders: { 'content-type': 'image/png', 'content-encoding': 'gzip' } }, opts());
-  assert.deepEqual(b, { state: 'skipped', encoding: 'gzip', encodedBytes: png.length, reason: 'treść binarna (image/png)' });
+  assert.deepEqual(b, { state: 'skipped', encoding: 'gzip', encodedBytes: png.length, reason: 'binary body (image/png)' });
   assert.equal(classifyBody({ body: '', base64Encoded: true }, { type: 'Other', responseHeaders: { 'content-type': 'application/json', 'content-encoding': 'gzip' } }, opts()).state, 'available', 'pusta odpowiedź (np. 204, HEAD)');
   // charset=utf-8: inspektor Node oddaje bajty jako tekst UTF-8 (sprawdzone na Node 22), gzip jest wtedy zniekształcony
   const mangled = zlib.gzipSync(Buffer.from(JSON_TEXT)).toString('utf8');
   const m = classifyBody({ body: mangled, base64Encoded: false }, { responseHeaders: { 'content-type': 'application/json; charset=utf-8', 'content-encoding': 'gzip' } }, opts());
   assert.equal(m.state, 'unavailable');
-  assert.match(m.reason, /zniekształcone/);
+  assert.match(m.reason, /garbled/);
 });

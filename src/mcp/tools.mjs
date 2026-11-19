@@ -3,11 +3,11 @@ import { row, details } from './render.mjs';
 import { analyze } from '../analyze/findings.mjs';
 
 const sel = {
-  app: { type: 'string', description: 'Nazwa aplikacji (z inspector_status) lub port inspektora. Pomiń, aby objąć wszystkie.' },
-  url_contains: { type: 'string', description: 'Filtr: fragment URL zapytania wychodzącego' },
-  page_contains: { type: 'string', description: 'Filtr: fragment żądania strony, które wywołało zapytanie, np. "/checkout"' },
-  last_ms: { type: 'number', description: 'Tylko zapytania z ostatnich N milisekund' },
-  since_id: { type: 'number', description: 'Tylko zapytania o id większym niż podane' },
+  app: { type: 'string', description: 'App name (from inspector_status) or inspector port. Omit to include all apps.' },
+  url_contains: { type: 'string', description: 'Filter: substring of the outbound request URL' },
+  page_contains: { type: 'string', description: 'Filter: substring of the page request that triggered the request, e.g. "/checkout"' },
+  last_ms: { type: 'number', description: 'Only requests from the last N milliseconds' },
+  since_id: { type: 'number', description: 'Only requests with an id greater than this one' },
 };
 
 /**
@@ -17,33 +17,33 @@ export function createTools(collector) {
   const { store } = collector;
   return {
     inspector_status: {
-      description: 'Lista podłączonych procesów/aplikacji (nazwa, port inspektora, pid, katalog) i liczba zebranych zapytań. Wywołaj najpierw, aby poznać nazwy aplikacji.',
+      description: 'Connected processes/apps (name, inspector port, pid, directory, warnings) and the number of collected requests. Call this first to learn the app names.',
       inputSchema: { type: 'object', properties: {} },
       run: () => collector.status(),
     },
     list_server_requests: {
-      description: 'Lista zapytań HTTP wykonanych przez procesy Node (fetch i node:http): aplikacja, metoda, URL, status, czas trwania, miejsce w kodzie.',
-      inputSchema: { type: 'object', properties: { ...sel, limit: { type: 'number', description: 'Maks. liczba wyników (domyślnie 50, najnowsze)' } } },
+      description: 'HTTP requests made by Node processes (fetch and node:http): app, page, method, URL, status, duration, code location.',
+      inputSchema: { type: 'object', properties: { ...sel, limit: { type: 'number', description: 'Max number of results (default 50, newest first)' } } },
       run: (a) => store.select(a, collector.now()).slice(-(a.limit || 50)).map(r => row(r)),
     },
     get_server_request: {
-      description: 'Szczegóły jednego zapytania: nagłówki żądania i odpowiedzi, treść odpowiedzi, stos wywołań.',
+      description: 'Details of one request: request and response headers, response body with its state, call stack.',
       inputSchema: { type: 'object', properties: { id: { type: 'number' }, max_body_chars: { type: 'number' } }, required: ['id'] },
       run: async ({ id, max_body_chars = 4000 }) => {
         const r = store.byId(id);
-        if (!r) throw new Error(`Brak zapytania o id ${id}`);
+        if (!r) throw new Error(`No request with id ${id}`);
         return details(await collector.ensureBody(r), max_body_chars);
       },
     },
     analyze_server_timeline: {
-      description: 'Analiza osi czasu ruchu serwera, osobno dla każdej aplikacji: serie zapytań, wykrywanie sekwencyjnych (waterfall) i równoległych, możliwy zysk z Promise.all, błędy 4xx/5xx i zerwane połączenia.',
+      description: 'Timeline analysis of server traffic, per app and per page request: request bursts, sequential (waterfall) vs parallel requests, potential gain from Promise.all (respecting data dependencies), 4xx/5xx errors and dropped connections.',
       inputSchema: { type: 'object', properties: { ...sel,
-        idle_gap_ms: { type: 'number', description: 'Przerwa rozdzielająca serie (domyślnie 250)' },
-        seq_gap_ms: { type: 'number', description: 'Maks. odstęp „zaraz po poprzednim” (domyślnie 15)' } } },
+        idle_gap_ms: { type: 'number', description: 'Idle gap that separates bursts, in ms (default 250)' },
+        seq_gap_ms: { type: 'number', description: 'Max gap in ms for "started right after the previous one" (default 15)' } } },
       run: (args = {}) => analyze(store.select(args, collector.now()), args, store.appsSeen()),
     },
     clear_server_requests: {
-      description: 'Czyści bufor zapytań (wszystkich albo jednej aplikacji), np. przed odtworzeniem scenariusza.',
+      description: 'Clears the request buffer (all apps or one app), e.g. before reproducing a scenario.',
       inputSchema: { type: 'object', properties: { app: sel.app } },
       run: ({ app } = {}) => ({ cleared: store.clear({ app }), last_id: store.lastId }),
     },

@@ -43,11 +43,11 @@ test('zależność przez ścieżkę po dekodowaniu procentowym i przez część 
 
 test('zależność przez nagłówek; nagłówki techniczne i zredagowane nie dają dopasowania', () => {
   const a = req(0, 0.1, { body: json({ cart: { ref: 'CART-778899' }, access_token: 'eyJhbGciOi.abc123def456' }) });
-  const b = req(0.101, 0.2, { headers: { 'x-cart-ref': 'CART-778899', authorization: '[zredagowano: Bearer · 30 zn. · #a1b2c3]' } });
+  const b = req(0.101, 0.2, { headers: { 'x-cart-ref': 'CART-778899', authorization: '[redacted: Bearer · 30 chars · #a1b2c3]' } });
   assert.deepEqual(chainOf([a, b]).dependencies.map(d => d.evidence.found_in), ['header:x-cart-ref']);
   // token z odpowiedzi trafia do Authorization — po redakcji nie da się tego wykryć (ograniczenie)
   const c = req(1, 1.1, { body: json({ access_token: 'eyJhbGciOi.abc123def456' }) });
-  const d = req(1.101, 1.2, { headers: { authorization: '[zredagowano: Bearer · 30 zn. · #a1b2c3]' } });
+  const d = req(1.101, 1.2, { headers: { authorization: '[redacted: Bearer · 30 chars · #a1b2c3]' } });
   const ch = chainOf([c, d]);
   assert.deepEqual(ch.dependencies, []);
   assert.deepEqual(ch.dependency_check, { status: 'complete' });
@@ -70,23 +70,23 @@ test('wartość znana przed końcem A (URL A, przekazany nagłówek, adres stron
 });
 
 test('brak treści odpowiedzi = stan nieznany, nie „niezależne”; oszczędność jak dawniej', () => {
-  const unavailable = { state: 'unavailable', bytes: 0, reason: 'inspektor nie zwrócił treści)' };
+  const unavailable = { state: 'unavailable', bytes: 0, reason: 'the inspector returned no body' };
   const ch = chainOf([req(0, 0.1, { body: unavailable }), req(0.101, 0.2, { url: `http://svc/s?orderId=${ORDER}` })]);
   assert.deepEqual(ch.dependencies, []);
   assert.equal(ch.dependency_check.status, 'unavailable');
-  assert.match(ch.dependency_check.reason, /inspektor nie zwrócił treści/);
+  assert.match(ch.dependency_check.reason, /the inspector returned no body/);
   assert.equal(ch.potential_saving_ms, 100);
   assert.equal(ch.hint, HINTS.independent, 'wskazówka warunkowa — „jeśli nie zależą od siebie”');
   // trzy kroki: treść pierwszego niedostępna, drugiego dostępna → sprawdzenie częściowe
   const partial = chainOf([req(1, 1.1, { body: { state: 'none' } }), req(1.101, 1.2), req(1.201, 1.3)]);
   assert.equal(partial.dependency_check.status, 'partial');
-  assert.match(partial.dependency_check.reason, /nie została pobrana/);
+  assert.match(partial.dependency_check.reason, /was not fetched/);
   // zapytanie zakończone błędem połączenia nie ma odpowiedzi — nie ma czego sprawdzać
   assert.equal(chainOf([req(2, 2.1, { state: 'failed', body: { state: 'none' } }), req(2.101, 2.2)]).dependency_check.status, 'complete');
   // treść żądania B (POST) nie jest w modelu — brak dowodu nic nie znaczy
   const post = chainOf([req(3, 3.1, { body: json({ id: 'x-12345678' }) }), req(3.101, 3.2, { method: 'POST', url: 'http://svc/pay' })]);
   assert.equal(post.dependency_check.status, 'unavailable');
-  assert.match(post.dependency_check.reason, /treść żądania POST/);
+  assert.match(post.dependency_check.reason, /POST request body/);
 });
 
 test('JSON zagnieżdżony: ścieżka dowodu, klucze jako wartości, duże liczby bez utraty cyfr', () => {
@@ -99,7 +99,7 @@ test('JSON zagnieżdżony: ścieżka dowodu, klucze jako wartości, duże liczby
   const c = req(1.101, 1.2, { url: 'http://svc/orders/12345678901234567890' });
   assert.equal(dependencyGraph([big, c]).edges[0]?.evidence.from_path, '$.order.id');
   // treść przycięta (niepoprawny JSON) — przeszukiwana jak tekst, sprawdzenie niepełne
-  const cut = req(2, 2.1, { body: { state: 'truncated', data: '{"items":[{"id":"ab-1234567"},{"id":"ab-76', bytes: 9999, reason: 'limit kolektora 256 B' } });
+  const cut = req(2, 2.1, { body: { state: 'truncated', data: '{"items":[{"id":"ab-1234567"},{"id":"ab-76', bytes: 9999, reason: 'collector limit of 256 B' } });
   const d = req(2.101, 2.2, { url: 'http://svc/x/ab-1234567' });
   const g = dependencyGraph([cut, d]);
   assert.equal(g.edges[0].evidence.from_path, undefined, 'tekst — bez ścieżki JSON');
@@ -119,14 +119,14 @@ test('duże treści: limit przeszukiwania i liczby kandydatów, rozsądny czas',
   const late = chainOf([a, req(0.101, 0.2, { url: 'http://svc/x?id=item-104999' })]);
   assert.deepEqual(late.dependencies, []);
   assert.equal(late.dependency_check.status, 'unavailable');
-  assert.match(late.dependency_check.reason, /limit 2000 wartości/);
+  assert.match(late.dependency_check.reason, /limit of 2000 values/);
   const html = { state: 'available', data: `<html>${'<p>tekst</p>'.repeat(2000)}<a href="/o/zz-12345678">x</a></html>`, bytes: 0 };
   assert.equal(chainOf([req(0.5, 0.6, { body: html }), req(0.601, 0.7, { url: 'http://svc/o/zz-12345678' })]).dependencies.length, 1,
     'treść tekstowa przeszukiwana dalej niż limit pojedynczego łańcucha JSON');
   const text = { state: 'available', data: 'x '.repeat(LIMITS.scanChars) + 'zz-12345678', bytes: 0 };
   const far = chainOf([req(1, 1.1, { body: text }), req(1.101, 1.2, { url: 'http://svc/zz-12345678' })]);
   assert.deepEqual(far.dependencies, []);
-  assert.match(far.dependency_check.reason, /przeszukano tylko pierwsze/);
+  assert.match(far.dependency_check.reason, /only the first/);
   assert.ok(performance.now() - t0 < 2000, `${Math.round(performance.now() - t0)} ms`);
 });
 
@@ -144,11 +144,11 @@ test('wartości pospolite i krótkie nie są kandydatami', () => {
 test('dowód spod klucza wyglądającego na sekret nie pokazuje wartości', () => {
   const a = req(0, 0.1, { body: json({ sessionRef: 'S3cr3t-ref-0987654321' }) });
   const b = req(0.101, 0.2, { url: 'http://svc/x?ref=S3cr3t-ref-0987654321' });
-  assert.deepEqual(dependencyGraph([a, b]).edges[0].evidence, { value: '[zredagowano · 21 zn.]', from_path: '$.sessionRef', found_in: 'query:ref' });
+  assert.deepEqual(dependencyGraph([a, b]).edges[0].evidence, { value: '[redacted · 21 chars]', from_path: '$.sessionRef', found_in: 'query:ref' });
   // wartość będąca kluczem pod polem-sekretem: ani wartość, ani dalsza ścieżka nie są pokazywane
   const c = req(1, 1.1, { body: json({ tokens: { 'tk-12345678': { ok: true } } }) });
   const d = req(1.101, 1.2, { url: 'http://svc/x/tk-12345678' });
-  assert.deepEqual(dependencyGraph([c, d]).edges[0].evidence, { value: '[zredagowano · 11 zn.]', from_path: '$.tokens…', found_in: 'path' });
+  assert.deepEqual(dependencyGraph([c, d]).edges[0].evidence, { value: '[redacted · 11 chars]', from_path: '$.tokens…', found_in: 'path' });
 });
 
 test('łańcuch częściowo zależny: oszczędność tylko z kroków niezależnych, wskazówka bez Promise.all dla zależnych', () => {
@@ -159,7 +159,7 @@ test('łańcuch częściowo zależny: oszczędność tylko z kroków niezależny
   assert.deepEqual(ch.dependencies.map(d => [d.from_step, d.to_step, d.evidence.found_in]), [[0, 1, 'query:orderId'], [0, 2, 'header:x-order-id']]);
   assert.equal(ch.if_parallel_ms, 200, 'A, potem B i C równolegle');
   assert.equal(ch.potential_saving_ms, 100, 'dawniej 200');
-  assert.match(ch.hint, /steps\[1\], steps\[2\] czekają/);
+  assert.match(ch.hint, /Steps steps\[1\], steps\[2\] wait/);
   // B zależy od A, C niezależne: C może iść razem z A
   const x = req(1, 1.1, { body: json({ orderId: ORDER }) }), y = req(1.101, 1.2, { url: `http://svc/s/${ORDER}` }), z = req(1.201, 1.3);
   assert.equal(criticalPathMs([x, y, z], dependencyGraph([x, y, z]).edges), 200);

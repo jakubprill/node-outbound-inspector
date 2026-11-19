@@ -38,7 +38,7 @@ test('tools/call: wynik, błąd narzędzia, nieznane narzędzie, nieznana metoda
   assert.equal(calls, before + 1, 'beforeCall przed każdym wywołaniem');
   const boom = await server.handle({ id: 5, method: 'tools/call', params: { name: 'boom' } });
   assert.deepEqual(boom.result, { content: [{ type: 'text', text: 'nie' }], isError: true });
-  assert.deepEqual((await server.handle({ id: 6, method: 'tools/call', params: { name: 'nope' } })).error, { code: -32603, message: 'Nieznane narzędzie: nope' });
+  assert.deepEqual((await server.handle({ id: 6, method: 'tools/call', params: { name: 'nope' } })).error, { code: -32603, message: 'Unknown tool: nope' });
   assert.deepEqual((await server.handle({ id: 7, method: 'x/y' })).error, { code: -32601, message: 'Method not found: x/y' });
 });
 

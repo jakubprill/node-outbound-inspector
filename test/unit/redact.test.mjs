@@ -7,8 +7,8 @@ const key = Buffer.alloc(32, 7);
 test('nagłówki: lista i wzorzec nazw; schemat, długość, skrót', () => {
   const r = createRedactor({ key });
   const out = r.headers({ Authorization: 'Bearer SECRET', cookie: 'a=b', 'Set-Cookie': 'sid=1', 'x-api-key': 'k', 'X-Session-Id': 's', 'x-auth-token': 't', 'content-type': 'application/json', 'keep-alive': 'timeout=5', 'x-request-id': 'req-1' });
-  assert.match(out.Authorization, /^\[zredagowano: Bearer · 13 zn\. · #[0-9a-f]{6}\]$/);
-  for (const h of ['cookie', 'Set-Cookie', 'x-api-key', 'X-Session-Id', 'x-auth-token']) assert.match(out[h], /^\[zredagowano: /, h);
+  assert.match(out.Authorization, /^\[redacted: Bearer · 13 chars · #[0-9a-f]{6}\]$/);
+  for (const h of ['cookie', 'Set-Cookie', 'x-api-key', 'X-Session-Id', 'x-auth-token']) assert.match(out[h], /^\[redacted: /, h);
   assert.equal(out['content-type'], 'application/json');
   assert.equal(out['keep-alive'], 'timeout=5');
   assert.equal(out['x-request-id'], 'req-1');
@@ -24,7 +24,7 @@ test('ten sam sekret → ten sam skrót; inny klucz kolektora → inny skrót', 
 
 test('dodatkowe nagłówki firmowe', () => {
   const r = createRedactor({ key, extraHeaders: ['X-Acme-Internal'] });
-  assert.match(r.headers({ 'x-acme-internal': 'v' })['x-acme-internal'], /zredagowano/);
+  assert.match(r.headers({ 'x-acme-internal': 'v' })['x-acme-internal'], /redacted/);
 });
 
 test('parametry URL', () => {

@@ -34,7 +34,7 @@ test('wada 2: proces bez --experimental-network-inspection — status to pokazuj
     for (let i = 0; i < 40 && !(await m.call('inspector_status')).apps[0]?.ready; i++) await sleep(250);
     const [s] = (await m.call('inspector_status')).apps;
     assert.equal(s.network_inspection, false);
-    assert.match(s.warnings.join(' '), /bez --experimental-network-inspection/);
+    assert.match(s.warnings.join(' '), /without --experimental-network-inspection/);
   }));
 
 test('wada 3: restart aplikacji na tym samym porcie — rekordy sprzed restartu zostają', () =>
@@ -76,7 +76,7 @@ test('wada 6: sekrety z nagłówków nie występują w żadnym wyniku żadnego n
     const all = outputs.join('\n');
     for (const secret of ['secret-token', 'session=abc']) assert.ok(!all.includes(secret), `wyciek: ${secret}`);
     const d = await m.call('get_server_request', { id: r.id });
-    assert.match(d.requestHeaders.authorization, /^\[zredagowano: Bearer · 19 zn\. · #[0-9a-f]{6}\]$/);
+    assert.match(d.requestHeaders.authorization, /^\[redacted: Bearer · 19 chars · #[0-9a-f]{6}\]$/);
   }));
 
 test('OUTBOUND_REDACT=0: wartości bez zmian i ostrzeżenie w statusie', () =>
@@ -88,5 +88,5 @@ test('OUTBOUND_REDACT=0: wartości bez zmian i ostrzeżenie w statusie', () =>
     assert.equal((await m.call('get_server_request', { id: r.id })).requestHeaders.authorization, 'Bearer secret-token');
     const st = await m.call('inspector_status');
     assert.equal(st.redaction, false);
-    assert.match(st.warnings.join(' '), /Redakcja sekretów wyłączona/);
+    assert.match(st.warnings.join(' '), /Secret redaction is off/);
   }));

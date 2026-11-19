@@ -52,7 +52,7 @@ test('proces potomny: flaga sieciowa w execArgv, inspektor na podanym porcie, ar
   run.p.stdin.end('exit 7\n');
   const r = await run.exited;
   assert.equal(r.code, 7, 'kod wyjścia potomka przechodzi dalej');
-  assert.doesNotMatch(r.err, /uwaga/);
+  assert.doesNotMatch(r.err, /warning/);
 });
 
 test('bez --inspect: ostrzeżenie zamiast cichego braku inspektora; flagi node przechodzą, --inspect nie', async () => {
@@ -64,7 +64,7 @@ test('bez --inspect: ostrzeżenie zamiast cichego braku inspektora; flagi node p
   run.p.stdin.end();
   const r = await run.exited;
   assert.equal(r.code, 0);
-  assert.match(r.err, /\[outbound-next\] uwaga: Brak --inspect=<port>/);
+  assert.match(r.err, /\[outbound-next\] warning: No --inspect=<port>/);
 });
 
 test('host inspektora spoza loopbacku: ostrzeżenie', async () => {
@@ -72,7 +72,7 @@ test('host inspektora spoza loopbacku: ostrzeżenie', async () => {
   await run.firstLine;
   run.p.stdin.end();
   const r = await run.exited;
-  assert.match(r.err, /dostępny spoza tego komputera/);
+  assert.match(r.err, /reachable from outside this machine/);
 });
 
 test('SIGTERM trafia do potomka, a launcher kończy się tym samym sygnałem', { skip: process.platform === 'win32' && 'brak sygnałów POSIX' }, async () => {
@@ -115,5 +115,5 @@ test('brak next: czytelny błąd i kod 1', async t => {
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const r = await launch(['dev'], { cwd: dir, env: { OUTBOUND_NEXT_BIN: '' } }).exited;
   assert.equal(r.code, 1);
-  assert.match(r.err, /Nie znaleziono next\/dist\/bin\/next .*OUTBOUND_NEXT_BIN/);
+  assert.match(r.err, /Could not find next\/dist\/bin\/next .*OUTBOUND_NEXT_BIN/);
 });

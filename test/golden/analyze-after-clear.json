@@ -2,5 +2,5 @@
   "apps_with_traffic": [
     "@acme/web"
   ],
-  "summary": "Brak zapytań w wybranym zakresie."
+  "summary": "No requests in the selected range."
 }

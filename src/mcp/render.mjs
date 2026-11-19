@@ -1,13 +1,13 @@
 // Kształt pojedynczego wiersza zapytania w odpowiedziach narzędzi (czyste).
 import { duration } from '../analyze/timeline.mjs';
 
-export const NO_ORIGIN = '(brak ramki z kodu aplikacji — np. fetch opakowany przez Next.js; szukaj po URL)';
+export const NO_ORIGIN = '(no frame from app code — e.g. fetch wrapped by Next.js; search by URL)';
 
 /** Status nieudanego zapytania, gdy inspektor Node podał pusty errorText (issue #3). */
-export const FAILED_NO_TEXT = 'FAILED (brak opisu błędu od inspektora)';
-export const EMPTY_ERROR_HINT = 'Inspektor Node podał pusty errorText (to error.message). Najczęstsza przyczyna: host ma kilka adresów '
-  + '(np. localhost → ::1 i 127.0.0.1), połączenie nie udało się pod żadnym i Node zgłasza AggregateError bez opisu — '
-  + 'zwykle pod tym adresem nic nie nasłuchuje (ECONNREFUSED).';
+export const FAILED_NO_TEXT = 'FAILED (no error text from the inspector)';
+export const EMPTY_ERROR_HINT = 'The Node inspector reported an empty errorText (that is error.message). Most common cause: the host has several addresses '
+  + '(e.g. localhost → ::1 and 127.0.0.1), the connection failed on all of them and Node reports an AggregateError without a message — '
+  + 'usually nothing is listening at that address (ECONNREFUSED).';
 
 // Rodzaj błędu z errorText inspektora. Kolejność ma znaczenie: „aborted due to timeout” to timeout.
 const ERROR_KINDS = [

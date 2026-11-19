@@ -2,7 +2,7 @@
 
 > An MCP server (stdio, zero dependencies) that shows an AI agent the outbound HTTP requests of Node.js processes, e.g. a Next.js dev server calling internal services. Built on the Node inspector (`--inspect` + `--experimental-network-inspection`, Chrome DevTools Protocol). Handles several apps at once (monorepo), correlates requests with the page request that triggered them, and detects sequential requests (waterfalls). For local development only.
 
-This file tells language models how to integrate the tool into an existing project and how to use it. Tool descriptions and tool output are in Polish; field names and identifiers are in English.
+This file tells language models how to integrate the tool into an existing project and how to use it. Tool descriptions and tool output are in English. Branch on the stable codes (`verdict_code`, `body_state`, `error_kind`, `dependency_check.status`), not on human-readable text.
 
 ## Requirements
 

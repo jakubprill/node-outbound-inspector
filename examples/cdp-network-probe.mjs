@@ -7,7 +7,7 @@ const [target] = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(
 const ws = new WebSocket(target.webSocketDebuggerUrl);
 let id = 0;
 const send = (method, params = {}) => ws.send(JSON.stringify({ id: ++id, method, params }));
-ws.onopen = () => { send('Network.enable'); console.log(`podłączono do ${target.title} — czekam na zapytania (Ctrl+C kończy)`); };
+ws.onopen = () => { send('Network.enable'); console.log(`connected to ${target.title} — waiting for requests (Ctrl+C to stop)`); };
 ws.onmessage = ({ data }) => {
   const { method, params: p } = JSON.parse(data);
   if (method === 'Network.requestWillBeSent') console.log(`→ ${p.request.method} ${p.request.url}`);

@@ -82,7 +82,7 @@ Filters: `app`, `page_contains`, `url_contains`, `last_ms`, `since_id`.
 
 A typical agent workflow: `clear_server_requests` → open a page (e.g. with [Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp)) → `analyze_server_timeline` → `get_server_request` for errors.
 
-Tool descriptions and tool output are currently in Polish.
+Tool descriptions, tool output and CLI messages are in English. For logic, use the stable codes (`verdict_code`, `body_state`, `error_kind`) rather than the text.
 
 ### Configuration (environment variables)
 | Variable | Default | Description |

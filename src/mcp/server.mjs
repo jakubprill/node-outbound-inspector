@@ -25,7 +25,7 @@ export function createMcpServer({ info, instructions, tools, beforeCall = async 
       else if (method === 'ping') result = {};
       else if (method === 'tools/list') result = { tools: Object.entries(tools).map(([name, t]) => ({ name, description: t.description, inputSchema: t.inputSchema })) };
       else if (method === 'tools/call') {
-        const t = tools[params.name]; if (!t) throw new Error(`Nieznane narzędzie: ${params.name}`);
+        const t = tools[params.name]; if (!t) throw new Error(`Unknown tool: ${params.name}`);
         await beforeCall();
         try { result = { content: [{ type: 'text', text: JSON.stringify(await t.run(params.arguments || {}), null, 2) }] }; }
         catch (e) { result = { content: [{ type: 'text', text: String(e.message || e) }], isError: true }; }

@@ -65,7 +65,7 @@ export function sentValues(r, base) {
   return out;
 }
 
-const bodyReason = b => b?.reason ?? (b?.state === 'none' || !b ? 'treść odpowiedzi nie została pobrana (tryb lazy albo brak odpowiedzi)' : `treść odpowiedzi: ${b.state}`);
+const bodyReason = b => b?.reason ?? (b?.state === 'none' || !b ? 'response body was not fetched (lazy mode or no response)' : `response body: ${b.state}`);
 
 /**
  * Kandydaci z treści odpowiedzi: wartość → ścieżka JSON (albo null dla tekstu).
@@ -78,11 +78,11 @@ export function responseValues(r) {
   if (body?.data == null || !['available', 'truncated'].includes(body.state)) return { values, complete: false, reason: bodyReason(body) };
   let complete = body.state === 'available', reason = complete ? undefined : bodyReason(body);
   let data = body.data;
-  if (data.length > LIMITS.scanChars) { data = data.slice(0, LIMITS.scanChars); complete = false; reason = `przeszukano tylko pierwsze ${LIMITS.scanChars} znaków treści`; }
+  if (data.length > LIMITS.scanChars) { data = data.slice(0, LIMITS.scanChars); complete = false; reason = `only the first ${LIMITS.scanChars} characters of the body were scanned`; }
   const add = (s, path, max = LIMITS.stringChars) => {
     for (const t of String(s).slice(0, max).match(TOKEN) ?? []) {
       if (values.has(t) || !isCandidate(t)) continue;
-      if (values.size >= LIMITS.candidates) { complete = false; reason = `limit ${LIMITS.candidates} wartości z jednej odpowiedzi`; return; }
+      if (values.size >= LIMITS.candidates) { complete = false; reason = `limit of ${LIMITS.candidates} values per response`; return; }
       values.set(t, path);
     }
   };
@@ -112,7 +112,7 @@ function walk(v, path, add, depth) {
 function evidence(value, fromPath, foundIn) {
   let path = fromPath, shown = value.length > 24 ? `${value.slice(0, 20)}…` : value;
   const secret = fromPath?.match(/\.([^.[\]]+)/g)?.find(seg => isSensitiveName(seg.slice(1)));
-  if (secret) { shown = `[zredagowano · ${value.length} zn.]`; path = fromPath.slice(0, fromPath.indexOf(secret) + secret.length) + (fromPath.endsWith(secret) ? '' : '…'); }
+  if (secret) { shown = `[redacted · ${value.length} chars]`; path = fromPath.slice(0, fromPath.indexOf(secret) + secret.length) + (fromPath.endsWith(secret) ? '' : '…'); }
   return { value: shown, ...(path ? { from_path: path.length > 60 ? `${path.slice(0, 59)}…` : path } : {}), found_in: foundIn };
 }
 
@@ -180,7 +180,7 @@ export function dependencyGraph(group) {
         const n = k - self - deps.length; // pary bez dowodu
         if (n <= 0) { pairs += deps.length; continue; }
         pairs += n + deps.length;
-        if (hasHiddenBody(B)) { unknown += n; reasons.add(`treść żądania ${B.method} nie jest dostępna w modelu`); continue; }
+        if (hasHiddenBody(B)) { unknown += n; reasons.add(`${B.method} request body is not available in the model`); continue; }
         const inc = incomplete[k] - (self && !produced.get(B).complete ? 1 : 0) - deps.filter(A => !produced.get(A).complete).length;
         unknown += inc;
         if (inc > 0) for (const [reason, i] of firstReason) if (i < k && ms[i] !== B && reasons.size < 4) reasons.add(reason);

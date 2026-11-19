@@ -12,7 +12,7 @@
           {
             "dependencies": [],
             "dependency_check": "<node-dependent>",
-            "hint": "Jeśli te zapytania nie zależą od siebie, Promise.all skróci ten fragment do czasu najwolniejszego z nich.",
+            "hint": "If these requests do not depend on each other, Promise.all cuts this part down to the time of the slowest one.",
             "if_parallel_ms": "<num>",
             "length": 3,
             "potential_saving_ms": "<num>",
@@ -59,7 +59,7 @@
             "url": "http://127.0.0.1:<port>/user?ms=150"
           }
         ],
-        "verdict": "SEKWENCYJNIE (waterfall) — każde zapytanie czeka na poprzednie",
+        "verdict": "SEQUENTIAL (waterfall) — each request waits for the previous one",
         "verdict_code": "sequential",
         "wall_ms": "<num>"
       },
@@ -83,7 +83,7 @@
             "url": "http://127.0.0.1:<port>/payments?ms=60&status=500"
           }
         ],
-        "verdict": "pojedyncze zapytanie",
+        "verdict": "single request",
         "verdict_code": "single",
         "wall_ms": "<num>"
       }

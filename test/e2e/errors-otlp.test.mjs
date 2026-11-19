@@ -17,7 +17,7 @@ test('odrzucone połączenie: status nigdy nie jest "FAILED: " bez opisu, szczeg
     await sc.hit(sc.apps[0], '/refused'); await sc.hit(sc.apps[0], '/timeout'); await sleep(300);
     const [refused] = await m.call('list_server_requests', { url_contains: '/api' });
     // Node 22 zgłasza tu AggregateError z pustym message; gdyby nowszy Node dodał opis, status go pokaże
-    assert.match(refused.status, /^FAILED(: \S| \(brak opisu błędu od inspektora\)$)/, refused.status);
+    assert.match(refused.status, /^FAILED(: \S| \(no error text from the inspector\)$)/, refused.status);
     const d = await m.call('get_server_request', { id: refused.id });
     assert.ok(['unknown', 'connection_refused', 'other'].includes(d.error_kind), d.error_kind);
     if (d.error === '') assert.match(d.error_hint, /AggregateError/);

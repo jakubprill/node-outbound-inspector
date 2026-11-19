@@ -42,7 +42,7 @@ export function applyNetworkEvent(store, session, method, p, { ignoreHosts, insp
     r.tsResponse = p.timestamp;
   } else if (method === 'Network.loadingFinished') {
     r.tsEnd = p.timestamp; r.state = 'finished';
-    if (bodies === 'off') { r.body = { state: 'skipped', reason: 'tryb treści: off' }; return []; }
+    if (bodies === 'off') { r.body = { state: 'skipped', reason: 'body mode: off' }; return []; }
     if (bodies === 'eager') return [{ type: 'fetch-body', key, requestId: p.requestId }];
   } else if (method === 'Network.loadingFailed') {
     // errorText bywa pusty (np. AggregateError bez opisu) — pokazanie tego jest zadaniem render.mjs

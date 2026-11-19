@@ -60,12 +60,12 @@ const reaches = (edges, from, to) => {
 };
 
 export const HINTS = Object.freeze({
-  independent: 'Jeśli te zapytania nie zależą od siebie, Promise.all skróci ten fragment do czasu najwolniejszego z nich.',
-  dependent: 'Każdy krok używa danych z odpowiedzi poprzedniego (zob. dependencies), więc zrównoleglenie (Promise.all) jest niemożliwe. '
-    + 'Ten fragment skróci tylko zmiana po stronie serwisów, np. jedno zapytanie zwracające komplet danych, albo szybsze odpowiedzi.',
-  partial: steps => `Kroki ${steps} czekają na dane z odpowiedzi wcześniejszych kroków (zob. dependencies) i nie mogą startować razem z nimi. `
-    + 'Równolegle uruchom tylko kroki niezależne od siebie, a krok zależny zaraz po swoim źródle, np. Promise.all([a().then(b), c()]) '
-    + 'albo a().then(x => Promise.all([b(x), c(x)])); potential_saving_ms uwzględnia te zależności.',
+  independent: 'If these requests do not depend on each other, Promise.all cuts this part down to the time of the slowest one.',
+  dependent: 'Each step uses data from the previous response (see dependencies), so running them in parallel (Promise.all) is not possible. '
+    + 'Only a change on the services side shortens this part, e.g. one request returning all the data, or faster responses.',
+  partial: steps => `Steps ${steps} wait for data from earlier responses (see dependencies) and cannot start together with them. `
+    + 'Run only mutually independent steps in parallel and start each dependent step right after its source, e.g. Promise.all([a().then(b), c()]) '
+    + 'or a().then(x => Promise.all([b(x), c(x)])); potential_saving_ms takes these dependencies into account.',
 });
 
 /**

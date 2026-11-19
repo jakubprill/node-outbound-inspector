@@ -22,12 +22,12 @@ export function supportedNode(node) {
  */
 export function processWarnings({ execArgv = [], node = '', networkEnabled }) {
   if (!supportedNode(node)) {
-    return { networkInspection: false, warnings: [`Proces działa na Node ${String(node).replace(/^v/, '')}, a wymagany jest Node ≥ ${MIN_NODE_MAJOR}: proces nie jest podsłuchiwany. Uruchom aplikację na Node ${MIN_NODE_MAJOR} lub nowszym.`] };
+    return { networkInspection: false, warnings: [`The process runs on Node ${String(node).replace(/^v/, '')}, but Node ≥ ${MIN_NODE_MAJOR} is required: the process is not inspected. Run the app on Node ${MIN_NODE_MAJOR} or newer.`] };
   }
   const warnings = [];
   const hasFlag = execArgv.includes(NETWORK_FLAG);
-  if (!hasFlag) warnings.push(`Proces działa bez ${NETWORK_FLAG}: zapytania wychodzące nie będą widoczne. Dodaj flagę bezpośrednio do polecenia node (NODE_OPTIONS jej nie przyjmuje).`);
-  else if (!networkEnabled) warnings.push('Network.enable nie odpowiedział — inspekcja sieci niedostępna.');
+  if (!hasFlag) warnings.push(`The process runs without ${NETWORK_FLAG}: outbound requests will not be visible. Add the flag directly to the node command (NODE_OPTIONS does not accept it).`);
+  else if (!networkEnabled) warnings.push('Network.enable did not respond — network inspection is unavailable.');
   return { networkInspection: hasFlag && !!networkEnabled, warnings };
 }
 
@@ -62,7 +62,7 @@ export function openSession(target, port, { config, log, onNetwork, onClose, pro
       const check = processWarnings({ node: info.node });
       session.networkOk = false; session.warnings = check.warnings;
       session.ready = true;
-      log(`pominięto app="${session.app}" port=${port} pid=${session.pid}: ${check.warnings[0]}`);
+      log(`skipped app="${session.app}" port=${port} pid=${session.pid}: ${check.warnings[0]}`);
       return;
     }
     // obejścia błędów Node w inspekcji sieci — przed Network.enable (np. nodejs/node#66551: setEncoding wywraca aplikację)
@@ -78,14 +78,14 @@ export function openSession(target, port, { config, log, onNetwork, onClose, pro
       session.pageCorrelation = ['installed', 'already'].includes(r?.result?.value);
     }
     session.ready = true; // identyfikacja, Network.enable i hak zakończone
-    log(`podłączono app="${session.app}" port=${port} pid=${session.pid} cwd=${session.cwd} korelacja_stron=${!!session.pageCorrelation}${session.warnings.length ? ' UWAGA: ' + session.warnings.join(' ') : ''}`);
+    log(`connected app="${session.app}" port=${port} pid=${session.pid} cwd=${session.cwd} page_correlation=${!!session.pageCorrelation}${session.warnings.length ? ' WARNING: ' + session.warnings.join(' ') : ''}`);
   }
 
   const cdp = connectCdp(url, {
     timeoutMs: config.sendTimeoutMs,
     onOpen,
     onEvent: (method, params) => { if (method.startsWith('Network.')) onNetwork(session, method, params); },
-    onClose: () => { onClose(session); log(`rozłączono app="${session.app}" port=${port}`); },
+    onClose: () => { onClose(session); log(`disconnected app="${session.app}" port=${port}`); },
   });
   session.send = cdp.send;
   session.close = cdp.close;

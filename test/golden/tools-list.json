@@ -2,7 +2,7 @@
   "tools": [
     {
       "name": "inspector_status",
-      "description": "Lista podłączonych procesów/aplikacji (nazwa, port inspektora, pid, katalog) i liczba zebranych zapytań. Wywołaj najpierw, aby poznać nazwy aplikacji.",
+      "description": "Connected processes/apps (name, inspector port, pid, directory, warnings) and the number of collected requests. Call this first to learn the app names.",
       "inputSchema": {
         "type": "object",
         "properties": {}
@@ -10,40 +10,40 @@
     },
     {
       "name": "list_server_requests",
-      "description": "Lista zapytań HTTP wykonanych przez procesy Node (fetch i node:http): aplikacja, metoda, URL, status, czas trwania, miejsce w kodzie.",
+      "description": "HTTP requests made by Node processes (fetch and node:http): app, page, method, URL, status, duration, code location.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "app": {
             "type": "string",
-            "description": "Nazwa aplikacji (z inspector_status) lub port inspektora. Pomiń, aby objąć wszystkie."
+            "description": "App name (from inspector_status) or inspector port. Omit to include all apps."
           },
           "url_contains": {
             "type": "string",
-            "description": "Filtr: fragment URL zapytania wychodzącego"
+            "description": "Filter: substring of the outbound request URL"
           },
           "page_contains": {
             "type": "string",
-            "description": "Filtr: fragment żądania strony, które wywołało zapytanie, np. \"/checkout\""
+            "description": "Filter: substring of the page request that triggered the request, e.g. \"/checkout\""
           },
           "last_ms": {
             "type": "number",
-            "description": "Tylko zapytania z ostatnich N milisekund"
+            "description": "Only requests from the last N milliseconds"
           },
           "since_id": {
             "type": "number",
-            "description": "Tylko zapytania o id większym niż podane"
+            "description": "Only requests with an id greater than this one"
           },
           "limit": {
             "type": "number",
-            "description": "Maks. liczba wyników (domyślnie 50, najnowsze)"
+            "description": "Max number of results (default 50, newest first)"
           }
         }
       }
     },
     {
       "name": "get_server_request",
-      "description": "Szczegóły jednego zapytania: nagłówki żądania i odpowiedzi, treść odpowiedzi, stos wywołań.",
+      "description": "Details of one request: request and response headers, response body with its state, call stack.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -61,50 +61,50 @@
     },
     {
       "name": "analyze_server_timeline",
-      "description": "Analiza osi czasu ruchu serwera, osobno dla każdej aplikacji: serie zapytań, wykrywanie sekwencyjnych (waterfall) i równoległych, możliwy zysk z Promise.all, błędy 4xx/5xx i zerwane połączenia.",
+      "description": "Timeline analysis of server traffic, per app and per page request: request bursts, sequential (waterfall) vs parallel requests, potential gain from Promise.all (respecting data dependencies), 4xx/5xx errors and dropped connections.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "app": {
             "type": "string",
-            "description": "Nazwa aplikacji (z inspector_status) lub port inspektora. Pomiń, aby objąć wszystkie."
+            "description": "App name (from inspector_status) or inspector port. Omit to include all apps."
           },
           "url_contains": {
             "type": "string",
-            "description": "Filtr: fragment URL zapytania wychodzącego"
+            "description": "Filter: substring of the outbound request URL"
           },
           "page_contains": {
             "type": "string",
-            "description": "Filtr: fragment żądania strony, które wywołało zapytanie, np. \"/checkout\""
+            "description": "Filter: substring of the page request that triggered the request, e.g. \"/checkout\""
           },
           "last_ms": {
             "type": "number",
-            "description": "Tylko zapytania z ostatnich N milisekund"
+            "description": "Only requests from the last N milliseconds"
           },
           "since_id": {
             "type": "number",
-            "description": "Tylko zapytania o id większym niż podane"
+            "description": "Only requests with an id greater than this one"
           },
           "idle_gap_ms": {
             "type": "number",
-            "description": "Przerwa rozdzielająca serie (domyślnie 250)"
+            "description": "Idle gap that separates bursts, in ms (default 250)"
           },
           "seq_gap_ms": {
             "type": "number",
-            "description": "Maks. odstęp „zaraz po poprzednim” (domyślnie 15)"
+            "description": "Max gap in ms for \"started right after the previous one\" (default 15)"
           }
         }
       }
     },
     {
       "name": "clear_server_requests",
-      "description": "Czyści bufor zapytań (wszystkich albo jednej aplikacji), np. przed odtworzeniem scenariusza.",
+      "description": "Clears the request buffer (all apps or one app), e.g. before reproducing a scenario.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "app": {
             "type": "string",
-            "description": "Nazwa aplikacji (z inspector_status) lub port inspektora. Pomiń, aby objąć wszystkie."
+            "description": "App name (from inspector_status) or inspector port. Omit to include all apps."
           }
         }
       }

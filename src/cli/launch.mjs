@@ -47,11 +47,11 @@ export function inspectWarnings(args) {
     if (!m) return [];
     return [m[1] ?? (args[i + 1] && !args[i + 1].startsWith('-') ? args[i + 1] : '')];
   });
-  if (!values.length) return ['Brak --inspect=<port> w argumentach: proces nie będzie miał inspektora, więc inspekcja sieci nic nie da. Dodaj np. --inspect=9231 (każda aplikacja w monorepo — własny port).'];
+  if (!values.length) return ['No --inspect=<port> in the arguments: the process will have no inspector, so network inspection does nothing. Add e.g. --inspect=9231 (each app in a monorepo needs its own port).'];
   return values.flatMap(v => {
     const host = v.includes(':') ? v.slice(0, v.lastIndexOf(':')) : '';
     return host && !LOOPBACK.has(host)
-      ? [`Inspektor na ${host} jest dostępny spoza tego komputera i daje pełną kontrolę nad procesem. Lokalnie używaj samego portu (--inspect=<port> → 127.0.0.1).`]
+      ? [`The inspector on ${host} is reachable from outside this machine and gives full control over the process. Locally, use just the port (--inspect=<port> → 127.0.0.1).`]
       : [];
   });
 }
@@ -106,17 +106,17 @@ export function exitLike({ code, signal }, proc = process) {
  */
 export async function runNext({ argv = process.argv.slice(2), env = process.env, cwd = process.cwd(), proc = process } = {}) {
   const fail = msg => { proc.stderr.write(`${TAG} ${msg}\n`); return proc.exit(1); };
-  if (proc.versions.bun) return fail('Bun jako runtime nie jest obsługiwany (WebKit Inspector zamiast CDP). Uruchom skrypt bez --bun; Bun może zostać menedżerem pakietów.');
+  if (proc.versions.bun) return fail('Bun as a runtime is not supported (WebKit Inspector instead of CDP). Run the script without --bun; Bun can stay as the package manager.');
   const [major] = proc.versions.node.split('.').map(Number);
-  if (major < 24) return fail(`Node ${proc.versions.node} nie jest wspierany. Wymagany Node ≥ 24.`);
+  if (major < 24) return fail(`Node ${proc.versions.node} is not supported. Node ≥ 24 is required.`);
   let cli;
   try {
     cli = resolveCli({ cwd, env });
   } catch (e) {
-    return fail(`Nie znaleziono ${NEXT_CLI} z katalogu ${cwd} (${e.code ?? e.message}). Uruchom skrypt w katalogu aplikacji z zależnością "next" albo wskaż plik w OUTBOUND_NEXT_BIN.`);
+    return fail(`Could not find ${NEXT_CLI} from ${cwd} (${e.code ?? e.message}). Run the script in an app directory that depends on "next", or point to the file with OUTBOUND_NEXT_BIN.`);
   }
-  for (const w of inspectWarnings(argv)) proc.stderr.write(`${TAG} uwaga: ${w}\n`);
+  for (const w of inspectWarnings(argv)) proc.stderr.write(`${TAG} warning: ${w}\n`);
   const result = await runChild({ execPath: proc.execPath, nodeArgs: buildNodeArgs({ cli, args: argv, execArgv: proc.execArgv }), proc });
-  if (result.error) return fail(`Nie udało się uruchomić ${proc.execPath}: ${result.error.message}`);
+  if (result.error) return fail(`Could not start ${proc.execPath}: ${result.error.message}`);
   return exitLike(result, proc);
 }

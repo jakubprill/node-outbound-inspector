@@ -73,6 +73,6 @@ test('node:http: treść gzip, br i deflate czytelna po dekompresji (issue #1)',
   }
   // content-type z charset: inspektor Node oddaje skompresowane bajty jako tekst UTF-8 (nieodwracalnie)
   assert.equal(charset.body_state, 'unavailable');
-  assert.match(charset.body_reason, /zniekształcone/);
+  assert.match(charset.body_reason, /garbled/);
   assert.equal(charset.body, null);
 }));

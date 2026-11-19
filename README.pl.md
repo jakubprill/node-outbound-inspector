@@ -75,10 +75,12 @@ Albo w konfiguracji klienta MCP:
 | `inspector_status` | Podłączone aplikacje: nazwa, port, pid, katalog, stan korelacji stron |
 | `list_server_requests` | Zapytania: aplikacja, strona, metoda, URL, status, czas, miejsce w kodzie |
 | `get_server_request` | Szczegóły: nagłówki żądania i odpowiedzi, treść, stos wywołań |
-| `analyze_server_timeline` | Analiza per aplikacja i per żądanie strony: SEKWENCYJNIE / RÓWNOLEGLE / MIESZANE, możliwa oszczędność, błędy |
+| `analyze_server_timeline` | Analiza per aplikacja i per żądanie strony: SEQUENTIAL / PARALLEL / MIXED, możliwa oszczędność, błędy |
 | `clear_server_requests` | Czyszczenie bufora (całość albo jedna aplikacja) |
 
 Filtry: `app`, `page_contains`, `url_contains`, `last_ms`, `since_id`.
+
+Opisy narzędzi, ich wyniki i komunikaty CLI są po angielsku. W logice używaj stałych kodów (`verdict_code`, `body_state`, `error_kind`), a nie tekstu.
 
 Przykładowy przebieg pracy agenta: `clear_server_requests` → otwarcie strony (np. przez [Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp)) → `analyze_server_timeline` → `get_server_request` dla błędów.
 
