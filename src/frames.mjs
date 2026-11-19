@@ -1,7 +1,18 @@
 // Ramki stosu inicjatora → miejsca wywołania w kodzie aplikacji (bez wnętrza Node, bibliotek i frameworka).
 // Klasyfikacja działa na ścieżce znormalizowanej: bez „file://”, z „/” zamiast „\”, po dekodowaniu %XX.
-// Zasada: ramkę odrzucamy tylko wtedy, gdy ścieżka JEDNOZNACZNIE wskazuje bibliotekę. Przy wątpliwości
-// (np. chunk Turbopacka „[root-of-the-server]__…”, który może łączyć kod aplikacji z bibliotekami) ramka zostaje.
+// Zasada: ramkę odrzucamy tylko wtedy, gdy ścieżka JEDNOZNACZNIE wskazuje bibliotekę. Przy wątpliwości ramka zostaje.
+//
+// Chunki Turbopacka (zweryfikowane na Next 16.4.0, pnpm, monorepo): nazwa to wspólna ścieżka modułów z „/” i „.”
+// zamienionymi na „_”, z prefiksem skróconym do hasha, np. „1sqn__pnpm_…” (z „.pnpm”), „0fe5_next_dist_esm_server_…”.
+// - „[root-of-the-server]__…” i „_1z2yvldm0ete0._.js” ZAWIERAJĄ kod aplikacji (strona, layout) razem z vendorowanym
+//   Next — nie są filtrowane (zweryfikowane).
+// - „1a-q_@opentelemetry_api_build_esm_…” to biblioteka, ale wzór „<hash>_@scope_…” jest NIEJEDNOZNACZNY: trasa
+//   równoległa „@modal” w kodzie aplikacji może dać podobną nazwę. Nie filtrujemy go po nazwie (można dopisać
+//   do OUTBOUND_LIBRARY_PATHS).
+// Lepsze rozwiązanie (M5, nie zaimplementowane): chunk zawiera identyfikatory modułów, np.
+// "[project]/apps/web/node_modules/... [app-rsc] (ecmascript)". Dla ramki (plik chunku + linia) można ustalić moduł,
+// w którym leży linia (granice modułów w tekście chunku albo mapa źródeł), i klasyfikować po ścieżce modułu,
+// a nie po nazwie chunku.
 
 /** Biblioteki zainstalowane menedżerem pakietów (npm, pnpm „node_modules/.pnpm/…”, Yarn PnP). */
 const PACKAGES = [
@@ -17,9 +28,11 @@ const BUNDLED = [
   /\/\.next\/(?:dev\/)?server\/(?:edge-)?runtime/,
   /\/\.next\/(?:dev\/)?server\/webpack-(?:api-)?runtime\.js$/,  // webpack: środowisko uruchomieniowe
   /\/\.next\/(?:dev\/)?server\/vendor-chunks\//,               // webpack: biblioteki wydzielone do osobnych chunków
-  // Turbopack nazywa chunk wspólną ścieżką modułów („/” → „_”). Nazwa zaczynająca się od „node_modules_”
-  // (albo „apps_web_node_modules_” w monorepo) oznacza, że wszystkie moduły chunku leżą w node_modules.
+  // Turbopack: wspólna ścieżka modułów chunku leży w node_modules (npm: „node_modules_@vercel_otel_…” z issue #2;
+  // także „apps_web_node_modules_…”, gdy pakiet nie jest wyniesiony do korzenia monorepo).
   /\/chunks\/(?:[^/]+\/)*(?:[^/]*_)?node_modules_[^/]*$/,
+  /\/chunks\/(?:[^/]+\/)*[^/]*__pnpm_[^/]*$/,                // pnpm: „1sqn__pnpm_…” (segment „.pnpm”)
+  /\/chunks\/(?:[^/]+\/)*[^/]*__next-internal_[^/]*$/,       // manifest akcji Next: „…_web__next-internal_server_…”
   /\/chunks\/(?:[^/]+\/)*\[(?:turbopack|externals)\]_[^/]*$/,  // runtime Turbopacka, moduły zewnętrzne
 ];
 
