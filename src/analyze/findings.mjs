@@ -1,6 +1,7 @@
 // Raport analizy: per aplikacja, per żądanie strony; błędy (czyste).
 import { duration, bursts, maxConcurrency } from './timeline.mjs';
-import { chains, describeChain } from './waterfall.mjs';
+import { chains, describeChain, criticalPathMs } from './waterfall.mjs';
+import { dependencyGraph } from './dependencies.mjs';
 import { row } from '../mcp/render.mjs';
 
 const isError = r => r.state === 'failed' || r.status >= 400;
@@ -23,12 +24,15 @@ export function analyzeApp(rs, { idle_gap_ms = 250, seq_gap_ms = 15 }) {
       const t0 = b[0].tsStart, tEnd = Math.max(...b.map(r => r.tsEnd));
       const wall = Math.round((tEnd - t0) * 1000);
       const maxConc = maxConcurrency(b);
-      const longest = Math.max(...b.map(duration));
+      // zależności danych (issue #6): bez nich wynik jak dawniej — wall minus najdłuższe zapytanie
+      const graph = dependencyGraph(b), check = graph.check(b);
       return {
         burst: i + 1, requests: b.length, wall_ms: wall, sum_of_durations_ms: b.reduce((s, r) => s + duration(r), 0), max_concurrency: maxConc,
         verdict: VERDICTS[verdictCode(b.length, maxConc)], verdict_code: verdictCode(b.length, maxConc),
-        sequential_chains: chains(b, { seqGapMs: seq_gap_ms }).map(describeChain),
-        potential_saving_ms_if_fully_parallel: wall - longest,
+        sequential_chains: chains(b, { seqGapMs: seq_gap_ms }).map(ch => describeChain(ch, graph)),
+        potential_saving_ms_if_fully_parallel: Math.max(0, wall - criticalPathMs(b, graph.edges)),
+        ...(graph.edges.length ? { dependencies: graph.edges.map(e => ({ from_id: e.from.id, to_id: e.to.id, evidence: e.evidence })) } : {}),
+        ...(check ? { dependency_check: check } : {}),
         timeline: b.map(r => row(r, t0)),
       };
     }),
@@ -58,7 +62,9 @@ export function analyze(rs, args = {}, appsSeen = []) {
         const b = a.bursts[0];
         return b && { page: `${reqs[0].page.method} ${reqs[0].page.url}`, page_request_id: reqs[0].page.id, requests: b.requests,
           wall_ms: b.wall_ms, max_concurrency: b.max_concurrency, verdict: b.verdict, verdict_code: b.verdict_code, sequential_chains: b.sequential_chains,
-          potential_saving_ms_if_fully_parallel: b.potential_saving_ms_if_fully_parallel, timeline: b.timeline };
+          potential_saving_ms_if_fully_parallel: b.potential_saving_ms_if_fully_parallel,
+          ...(b.dependencies ? { dependencies: b.dependencies } : {}), ...(b.dependency_check ? { dependency_check: b.dependency_check } : {}),
+          timeline: b.timeline };
       }).filter(Boolean),
       // zapytania bez powiązanej strony (np. zadania w tle, start serwera) — dzielone na serie czasowe
       unattributed: without.length ? analyzeApp(without, args).bursts : [],

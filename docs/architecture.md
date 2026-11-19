@@ -174,6 +174,7 @@ src/
   analyze/
     timeline.mjs          # spany, serie, współbieżność (czyste)
     waterfall.mjs         # łańcuchy sekwencyjne i oszczędność (czyste)
+    dependencies.mjs      # zależności danych między zapytaniami: heurystyka (czyste)
     findings.mjs          # błędy, duplikaty, wolne, w toku; raport (czyste)
   hook/
     hook.mjs              # installHook(): kod działający w procesie aplikacji
@@ -289,6 +290,8 @@ toSpans(requests, nowTs): Span[]
 bursts(spans, { idleGapMs }): Span[][]
 concurrency(spans): number
 chains(spans, { seqGapMs }): Chain[]
+dependencyGraph(requests): { edges: { from, to, evidence }[], check(members) }   // zależności danych
+criticalPathMs(requests, edges): number                     // czas po zrównolegleniu z zachowaniem zależności
 analyze(view: { requests, pages }, opts): Report           // zachowuje dzisiejszy kształt wyniku
 
 // mcp/*
@@ -599,6 +602,13 @@ Przykład podsumowania (wartości poglądowe). Nazwy pól, na których polega dz
                                 "origins": ["apps/web/app/seq/page.js:5", "…:6", "…:7"] }] }] },
   "hint": "Pełna oś czasu: analyze_server_timeline({ page_request_id })." }
 ```
+
+**Zależności danych w łańcuchach.** Zapytanie, które używa danych z odpowiedzi poprzedniego (np. `orderId` z `POST /orders` w `GET /orders/status?orderId=…`), nie może iść w `Promise.all`. Heurystyka (`analyze/dependencies.mjs`): wartość identyfikatorowa z treści odpowiedzi A (liść albo klucz JSON-a, token tekstu; ≥ 8 znaków z cyfrą, UUID, liczba ≥ 6 cyfr; bez dat, adresów IP, wersji i wypełnień) występuje w ścieżce, parametrze (po dekodowaniu) albo nagłówku B i nie była wysłana przed końcem A ani zawarta w adresie strony. Pola dodane addytywnie:
+
+- w łańcuchu: `dependencies: [{ from_step, to_step, from_id, to_id, evidence: { value, from_path?, found_in } }]` i `dependency_check: { status: 'complete' | 'partial' | 'unavailable', reason? }`;
+- w serii i żądaniu strony: `dependencies` (tylko gdy niepuste) i `dependency_check` (gdy są pary „A skończone przed startem B”).
+
+`if_parallel_ms`, `potential_saving_ms` i `potential_saving_ms_if_fully_parallel` to ścieżka krytyczna z zachowaniem znalezionych zależności; bez nich wartości są takie jak wcześniej. Brak treści (fetch na Node 22, tryb `lazy`/`off`, wyparcie, przycięcie, limit kosztu) albo treść żądania B (POST/PUT/PATCH, której model nie ma) daje stan `partial`/`unavailable`, a nie „niezależne”. Wtedy oszczędność zostaje optymistyczna, jak dawniej, z warunkową wskazówką. `verdict_code` opisuje oś czasu i się nie zmienia. Nagłówki i parametry z sekretami są zredagowane przed analizą, więc nie dają dopasowania (np. token z logowania w `Authorization`).
 
 **Budżet odpowiedzi:**
 

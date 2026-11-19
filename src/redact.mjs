@@ -8,6 +8,9 @@ export const SENSITIVE_HEADERS = Object.freeze(['authorization', 'proxy-authoriz
 const SENSITIVE_NAME = /token|secret|password|passwd|session|api[-_]?key|(^|[-_])key($|[-_])|auth|signature|credential/i;
 const SCHEME = /^(Bearer|Basic|Digest|Negotiate|Token|ApiKey)\s/i;
 
+/** Czy nazwa (parametru, pola) wygląda na sekret — ta sama reguła co dla nagłówków i parametrów URL. */
+export const isSensitiveName = name => SENSITIVE_NAME.test(name);
+
 /**
  * @param {{ enabled?: boolean, extraHeaders?: readonly string[], key?: Buffer }} [opts]
  */
