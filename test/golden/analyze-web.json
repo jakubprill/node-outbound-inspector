@@ -1,0 +1,101 @@
+{
+  "@acme/web": {
+    "by_page_request": [
+      {
+        "max_concurrency": 1,
+        "page": "GET /err",
+        "page_request_id": "<str>",
+        "potential_saving_ms_if_fully_parallel": "<num>",
+        "requests": 1,
+        "sequential_chains": [],
+        "timeline": [
+          {
+            "app": "@acme/web",
+            "duration_ms": "<num>",
+            "id": "<num>",
+            "method": "POST",
+            "origin": "/err @ <root>/test/fixtures/fake-app.mjs:9:31",
+            "page": "GET /err",
+            "start_ms": "<num>",
+            "status": 500,
+            "url": "http://127.0.0.1:<port>/payments?ms=60&status=500"
+          }
+        ],
+        "verdict": "pojedyncze zapytanie",
+        "wall_ms": "<num>"
+      },
+      {
+        "max_concurrency": 1,
+        "page": "GET /seq",
+        "page_request_id": "<str>",
+        "potential_saving_ms_if_fully_parallel": "<num>",
+        "requests": 3,
+        "sequential_chains": [
+          {
+            "hint": "Jeśli te zapytania nie zależą od siebie, Promise.all skróci ten fragment do czasu najwolniejszego z nich.",
+            "if_parallel_ms": "<num>",
+            "length": 3,
+            "potential_saving_ms": "<num>",
+            "steps": [
+              "GET http://127.0.0.1:<port>/offers?ms=150 (<n> ms)",
+              "GET http://127.0.0.1:<port>/orders?ms=150 (<n> ms)",
+              "GET http://127.0.0.1:<port>/user?ms=150 (<n> ms)"
+            ],
+            "wall_ms": "<num>"
+          }
+        ],
+        "timeline": [
+          {
+            "app": "@acme/web",
+            "duration_ms": "<num>",
+            "id": "<num>",
+            "method": "GET",
+            "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
+            "page": "GET /seq",
+            "start_ms": "<num>",
+            "status": 200,
+            "url": "http://127.0.0.1:<port>/offers?ms=150"
+          },
+          {
+            "app": "@acme/web",
+            "duration_ms": "<num>",
+            "id": "<num>",
+            "method": "GET",
+            "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
+            "page": "GET /seq",
+            "start_ms": "<num>",
+            "status": 200,
+            "url": "http://127.0.0.1:<port>/orders?ms=150"
+          },
+          {
+            "app": "@acme/web",
+            "duration_ms": "<num>",
+            "id": "<num>",
+            "method": "GET",
+            "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
+            "page": "GET /seq",
+            "start_ms": "<num>",
+            "status": 200,
+            "url": "http://127.0.0.1:<port>/user?ms=150"
+          }
+        ],
+        "verdict": "SEKWENCYJNIE (waterfall) — każde zapytanie czeka na poprzednie",
+        "wall_ms": "<num>"
+      }
+    ],
+    "errors": [
+      {
+        "app": "@acme/web",
+        "duration_ms": "<num>",
+        "id": "<num>",
+        "method": "POST",
+        "origin": "/err @ <root>/test/fixtures/fake-app.mjs:9:31",
+        "page": "GET /err",
+        "status": 500,
+        "url": "http://127.0.0.1:<port>/payments?ms=60&status=500"
+      }
+    ],
+    "total_requests": 4,
+    "unattributed": []
+  }
+}

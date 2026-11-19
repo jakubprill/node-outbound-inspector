@@ -1,0 +1,13 @@
+{
+  "id": "<num>",
+  "jsonrpc": "2.0",
+  "result": {
+    "content": [
+      {
+        "text": "Brak zapytania o id 999999",
+        "type": "text"
+      }
+    ],
+    "isError": true
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "apps": [
+    {
+      "app": "@acme/admin",
+      "buffered_requests": 7,
+      "cwd": "<root>/test/fixtures/apps/admin",
+      "network_inspection": true,
+      "page_correlation": true,
+      "pid": "<num>",
+      "port": "<num>",
+      "since": "<str>"
+    },
+    {
+      "app": "@acme/web",
+      "buffered_requests": 4,
+      "cwd": "<root>/test/fixtures/apps/web",
+      "network_inspection": true,
+      "page_correlation": true,
+      "pid": "<num>",
+      "port": "<num>",
+      "since": "<str>"
+    }
+  ],
+  "buffered_requests_total": 11,
+  "ignored_hosts": [
+    "registry.npmjs.org"
+  ],
+  "last_id": "<num>",
+  "ports_scanned": "9431-9441 (2)"
+}

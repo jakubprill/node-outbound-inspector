@@ -1,0 +1,32 @@
+[
+  {
+    "app": "@acme/admin",
+    "duration_ms": "<num>",
+    "id": "<num>",
+    "method": "GET",
+    "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
+    "page": "GET /seq",
+    "status": 200,
+    "url": "http://127.0.0.1:<port>/offers?ms=150"
+  },
+  {
+    "app": "@acme/admin",
+    "duration_ms": "<num>",
+    "id": "<num>",
+    "method": "GET",
+    "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
+    "page": "GET /seq",
+    "status": 200,
+    "url": "http://127.0.0.1:<port>/orders?ms=150"
+  },
+  {
+    "app": "@acme/admin",
+    "duration_ms": "<num>",
+    "id": "<num>",
+    "method": "GET",
+    "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
+    "page": "GET /seq",
+    "status": 200,
+    "url": "http://127.0.0.1:<port>/user?ms=150"
+  }
+]

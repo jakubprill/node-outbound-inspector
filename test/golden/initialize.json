@@ -1,0 +1,10 @@
+{
+  "protocolVersion": "2025-06-18",
+  "capabilities": {
+    "tools": {}
+  },
+  "serverInfo": {
+    "name": "node-outbound-inspector",
+    "version": "0.3.0"
+  }
+}

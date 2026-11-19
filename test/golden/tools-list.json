@@ -1,0 +1,113 @@
+{
+  "tools": [
+    {
+      "name": "inspector_status",
+      "description": "Lista podłączonych procesów/aplikacji (nazwa, port inspektora, pid, katalog) i liczba zebranych zapytań. Wywołaj najpierw, aby poznać nazwy aplikacji.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "list_server_requests",
+      "description": "Lista zapytań HTTP wykonanych przez procesy Node (fetch i node:http): aplikacja, metoda, URL, status, czas trwania, miejsce w kodzie.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "description": "Nazwa aplikacji (z inspector_status) lub port inspektora. Pomiń, aby objąć wszystkie."
+          },
+          "url_contains": {
+            "type": "string",
+            "description": "Filtr: fragment URL zapytania wychodzącego"
+          },
+          "page_contains": {
+            "type": "string",
+            "description": "Filtr: fragment żądania strony, które wywołało zapytanie, np. \"/checkout\""
+          },
+          "last_ms": {
+            "type": "number",
+            "description": "Tylko zapytania z ostatnich N milisekund"
+          },
+          "since_id": {
+            "type": "number",
+            "description": "Tylko zapytania o id większym niż podane"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Maks. liczba wyników (domyślnie 50, najnowsze)"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_server_request",
+      "description": "Szczegóły jednego zapytania: nagłówki żądania i odpowiedzi, treść odpowiedzi, stos wywołań.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "max_body_chars": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "analyze_server_timeline",
+      "description": "Analiza osi czasu ruchu serwera, osobno dla każdej aplikacji: serie zapytań, wykrywanie sekwencyjnych (waterfall) i równoległych, możliwy zysk z Promise.all, błędy 4xx/5xx i zerwane połączenia.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "description": "Nazwa aplikacji (z inspector_status) lub port inspektora. Pomiń, aby objąć wszystkie."
+          },
+          "url_contains": {
+            "type": "string",
+            "description": "Filtr: fragment URL zapytania wychodzącego"
+          },
+          "page_contains": {
+            "type": "string",
+            "description": "Filtr: fragment żądania strony, które wywołało zapytanie, np. \"/checkout\""
+          },
+          "last_ms": {
+            "type": "number",
+            "description": "Tylko zapytania z ostatnich N milisekund"
+          },
+          "since_id": {
+            "type": "number",
+            "description": "Tylko zapytania o id większym niż podane"
+          },
+          "idle_gap_ms": {
+            "type": "number",
+            "description": "Przerwa rozdzielająca serie (domyślnie 250)"
+          },
+          "seq_gap_ms": {
+            "type": "number",
+            "description": "Maks. odstęp „zaraz po poprzednim” (domyślnie 15)"
+          }
+        }
+      }
+    },
+    {
+      "name": "clear_server_requests",
+      "description": "Czyści bufor zapytań (wszystkich albo jednej aplikacji), np. przed odtworzeniem scenariusza.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "description": "Nazwa aplikacji (z inspector_status) lub port inspektora. Pomiń, aby objąć wszystkie."
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": -32603,
+    "message": "Nieznane narzędzie: nope"
+  },
+  "id": "<num>",
+  "jsonrpc": "2.0"
+}

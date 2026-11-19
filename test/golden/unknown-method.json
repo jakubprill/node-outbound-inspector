@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": -32601,
+    "message": "Method not found: nope/nope"
+  },
+  "id": "<num>",
+  "jsonrpc": "2.0"
+}
