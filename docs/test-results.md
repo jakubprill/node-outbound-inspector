@@ -49,3 +49,18 @@ Ten sam URL (`/user`) wołany w tej samej chwili przez obie aplikacje i przez dw
 
 ## 4. Testy automatyczne (`npm test`)
 `test/e2e.test.mjs` odtwarza scenariusz B bez Next.js (dwa procesy Node z różnymi portami inspektora). Sprawdza rozpoznanie aplikacji, przypisanie do aplikacji i strony (także `node:http`), werdykty, błędy, nagłówki i filtry. Wynik: 5/5, stabilnie w kolejnych uruchomieniach.
+
+## 5. M2 — poprawki wad i treści odpowiedzi (2026-11-19)
+
+| Środowisko | Testy | Wynik |
+|---|---|---|
+| Linux, Node 22.23.5 | 82 | 80 zielonych, 2 `todo` (wady 1 i 5 → M4, M6) |
+| macOS (Apple Silicon), Node 26.12.0 | 84 (+2 dla nagrania z Node 26) | 82 zielone, 2 `todo` |
+
+- **Wada 2:** status bez flagi pokazuje `network_inspection: false` i powód w `warnings`.
+- **Wada 3:** po restarcie aplikacji na tym samym porcie widać 6 rekordów, nie 3.
+- **Wada 4:** na Node 22 treść `fetch` ma stan `unavailable` z powodem, a na Node 26 jest dostępna. Potwierdzone na nagraniach z obu wersji.
+- **Wada 6:** wartość `Bearer secret-token` nie występuje w wyniku żadnego narzędzia.
+- **Limit bufora:** przy limicie 32 MB najstarsza z 40 odpowiedzi po 2 MB znika z procesu aplikacji (tryb `lazy` → `evicted`), a w trybie `eager` jej treść zostaje pobrana wcześniej. Działa na Node 22 i 26.
+- **Wyścig ujawniony na Macu:** status mógł pokazać proces przed zakończeniem jego identyfikacji. Naprawione polem `ready`.
+- **Pułapka w testach:** porty 5060/5061 są blokowane przez `fetch` (SIP). Testy ich nie używają.

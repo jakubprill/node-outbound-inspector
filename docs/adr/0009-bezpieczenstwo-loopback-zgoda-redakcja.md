@@ -27,6 +27,8 @@ Inspektor Node daje pełną kontrolę nad procesem. Prototyp łączy się z każ
 
 ## Konsekwencje
 
+- **Uwaga z wdrożenia (M2):** zamiast czystego SHA-256 skrót to HMAC-SHA256 z kluczem losowanym przy starcie kolektora. Porównywanie sekretów w obrębie sesji działa tak samo, a krótkich sekretów (np. PIN-ów, prostych haseł) nie da się odgadnąć, przeliczając skróty słownikiem.
+
 - Redakcja jest nieodwracalna w ramach sesji: żeby zobaczyć wartość, trzeba uruchomić kolektor z wyłączoną redakcją.
 - Tryb zgodności (procesy bez launchera) domyślnie traci przypisanie do stron. To zmiana zachowania względem prototypu, opisana w changelogu.
 - Redakcja pól JSON w treściach działa po nazwach kluczy, więc nie złapie danych osobowych pod neutralną nazwą. Ostateczną ochroną jest tryb treści `off`.

@@ -67,6 +67,11 @@ Przykładowy przebieg pracy agenta: `clear_server_requests` → otwarcie strony 
 | `INSPECTOR_PORTS` | `9229-9249` | Porty/zakresy inspektorów, np. `9231,9241` |
 | `APP_NAMES` | — | Nazwy po porcie, np. `9231=web,9241=admin`. Domyślnie nazwa pochodzi z `npm_package_name`, potem z `name` w `package.json` w katalogu procesu, potem z nazwy katalogu. |
 | `PAGE_CORRELATION` | `1` | `0` wyłącza wstrzykiwanie kodu korelującego zapytania ze stronami |
+| `OUTBOUND_REDACT` | `1` | `0` wyłącza redakcję sekretów (ostrzeżenie w `inspector_status`) |
+| `OUTBOUND_REDACT_HEADERS` | — | Dodatkowe nagłówki do redakcji, np. `x-acme-token,x-tenant-secret` |
+| `OUTBOUND_BODIES` | `eager` | Treści odpowiedzi: `eager` (od razu), `lazy` (przy `get_server_request`), `off` (nigdy) |
+| `OUTBOUND_BODY_MAX_KB` / `OUTBOUND_BODIES_TOTAL_MB` | `256` / `32` | Limit treści jednej odpowiedzi i wszystkich treści w kolektorze |
+| `OUTBOUND_INSPECTOR_BUFFER_MB` / `OUTBOUND_INSPECTOR_RESOURCE_MB` | `32` / `2` | Limity bufora treści w procesie aplikacji (na sesję) |
 | `IGNORE_HOSTS` | `registry.npmjs.org` | Hosty pomijane (Next sam sprawdza aktualizacje) |
 | `MAX_REQUESTS` | `5000` | Rozmiar bufora |
 
@@ -97,6 +102,7 @@ Minimalny klient CDP (to, co robi zakładka Network): [`examples/cdp-network-pro
 - Zapytania poza kontekstem żądania strony (start serwera, zadania w tle) trafiają do grupy „bez strony”.
 - Edge runtime nie jest objęty.
 - `outbound-mcp` wstrzykuje do procesu kod (`diagnostics_channel` i `AsyncLocalStorage`). Używaj wyłącznie lokalnie, z inspektorem na `127.0.0.1`.
+- Sekrety w nagłówkach i parametrach URL są redagowane, zanim trafią do agenta. Treści odpowiedzi nie są redagowane (na razie), więc przy wrażliwych integracjach użyj `OUTBOUND_BODIES=off`.
 
 ## Dokumentacja
 - [Pełna analiza: problem, alternatywy (proxy, OpenTelemetry/Jaeger), WebMCP, rekomendacje](docs/analysis.md)
