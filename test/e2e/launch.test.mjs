@@ -8,6 +8,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startMcp } from '../helpers/mcp-client.mjs';
+import { freePorts } from '../helpers/scenario.mjs';
+
+// porty od systemu: pliki testów działają równolegle, stałe numery kolidowały
+const [P1, P2, P3, P4] = await freePorts(4);
 
 const BIN = fileURLToPath(new URL('../../bin/outbound-next.mjs', import.meta.url));
 const FAKE_NEXT = fileURLToPath(new URL('../fixtures/fake-next.mjs', import.meta.url));
@@ -29,17 +33,17 @@ function launch(args, { cwd = process.cwd(), env = { OUTBOUND_NEXT_BIN: FAKE_NEX
 }
 
 test('proces potomny: flaga sieciowa w execArgv, inspektor na podanym porcie, argumenty i kod wyjścia', async () => {
-  const args = ['dev', '--port', '3101', '--inspect=9711', 'z odstępem'];
+  const args = ['dev', '--port', '3101', `--inspect=${P1}`, 'z odstępem'];
   const run = launch(args);
   const child = await run.firstLine;
   assert.ok(child.execArgv.includes(FLAG), 'flaga w linii poleceń (nie w NODE_OPTIONS)');
   assert.deepEqual(child.argv, args, 'argumenty bez zmian, także ze spacją');
-  assert.match(child.inspectorUrl, /^ws:\/\/127\.0\.0\.1:9711\//);
+  assert.ok(child.inspectorUrl.startsWith(`ws://127.0.0.1:${P1}/`), child.inspectorUrl);
   assert.notEqual(child.pid, run.p.pid, 'osobny proces potomny');
-  const targets = await fetch('http://127.0.0.1:9711/json/list').then(r => r.json());
+  const targets = await fetch(`http://127.0.0.1:${P1}/json/list`).then(r => r.json());
   assert.equal(targets.length, 1);
   // narzędzie widzi tak uruchomiony proces jako aplikację z inspekcją sieci
-  const mcp = await startMcp({ env: { INSPECTOR_PORTS: '9711', APP_NAMES: '9711=fake-next' }, stderr: 'ignore' });
+  const mcp = await startMcp({ env: { INSPECTOR_PORTS: String(P1), APP_NAMES: `${P1}=fake-next` }, stderr: 'ignore' });
   try {
     const s = await mcp.waitForApps(1);
     assert.equal(s.apps[0].app, 'fake-next');
@@ -64,7 +68,7 @@ test('bez --inspect: ostrzeżenie zamiast cichego braku inspektora; flagi node p
 });
 
 test('host inspektora spoza loopbacku: ostrzeżenie', async () => {
-  const run = launch(['dev', '--inspect=0.0.0.0:9712']);
+  const run = launch(['dev', `--inspect=0.0.0.0:${P2}`]);
   await run.firstLine;
   run.p.stdin.end();
   const r = await run.exited;
@@ -72,12 +76,12 @@ test('host inspektora spoza loopbacku: ostrzeżenie', async () => {
 });
 
 test('SIGTERM trafia do potomka, a launcher kończy się tym samym sygnałem', { skip: process.platform === 'win32' && 'brak sygnałów POSIX' }, async () => {
-  const run = launch(['dev', '--inspect=9713']);
+  const run = launch(['dev', `--inspect=${P3}`]);
   await run.firstLine;
   run.p.kill('SIGTERM');
   const r = await run.exited;
   assert.equal(r.signal, 'SIGTERM');
-  await assert.rejects(fetch('http://127.0.0.1:9713/json/list'), 'potomek nie żyje');
+  await assert.rejects(fetch(`http://127.0.0.1:${P3}/json/list`), 'potomek nie żyje');
 });
 
 test('rozwiązuje next z node_modules: aplikacja, monorepo z wyniesieniem, symlink jak w pnpm', async t => {
@@ -97,11 +101,11 @@ test('rozwiązuje next z node_modules: aplikacja, monorepo z wyniesieniem, symli
   mkdirSync(join(pnpm, 'node_modules'));
   symlinkSync(join(root, '.store/next'), join(pnpm, 'node_modules/next'), 'junction');
   for (const [cwd, label] of [[hoisted, 'wyniesiony'], [pnpm, 'pnpm']]) {
-    const run = launch(['dev', '--inspect=9714'], { cwd, env: { OUTBOUND_NEXT_BIN: '' } });
+    const run = launch(['dev', `--inspect=${P4}`], { cwd, env: { OUTBOUND_NEXT_BIN: '' } });
     const child = await run.firstLine;
     assert.equal(child.label, label);
     assert.ok(child.execArgv.includes(FLAG));
-    assert.deepEqual(child.argv, ['dev', '--inspect=9714']);
+    assert.deepEqual(child.argv, ['dev', `--inspect=${P4}`]);
     assert.equal((await run.exited).code, 3);
   }
 });

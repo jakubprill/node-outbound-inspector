@@ -4,16 +4,16 @@ import assert from 'node:assert/strict';
 import { startMcp } from '../helpers/mcp-client.mjs';
 import { startScenario, sleep } from '../helpers/scenario.mjs';
 
-const app = (port, inspect) => ({ name: '@acme/web', dir: 'web', port, inspect, script: 'errors-app.mjs' });
+const app = () => ({ name: '@acme/web', dir: 'web', script: 'errors-app.mjs' }); // porty przydziela startScenario
 
 async function withApp(a, env, fn) {
-  const sc = await startScenario({ servicesPort: a.port - 1, apps: [a] });
+  const sc = await startScenario({ apps: [a] });
   const m = await startMcp({ env: { INSPECTOR_PORTS: String(a.inspect), ...env }, stderr: 'ignore' });
   try { await m.waitForApps(1); return await fn(sc, m); } finally { m.close(); sc.stop(); }
 }
 
 test('odrzucone połączenie: status nigdy nie jest "FAILED: " bez opisu, szczegóły podają rodzaj błędu', () =>
-  withApp(app(4841, 9741), {}, async (sc, m) => {
+  withApp(app(), {}, async (sc, m) => {
     await sc.hit(sc.apps[0], '/refused'); await sc.hit(sc.apps[0], '/timeout'); await sleep(300);
     const [refused] = await m.call('list_server_requests', { url_contains: '/api' });
     // Node 22 zgłasza tu AggregateError z pustym message; gdyby nowszy Node dodał opis, status go pokaże
@@ -30,7 +30,7 @@ test('odrzucone połączenie: status nigdy nie jest "FAILED: " bez opisu, szczeg
   }));
 
 test('eksport OTLP na :4318 domyślnie pomijany: brak w liście i błędach, widoczny w inspector_status', () =>
-  withApp(app(4851, 9751), {}, async (sc, m) => {
+  withApp(app(), {}, async (sc, m) => {
     await sc.hit(sc.apps[0], '/otel'); await sleep(300);
     const rows = await m.call('list_server_requests');
     assert.deepEqual(rows.map(r => new URL(r.url).pathname), ['/user'], 'zostaje tylko zwykłe zapytanie');
@@ -41,7 +41,7 @@ test('eksport OTLP na :4318 domyślnie pomijany: brak w liście i błędach, wid
   }));
 
 test('OUTBOUND_IGNORE_OTLP=0: eksport OTLP widoczny jako błąd', () =>
-  withApp(app(4861, 9761), { OUTBOUND_IGNORE_OTLP: '0' }, async (sc, m) => {
+  withApp(app(), { OUTBOUND_IGNORE_OTLP: '0' }, async (sc, m) => {
     await sc.hit(sc.apps[0], '/otel'); await sleep(300);
     const { errors } = (await m.call('analyze_server_timeline'))['@acme/web'];
     assert.deepEqual(errors.map(e => new URL(e.url).pathname).sort(), ['/v1/metrics', '/v1/traces']);

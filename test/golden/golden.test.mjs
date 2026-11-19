@@ -20,15 +20,15 @@ function golden(name, actual, { raw = false } = {}) {
 }
 
 const APPS = [
-  { name: '@acme/web', dir: 'web', port: 4821, inspect: 9431 },
-  { name: '@acme/admin', dir: 'admin', port: 4822, inspect: 9441 },
+  { name: '@acme/web', dir: 'web' },     // porty przydziela startScenario
+  { name: '@acme/admin', dir: 'admin' },
 ];
 let sc, mcp;
 const results = {};
 
 before(async () => {
-  sc = await startScenario({ servicesPort: 4811, apps: APPS });
-  mcp = await startMcp({ env: { INSPECTOR_PORTS: '9431,9441' }, stderr: 'ignore' });
+  sc = await startScenario({ apps: APPS });
+  mcp = await startMcp({ env: { INSPECTOR_PORTS: APPS.map(a => a.inspect).join(',') }, stderr: 'ignore' });
   await mcp.waitForApps(2);
   const [web, admin] = sc.apps;
   await Promise.all([sc.hit(web, '/seq'), sc.hit(web, '/err'), sc.hit(admin, '/par'), sc.hit(admin, '/seq'), sc.hit(admin, '/http')]);

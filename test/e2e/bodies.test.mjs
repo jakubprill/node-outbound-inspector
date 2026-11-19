@@ -6,15 +6,15 @@ import { startMcp } from '../helpers/mcp-client.mjs';
 import { startScenario, sleep } from '../helpers/scenario.mjs';
 
 const NODE_MAJOR = Number(process.versions.node.split('.')[0]);
-const app = (port, inspect) => ({ name: '@acme/web', dir: 'web', port, inspect, script: 'bodies-app.mjs' });
+const app = () => ({ name: '@acme/web', dir: 'web', script: 'bodies-app.mjs' }); // porty przydziela startScenario
 
 async function withApp(a, env, fn) {
-  const sc = await startScenario({ servicesPort: a.port - 1, apps: [a] });
+  const sc = await startScenario({ apps: [a] });
   const m = await startMcp({ env: { INSPECTOR_PORTS: String(a.inspect), ...env }, stderr: 'ignore' });
   try { await m.waitForApps(1); return await fn(sc, m); } finally { m.close(); sc.stop(); }
 }
 
-test('fetch i node:http: treść albo jawny powód jej braku', () => withApp(app(4781, 9681), {}, async (sc, m) => {
+test('fetch i node:http: treść albo jawny powód jej braku', () => withApp(app(), {}, async (sc, m) => {
   await sc.hit(sc.apps[0], '/fetch'); await sc.hit(sc.apps[0], '/http'); await sleep(400);
   const get = async path => {
     const rows = await m.call('list_server_requests', { url_contains: '/small' });
@@ -39,7 +39,7 @@ test('fetch i node:http: treść albo jawny powód jej braku', () => withApp(app
 }));
 
 test('limit bufora inspektora: najstarsza z 40 odpowiedzi po 2 MB znika z Node (tryb lazy → evicted)',
-  () => withApp(app(4791, 9691), { OUTBOUND_BODIES: 'lazy', OUTBOUND_INSPECTOR_BUFFER_MB: '32', OUTBOUND_INSPECTOR_RESOURCE_MB: '3' }, async (sc, m) => {
+  () => withApp(app(), { OUTBOUND_BODIES: 'lazy', OUTBOUND_INSPECTOR_BUFFER_MB: '32', OUTBOUND_INSPECTOR_RESOURCE_MB: '3' }, async (sc, m) => {
     await sc.hit(sc.apps[0], '/big?n=40'); await sleep(500);
     const rows = await m.call('list_server_requests', { url_contains: '/big', limit: 100 });
     assert.equal(rows.length, 40);
@@ -51,7 +51,7 @@ test('limit bufora inspektora: najstarsza z 40 odpowiedzi po 2 MB znika z Node (
   }));
 
 test('tryb eager: treść najstarszej odpowiedzi pobrana od razu, zanim Node ją usunie',
-  () => withApp(app(4801, 9701), { OUTBOUND_INSPECTOR_BUFFER_MB: '32', OUTBOUND_INSPECTOR_RESOURCE_MB: '3' }, async (sc, m) => {
+  () => withApp(app(), { OUTBOUND_INSPECTOR_BUFFER_MB: '32', OUTBOUND_INSPECTOR_RESOURCE_MB: '3' }, async (sc, m) => {
     await sc.hit(sc.apps[0], '/big?n=40'); await sleep(800);
     const rows = await m.call('list_server_requests', { url_contains: '/big', limit: 100 });
     const oldest = await m.call('get_server_request', { id: rows[0].id, max_body_chars: 10 });
@@ -60,7 +60,7 @@ test('tryb eager: treść najstarszej odpowiedzi pobrana od razu, zanim Node ją
     assert.equal(oldest.body, '{"service"');
   }));
 
-test('tryb off: treści nie są pobierane', () => withApp(app(4811, 9711), { OUTBOUND_BODIES: 'off' }, async (sc, m) => {
+test('tryb off: treści nie są pobierane', () => withApp(app(), { OUTBOUND_BODIES: 'off' }, async (sc, m) => {
   await sc.hit(sc.apps[0], '/http'); await sleep(300);
   const [r] = await m.call('list_server_requests', { url_contains: '/small' });
   const d = await m.call('get_server_request', { id: r.id });
@@ -68,7 +68,7 @@ test('tryb off: treści nie są pobierane', () => withApp(app(4811, 9711), { OUT
   assert.equal(d.body, null);
 }));
 
-test('node:http: treść gzip, br i deflate czytelna po dekompresji (issue #1)', () => withApp(app(4851, 9751), {}, async (sc, m) => {
+test('node:http: treść gzip, br i deflate czytelna po dekompresji (issue #1)', () => withApp(app(), {}, async (sc, m) => {
   await sc.hit(sc.apps[0], '/gzip'); await sleep(400);
   const rows = await m.call('list_server_requests', { url_contains: '/packed' });
   assert.equal(rows.length, 4);

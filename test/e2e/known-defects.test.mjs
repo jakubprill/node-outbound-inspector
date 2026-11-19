@@ -7,17 +7,17 @@ import assert from 'node:assert/strict';
 import { startMcp } from '../helpers/mcp-client.mjs';
 import { startScenario, sleep } from '../helpers/scenario.mjs';
 
-const app = (port, inspect, extra = {}) => ({ name: '@acme/web', dir: 'web', port, inspect, ...extra });
+const app = (extra = {}) => ({ name: '@acme/web', dir: 'web', ...extra }); // porty przydziela startScenario
 
 async function withApp(a, fn, { servicesPort } = {}) {
-  const sc = await startScenario({ servicesPort: servicesPort ?? a.port - 1, apps: [a] });
+  const sc = await startScenario({ servicesPort, apps: [a] });
   const mcps = [];
   try { return await fn(sc, async (env = {}) => { const m = await startMcp({ env: { INSPECTOR_PORTS: String(a.inspect), ...env }, stderr: 'ignore' }); mcps.push(m); return m; }); }
   finally { mcps.forEach(m => m.close()); sc.stop(); }
 }
 
 test('wada 1: dwa kolektory naraz — oba widzą przypisanie do stron', { todo: 'M4: dziennik haka opróżniany przez pierwszy kolektor (splice)' }, () =>
-  withApp(app(4731, 9631), async (sc, mcp) => {
+  withApp(app(), async (sc, mcp) => {
     const [m1, m2] = [await mcp(), await mcp()];
     await m1.waitForApps(1); await m2.waitForApps(1);
     await sc.hit(sc.apps[0], '/seq'); await sleep(1500);
@@ -29,7 +29,7 @@ test('wada 1: dwa kolektory naraz — oba widzą przypisanie do stron', { todo: 
   }));
 
 test('wada 2: proces bez --experimental-network-inspection — status to pokazuje i podaje powód', () =>
-  withApp(app(4741, 9641, { flags: [] }), async (sc, mcp) => {
+  withApp(app({ flags: [] }), async (sc, mcp) => {
     const m = await mcp();
     for (let i = 0; i < 40 && !(await m.call('inspector_status')).apps[0]?.ready; i++) await sleep(250);
     const [s] = (await m.call('inspector_status')).apps;
@@ -38,22 +38,22 @@ test('wada 2: proces bez --experimental-network-inspection — status to pokazuj
   }));
 
 test('wada 3: restart aplikacji na tym samym porcie — rekordy sprzed restartu zostają', () =>
-  withApp(app(4751, 9651), async (sc, mcp) => {
+  withApp(app(), async (sc, mcp) => {
     const m = await mcp();
     await m.waitForApps(1);
     await sc.hit(sc.apps[0], '/seq'); await sleep(300);
     sc.apps[0].proc.kill(); await sleep(500);
-    const again = await startScenario({ servicesPort: 4752, apps: [app(4751, 9651)] });
+    const again = await startScenario({ apps: [app({ port: sc.apps[0].port, inspect: sc.apps[0].inspect })] }); // ten sam port aplikacji i inspektora
     try {
       for (let i = 0; i < 40 && (await m.call('inspector_status')).apps.length < 1; i++) await sleep(250);
       await sleep(1500);
       await again.hit(again.apps[0], '/seq'); await sleep(300);
       assert.equal((await m.call('list_server_requests')).length, 6);
     } finally { again.stop(); }
-  }, { servicesPort: 4750 }));
+  }));
 
 test('wada 5: analiza dużego ruchu mieści się w budżecie odpowiedzi', { todo: 'M6: brak budżetu — 132 zapytania ≈ 65–88 tys. znaków' }, () =>
-  withApp(app(4761, 9661), async (sc, mcp) => {
+  withApp(app(), async (sc, mcp) => {
     const m = await mcp();
     await m.waitForApps(1);
     for (let i = 0; i < 44; i++) await sc.hit(sc.apps[0], '/par');
@@ -63,7 +63,7 @@ test('wada 5: analiza dużego ruchu mieści się w budżecie odpowiedzi', { todo
   }));
 
 test('wada 6: sekrety z nagłówków nie występują w żadnym wyniku żadnego narzędzia', () =>
-  withApp(app(4771, 9671, { script: 'secrets-app.mjs' }), async (sc, mcp) => {
+  withApp(app({ script: 'secrets-app.mjs' }), async (sc, mcp) => {
     const m = await mcp();
     await m.waitForApps(1);
     await sc.hit(sc.apps[0], '/'); await sleep(300);
@@ -80,7 +80,7 @@ test('wada 6: sekrety z nagłówków nie występują w żadnym wyniku żadnego n
   }));
 
 test('OUTBOUND_REDACT=0: wartości bez zmian i ostrzeżenie w statusie', () =>
-  withApp(app(4831, 9721, { script: 'secrets-app.mjs' }), async (sc, mcp) => {
+  withApp(app({ script: 'secrets-app.mjs' }), async (sc, mcp) => {
     const m = await mcp({ OUTBOUND_REDACT: '0' });
     await m.waitForApps(1);
     await sc.hit(sc.apps[0], '/'); await sleep(300);

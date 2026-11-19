@@ -6,10 +6,10 @@ import { startMcp } from '../helpers/mcp-client.mjs';
 import { startScenario, sleep } from '../helpers/scenario.mjs';
 import { HINTS } from '../../src/analyze/waterfall.mjs';
 
-const APP = { name: '@acme/web', dir: 'web', port: 4851, inspect: 9751, script: 'deps-app.mjs' };
+const APP = { name: '@acme/web', dir: 'web', script: 'deps-app.mjs' }; // porty przydziela startScenario
 
 test('POST /orders → GET /orders/status?orderId=…: zależne; para niezależna bez zmian', async () => {
-  const sc = await startScenario({ servicesPort: 4850, apps: [APP] });
+  const sc = await startScenario({ apps: [APP] });
   const m = await startMcp({ env: { INSPECTOR_PORTS: String(APP.inspect) }, stderr: 'ignore' });
   try {
     await m.waitForApps(1);

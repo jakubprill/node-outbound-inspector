@@ -44,7 +44,7 @@
     "otlp": 0
   },
   "last_id": "<num>",
-  "ports_scanned": "9431-9441 (2)",
+  "ports_scanned": "<str>",
   "redaction": true,
   "warnings": []
 }
