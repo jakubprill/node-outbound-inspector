@@ -53,23 +53,27 @@ The collector rescans the ports periodically, so it also finds processes started
 
 1. Start the apps in inspection mode.
 2. `inspector_status`: every app has `ready: true`, `network_inspection: true` and empty `warnings`. An app missing from the list means a wrong or taken port. `network_inspection: false` means the flag is missing or Node < 24 (the reason is in `warnings`).
-3. Open a page of the app that calls services, then `list_server_requests`: the requests have `app` and the page filled in.
+3. Open a page of the app that calls services, then `list_server_requests`: the requests have `app` and `page` filled in.
 
 ## MCP tools
 
 - `inspector_status`: connected apps (name, port, pid, directory, Node version, inspection and correlation state, `node_workarounds`, warnings) and collector settings. Call it first.
-- `list_server_requests`: requests (app, page, method, URL, status, duration, code location). Parameter `limit` (default 50, newest).
-- `get_server_request`: one request by `id`: headers, response body with its state (`available`, `truncated`, `unavailable`, `evicted`, `skipped`), call stack. Parameter `max_body_chars` (default 4000).
-- `analyze_server_timeline`: per app and per page request: SEQUENTIAL / PARALLEL / MIXED, the potential saving from `Promise.all` (taking data dependencies between requests into account), 4xx/5xx errors and dropped connections.
+- `list_server_requests`: `{ requests, next_since_id }` — requests with app, page, method, URL (long query strings shortened), status, duration, code location. Without `since_id`: the newest `limit` (default 50). With `since_id`: the next page after that id; call again with `next_since_id` while `has_more` is true.
+- `get_server_request`: one request by `id`: full URL, headers, response body with its state (`available`, `truncated`, `unavailable`, `evicted`, `skipped`), call stack. `max_body_chars` (default 4000); page a long body with `body_offset` = `body_next_offset`.
+- `analyze_server_timeline`: per app and per page request: SEQUENTIAL / PARALLEL / MIXED, the potential saving from `Promise.all` (taking data dependencies between requests into account), 4xx/5xx errors, dropped connections and `findings` (duplicates within a page request, slow requests). By default a summary of the newest 20 page requests without timelines (`detail: "summary"`); pass `page_request_id` (from the summary) or `detail: "full"` for timelines. `settle_ms` waits until nothing is in flight and the traffic was quiet that long (max 15 s); the result then has `settle`.
 - `clear_server_requests`: clears the buffer (everything or one app).
 
-Shared filters: `app` (name or port), `url_contains`, `page_contains` (e.g. `/checkout`), `last_ms`, `since_id`.
+Shared filters: `app` (name or port), `url_contains`, `page_contains` (e.g. `/checkout`), `page_request_id`, `status` (`404`, `5xx`, `error`, `failed`, `pending`), `last_ms`, `since_id`.
 
-Typical workflow: `clear_server_requests` → visit a page (e.g. with Chrome DevTools MCP or `curl`) → `analyze_server_timeline` → `get_server_request` for errors and suspicious requests.
+Every result fits a hard size limit (`OUTBOUND_MAX_RESPONSE_CHARS`, default 20,000 characters). A cut result has `truncated: true` and a `truncation_hint`; narrow the call instead of retrying it unchanged.
+
+Typical workflow: `clear_server_requests` → visit a page (e.g. with Chrome DevTools MCP or `curl`) → `analyze_server_timeline` with `settle_ms: 500` → `analyze_server_timeline` with `page_request_id` for the interesting page → `get_server_request` for errors and suspicious requests.
+
+The server supports both MCP eras: the `initialize` handshake and the stateless 2026-07-28 revision (`server/discover`, version in `_meta`).
 
 ## Caveats
 
-- Headers and URL parameters with secrets are redacted before they reach the agent. Response bodies are not redacted; set `OUTBOUND_BODIES=off` for sensitive data.
+- Secrets are redacted before they reach the agent: headers, URL parameters and scalar JSON body fields with secret-like names (`body_redacted_fields` counts them). Other personal data in bodies is not; set `OUTBOUND_BODIES=off` for sensitive data.
 - In Next.js, `fetch` is wrapped by Next, so the stack does not point at the page's line. Find the code by URL and the correlated page.
 - Requests outside a page request (server start, background jobs) are in the "no page" group.
 - Node bug nodejs/node#66551: `res.setEncoding()` on `node:http` with network inspection enabled destroys the connection. The collector installs a workaround automatically (`node_workarounds`). Chrome DevTools alone, without the collector, still triggers the bug.

@@ -22,16 +22,28 @@ export function createCollector(config, { log = () => {}, now = Date.now } = {})
   let pollTimer = null;
   const ignored = { hosts: 0, otlp: 0, inspector: 0 }; // licznik pominiętych zapytań od startu kolektora
 
+  let lastActivityAt = now(); // ostatnie zdarzenie sieciowe (dla settle_ms)
+
+  /** Sekrety w polach treści JSON zastępuje opis, zanim treść trafi do magazynu. */
+  function redactBody(body, mimeType) {
+    if (!redact.enabled || typeof body?.data !== 'string' || !['available', 'truncated'].includes(body.state)) return;
+    if (!/json/i.test(mimeType ?? '') && !/^\s*[[{]/.test(body.data)) return;
+    const { text, count } = redact.jsonBody(body.data);
+    if (count) { body.data = text; body.redactedFields = count; }
+  }
+
   /** Pobiera treść z inspektora i zapisuje ją w rekordzie z jawnym stanem. */
   async function fetchBody(r, missingState) {
     const session = byProcess.get(r.processId);
     if (!session) { r.body = { state: missingState, reason: 'app process disconnected' }; return; }
     const res = await session.send('Network.getResponseBody', { requestId: r.requestId }).catch(() => null);
     r.body = classifyBody(res, r, { maxStoredBytes: config.bodyMaxBytes, missingState });
+    redactBody(r.body, r.mimeType);
     enforceBodyBudget(store.values(), { maxTotalBytes: config.bodiesTotalBytes });
   }
 
   function onNetwork(session, method, params) {
+    lastActivityAt = now();
     const effects = applyNetworkEvent(store, session, method, params,
       { ignoreHosts: config.ignoreHosts, inspectorPorts: config.ports, ignoreOtlp: config.ignoreOtlp, nowMs: now(), redact, bodies: config.bodies, libraryPaths: config.libraryPaths });
     for (const e of effects) {
@@ -66,8 +78,24 @@ export function createCollector(config, { log = () => {}, now = Date.now } = {})
     return r;
   }
 
+  /**
+   * Czeka, aż ruch ucichnie: brak zapytań w toku (w wybranym zakresie) i brak zdarzeń przez `quietMs`.
+   * @returns {Promise<{ settled: boolean, waited_ms: number, in_flight?: number }>}
+   */
+  async function settle({ quietMs, maxWaitMs, args = {} }) {
+    const start = now();
+    for (;;) {
+      await pollAll();
+      const pending = store.select(args, now()).filter(r => r.tsEnd == null).length;
+      const waited = now() - start;
+      if (!pending && now() - lastActivityAt >= quietMs) return { settled: true, waited_ms: waited };
+      if (waited >= maxWaitMs) return { settled: false, waited_ms: waited, in_flight: pending };
+      await new Promise(res => setTimeout(res, Math.min(50, quietMs)));
+    }
+  }
+
   const globalWarnings = () => [
-    ...(config.redact ? [] : ['Secret redaction is off (OUTBOUND_REDACT=0): headers and URL parameters reach the agent unchanged.']),
+    ...(config.redact ? [] : ['Secret redaction is off (OUTBOUND_REDACT=0): headers, URL parameters and JSON body fields reach the agent unchanged.']),
   ];
 
   return {
@@ -75,6 +103,7 @@ export function createCollector(config, { log = () => {}, now = Date.now } = {})
     now,
     pollAll,
     ensureBody,
+    settle,
     start() {
       pollTimer = setInterval(pollAll, config.pollIntervalMs); pollTimer.unref();
       discovery.start();

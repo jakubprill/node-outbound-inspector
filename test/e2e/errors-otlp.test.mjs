@@ -15,13 +15,13 @@ async function withApp(a, env, fn) {
 test('odrzucone połączenie: status nigdy nie jest "FAILED: " bez opisu, szczegóły podają rodzaj błędu', () =>
   withApp(app(), {}, async (sc, m) => {
     await sc.hit(sc.apps[0], '/refused'); await sc.hit(sc.apps[0], '/timeout'); await sleep(300);
-    const [refused] = await m.call('list_server_requests', { url_contains: '/api' });
+    const [refused] = (await m.call('list_server_requests', { url_contains: '/api' })).requests;
     // Node 22 zgłasza tu AggregateError z pustym message; gdyby nowszy Node dodał opis, status go pokaże
     assert.match(refused.status, /^FAILED(: \S| \(no error text from the inspector\)$)/, refused.status);
     const d = await m.call('get_server_request', { id: refused.id });
     assert.ok(['unknown', 'connection_refused', 'other'].includes(d.error_kind), d.error_kind);
     if (d.error === '') assert.match(d.error_hint, /AggregateError/);
-    const [timeout] = await m.call('list_server_requests', { url_contains: '/slow' });
+    const [timeout] = (await m.call('list_server_requests', { url_contains: '/slow' })).requests;
     assert.equal(timeout.status, 'FAILED: The operation was aborted due to timeout');
     assert.equal((await m.call('get_server_request', { id: timeout.id })).error_kind, 'timeout');
     const { errors } = (await m.call('analyze_server_timeline'))['@acme/web'];
@@ -32,7 +32,7 @@ test('odrzucone połączenie: status nigdy nie jest "FAILED: " bez opisu, szczeg
 test('eksport OTLP na :4318 domyślnie pomijany: brak w liście i błędach, widoczny w inspector_status', () =>
   withApp(app(), {}, async (sc, m) => {
     await sc.hit(sc.apps[0], '/otel'); await sleep(300);
-    const rows = await m.call('list_server_requests');
+    const rows = (await m.call('list_server_requests')).requests;
     assert.deepEqual(rows.map(r => new URL(r.url).pathname), ['/user'], 'zostaje tylko zwykłe zapytanie');
     assert.deepEqual((await m.call('analyze_server_timeline'))['@acme/web'].errors, []);
     const s = await m.call('inspector_status');

@@ -73,16 +73,20 @@ Albo w konfiguracji klienta MCP:
 | Narzędzie | Opis |
 |---|---|
 | `inspector_status` | Podłączone aplikacje: nazwa, port, pid, katalog, stan korelacji stron |
-| `list_server_requests` | Zapytania: aplikacja, strona, metoda, URL, status, czas, miejsce w kodzie |
-| `get_server_request` | Szczegóły: nagłówki żądania i odpowiedzi, treść, stos wywołań |
-| `analyze_server_timeline` | Analiza per aplikacja i per żądanie strony: SEQUENTIAL / PARALLEL / MIXED, możliwa oszczędność, błędy |
+| `list_server_requests` | Zapytania: aplikacja, strona, metoda, URL, status, czas, miejsce w kodzie. Zwraca `{ requests, next_since_id }`; z `since_id` przejdziesz przez wszystkie |
+| `get_server_request` | Szczegóły: pełny URL, nagłówki żądania i odpowiedzi, treść (stronicowana przez `body_offset`), stos wywołań |
+| `analyze_server_timeline` | Analiza per aplikacja i per żądanie strony: SEQUENTIAL / PARALLEL / MIXED, możliwa oszczędność, błędy, duplikaty, wolne zapytania. Domyślnie podsumowanie 20 najnowszych żądań stron; `page_request_id` albo `detail: "full"` daje całość; `settle_ms` czeka, aż ruch ucichnie |
 | `clear_server_requests` | Czyszczenie bufora (całość albo jedna aplikacja) |
 
-Filtry: `app`, `page_contains`, `url_contains`, `last_ms`, `since_id`.
+Filtry: `app`, `page_contains`, `page_request_id`, `url_contains`, `status` (`404`, `5xx`, `error`, `failed`, `pending`), `last_ms`, `since_id`.
+
+Każdy wynik mieści się w twardym limicie (domyślnie 20 000 znaków). Wynik przycięty ma `truncated: true` i `truncation_hint` z podpowiedzią, jak zawęzić wywołanie.
 
 Opisy narzędzi, ich wyniki i komunikaty CLI są po angielsku. W logice używaj stałych kodów (`verdict_code`, `body_state`, `error_kind`), a nie tekstu.
 
-Przykładowy przebieg pracy agenta: `clear_server_requests` → otwarcie strony (np. przez [Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp)) → `analyze_server_timeline` → `get_server_request` dla błędów.
+Przykładowy przebieg pracy agenta: `clear_server_requests` → otwarcie strony (np. przez [Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp)) → `analyze_server_timeline` z `settle_ms` → `analyze_server_timeline` z `page_request_id` albo `get_server_request` po szczegóły.
+
+Serwer obsługuje obie ery MCP: z `initialize` (2024-11-05 do 2025-06-18) i bezstanową 2026-07-28 (`server/discover`, wersja w `_meta` każdego żądania).
 
 ### Konfiguracja (zmienne środowiskowe)
 | Zmienna | Domyślnie | Opis |
@@ -99,6 +103,7 @@ Przykładowy przebieg pracy agenta: `clear_server_requests` → otwarcie strony 
 | `IGNORE_HOSTS` | `registry.npmjs.org` | Hosty pomijane (Next sam sprawdza aktualizacje) |
 | `OUTBOUND_IGNORE_OTLP` | `1` | Pomija eksport OpenTelemetry (np. `@vercel/otel` bez lokalnego kolektora): `/v1/traces`, `/v1/metrics`, `/v1/logs` na porcie `4318` (dowolny host) i OTLP/gRPC (`…Service/Export`). `0` pokazuje ten ruch. Pominięte reguły i liczniki: `inspector_status` (`ignored_otlp`, `ignored_requests_total`). Eksport do chmury na innym porcie dodaj do `IGNORE_HOSTS`. |
 | `MAX_REQUESTS` | `5000` | Rozmiar bufora |
+| `OUTBOUND_MAX_RESPONSE_CHARS` | `20000` | Twardy limit znaków jednego wyniku narzędzia (minimum 4000) |
 
 ## Przykład i testy
 
@@ -131,7 +136,7 @@ Minimalny klient CDP (to, co robi zakładka Network): [`examples/cdp-network-pro
 - Treści z `content-encoding` (gzip, br, deflate, zstd) są dekompresowane (`body_encoding`, `body_encoded_bytes`). Gdy `content-type` ma `charset`, inspektor Node oddaje skompresowane bajty jako zniekształcony tekst i treść ma stan `unavailable`.
 - **Błąd Node [#66551](https://github.com/nodejs/node/issues/66551):** gdy aplikacja czyta odpowiedź `node:http` po `res.setEncoding()` (robi tak wiele bibliotek), a do procesu jest podłączony klient z inspekcją sieci, Node rzuca `Missing dataLength in event` i niszczy połączenie. Aplikacja dostaje wtedy błąd albo nie dostaje odpowiedzi wcale. `outbound-mcp` instaluje w procesie aplikacji obejście przed włączeniem inspekcji (`node_workarounds` w `inspector_status`). **Same Chrome DevTools (bez kolektora) nadal wywołują ten błąd.**
 - Zachowanie inspektora Node, na które narzędzie nie ma wpływu: gdy połączenie `node:http` zerwie się w trakcie odbierania treści, zapytanie zostaje w toku (brak zdarzenia końcowego).
-- Sekrety w nagłówkach i parametrach URL są redagowane, zanim trafią do agenta. Treści odpowiedzi nie są redagowane (na razie), więc przy wrażliwych integracjach użyj `OUTBOUND_BODIES=off`.
+- Sekrety są redagowane, zanim trafią do agenta: nagłówki, parametry URL i pola skalarne treści JSON o nazwach wyglądających na sekret (`access_token`, `client_secret`, `password`, …). Inne dane osobowe w treściach nie są redagowane, więc przy wrażliwych integracjach użyj `OUTBOUND_BODIES=off`.
 
 ## Dokumentacja
 - [`llms.txt`](llms.txt): instrukcja integracji i użycia dla agentów AI (po angielsku)

@@ -73,3 +73,17 @@ Ten sam URL (`/user`) wołany w tej samej chwili przez obie aplikacje i przez dw
 
 - **Błąd Node nodejs/node#66551:** aplikacja czytająca odpowiedź `node:http` po `res.setEncoding()` przy podłączonym kolektorze dostawała `TypeError: Missing dataLength in event` i nie dostawała odpowiedzi. Test `test/e2e/node-fixes.test.mjs` bez obejścia kończy się przekroczeniem czasu, z obejściem przechodzi (proces żyje, treść `available`, `node_workarounds: ["nodejs/node#66551"]`).
 - Niezweryfikowane po zmianie: kodowanie znaków przy gzip w `fetch` na Node ≥ 24 (wcześniej sprawdzone tylko na Node 22).
+
+## 7. M6 — budżet odpowiedzi, kursor, settle, redakcja treści, era MCP 2026-07-28 (2026-11-19)
+
+| Środowisko | Testy | Wynik |
+|---|---|---|
+| Linux, Node 24.22.3 | 175 | 174 zielone, 1 `todo` (wada 1 → M4) |
+
+- **Wada 5 naprawiona:** 44 strony × 3 zapytania przez prawdziwy inspektor; podsumowanie ≤ 6000 znaków, pełny raport i lista ≤ 20 000.
+- **Test własności:** losowe magazyny 0–5000 zapytań, limity 20 000 i 6000; każdy wynik każdego narzędzia to poprawny JSON w limicie.
+- **Kursor:** przejście przez 1200 rekordów z różnymi `limit` i budżetem zwraca każdy rekord dokładnie raz.
+- **settle_ms:** analiza wywołana 80 ms po wejściu na stronę z trzema zapytaniami po 150 ms: bez `settle_ms` 0 żądań stron i 1 zapytanie w toku, z `settle_ms: 300` komplet trzech.
+- **Redakcja treści:** `access_token` z odpowiedzi serwisu nie występuje w żadnym wyniku żadnego narzędzia; przy `OUTBOUND_REDACT=0` jest widoczny.
+- **Protokół:** klient bez `initialize` (tylko era 2026-07-28) dostaje `server/discover` i wynik `tools/call` przez stdio.
+

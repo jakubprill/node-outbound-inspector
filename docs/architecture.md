@@ -851,6 +851,7 @@ Tych rzeczy nie dało się sprawdzić bez Next.js. Każda zajmuje kilka minut na
 - **punkt decyzyjny (S3):** jeśli zewnętrzna warstwa nie działa w prawdziwym Next, wdrażana jest sama rezerwa (ramki async), a ADR 0005 dostaje aktualizację z wynikiem.
 
 ### M6. Ergonomia dla agenta (M)
+**Status (2026-11-19): zrobione.** Wszystkie kryteria akceptacji mają testy (`test/unit/budget.test.mjs`, `test/unit/mcp-server.test.mjs`, `test/e2e/settle.test.mjs`, `test/e2e/protocol.test.mjs`, wada 5 w `test/e2e/known-defects.test.mjs`). Odstępstwa: `list_server_requests` zwraca obiekt zamiast tablicy (kursor i znacznik przycięcia wymagają miejsca), filtr `tag` przeniesiony do M7 (wymaga haka), redakcja pól JSON w treściach dodana w tym kamieniu.
 
 **Cel:** odpowiedzi mieszczą się w budżecie, a protokół jest gotowy na klientów nowej ery.
 

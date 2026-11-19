@@ -1,7 +1,7 @@
 // Normalizacja wyników narzędzi do porównań golden: usuwa wartości zmienne (id, pid, porty, czasy,
 // ścieżki bezwzględne) i porządkuje elementy, których kolejność zależy od wyścigu współbieżnych zapytań.
 const VOLATILE_NUM = new Set(['id', 'pid', 'port', 'start_ms', 'duration_ms', 'wall_ms', 'sum_of_durations_ms',
-  'if_parallel_ms', 'potential_saving_ms', 'potential_saving_ms_if_fully_parallel', 'last_id', 'since_id', 'ttfb_ms']);
+  'if_parallel_ms', 'potential_saving_ms', 'potential_saving_ms_if_fully_parallel', 'last_id', 'since_id', 'next_since_id', 'ttfb_ms', 'waited_ms']);
 const VOLATILE_STR = new Set(['since', 'wallStart', 'page_request_id', 'connectedAt', 'node', 'ports_scanned']);
 // Treść odpowiedzi i jej pochodne mogą różnić się między wersjami Node — sprawdzają je osobne testy e2e.
 // Tak samo stan sprawdzenia zależności danych, który wynika z dostępności treści (issue #6).

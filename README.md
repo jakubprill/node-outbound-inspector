@@ -73,14 +73,18 @@ Or in the MCP client config:
 | Tool | Description |
 |---|---|
 | `inspector_status` | Connected apps: name, port, pid, directory, page correlation state |
-| `list_server_requests` | Requests: app, page, method, URL, status, duration, code location |
-| `get_server_request` | Details: request and response headers, body, call stack |
-| `analyze_server_timeline` | Analysis per app and per page request: SEQUENTIAL / PARALLEL / MIXED, potential saving, errors |
+| `list_server_requests` | Requests: app, page, method, URL, status, duration, code location. Returns `{ requests, next_since_id }`; pass `since_id` to page through everything |
+| `get_server_request` | Details: full URL, request and response headers, body (paged with `body_offset`), call stack |
+| `analyze_server_timeline` | Analysis per app and per page request: SEQUENTIAL / PARALLEL / MIXED, potential saving, errors, duplicates, slow requests. A summary of the newest 20 page requests by default; `page_request_id` or `detail: "full"` for everything; `settle_ms` waits until traffic goes quiet |
 | `clear_server_requests` | Clear the buffer (everything or one app) |
 
-Filters: `app`, `page_contains`, `url_contains`, `last_ms`, `since_id`.
+Filters: `app`, `page_contains`, `page_request_id`, `url_contains`, `status` (`404`, `5xx`, `error`, `failed`, `pending`), `last_ms`, `since_id`.
 
-A typical agent workflow: `clear_server_requests` → open a page (e.g. with [Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp)) → `analyze_server_timeline` → `get_server_request` for errors.
+Every result fits a hard size limit (20,000 characters by default). A cut result has `truncated: true` and a `truncation_hint` saying how to narrow the call.
+
+A typical agent workflow: `clear_server_requests` → open a page (e.g. with [Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp)) → `analyze_server_timeline` with `settle_ms` → `analyze_server_timeline` with `page_request_id` or `get_server_request` for details.
+
+The server speaks both MCP eras: the `initialize` handshake (2024-11-05 to 2025-06-18) and the stateless 2026-07-28 revision (`server/discover`, version in `_meta` of every request).
 
 Tool descriptions, tool output and CLI messages are in English. For logic, use the stable codes (`verdict_code`, `body_state`, `error_kind`) rather than the text.
 
@@ -99,6 +103,7 @@ Tool descriptions, tool output and CLI messages are in English. For logic, use t
 | `IGNORE_HOSTS` | `registry.npmjs.org` | Hosts to skip (Next checks for updates itself) |
 | `OUTBOUND_IGNORE_OTLP` | `1` | Skips OpenTelemetry export (e.g. `@vercel/otel` without a local collector): `/v1/traces`, `/v1/metrics`, `/v1/logs` on port `4318` (any host) and OTLP/gRPC (`…Service/Export`). `0` shows this traffic. Skipped rules and counters: `inspector_status` (`ignored_otlp`, `ignored_requests_total`). Add cloud export on another port to `IGNORE_HOSTS`. |
 | `MAX_REQUESTS` | `5000` | Buffer size |
+| `OUTBOUND_MAX_RESPONSE_CHARS` | `20000` | Hard size limit of one tool result, in characters (minimum 4000) |
 
 ## Example and tests
 
@@ -131,7 +136,7 @@ A minimal CDP client (what the Network tab does): [`examples/cdp-network-probe.m
 - Bodies with `content-encoding` (gzip, br, deflate, zstd) are decompressed (`body_encoding`, `body_encoded_bytes`). When `content-type` has a `charset`, the Node inspector returns the compressed bytes as garbled text and the body is marked `unavailable`.
 - **Node bug [#66551](https://github.com/nodejs/node/issues/66551):** when an app reads a `node:http` response after `res.setEncoding()` (many libraries do) while a client with network inspection is attached, Node throws `Missing dataLength in event` and destroys the connection. The app then gets an error or no response at all. `outbound-mcp` installs a workaround in the app process before enabling inspection (`node_workarounds` in `inspector_status`). **Chrome DevTools alone (without the collector) still triggers this bug.**
 - Node inspector behavior the tool cannot change: when a `node:http` connection drops while the body is being received, the request stays in flight (no final event).
-- Secrets in headers and URL parameters are redacted before they reach the agent. Response bodies are not redacted (yet), so use `OUTBOUND_BODIES=off` for sensitive integrations.
+- Secrets are redacted before they reach the agent: headers, URL parameters and scalar fields of JSON bodies with secret-like names (`access_token`, `client_secret`, `password`, …). Other personal data in bodies is not redacted, so use `OUTBOUND_BODIES=off` for sensitive integrations.
 
 ## Documentation
 - [`llms.txt`](llms.txt): integration and usage guide for AI agents

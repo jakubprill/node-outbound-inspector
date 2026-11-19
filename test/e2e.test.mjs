@@ -44,7 +44,7 @@ test('przypisuje zapytania do właściwej aplikacji i strony, gdy wszystko dziej
   // ten sam URL /user wołany przez obie aplikacje i przez dwie strony jednej aplikacji jednocześnie
   await Promise.all([hit(web, '/seq'), hit(web, '/err'), hit(admin, '/par'), hit(admin, '/seq'), hit(admin, '/http')]);
   await sleep(500);
-  const reqs = await mcp.call('list_server_requests', { limit: 100 });
+  const reqs = (await mcp.call('list_server_requests', { limit: 100 })).requests;
   const pick = (app, page) => reqs.filter(r => r.app === app && r.page === page).map(r => new URL(r.url).pathname).sort();
   assert.deepEqual(pick('@acme/web', 'GET /seq'), ['/offers', '/orders', '/user']);
   assert.deepEqual(pick('@acme/web', 'GET /err'), ['/payments']);
@@ -74,7 +74,7 @@ test('wykrywa waterfall, równoległość i błędy osobno dla każdej strony', 
 });
 
 test('zwraca szczegóły zapytania z nagłówkami', async () => {
-  const [err] = (await mcp.call('list_server_requests', { app: '@acme/web', url_contains: '/payments' }));
+  const [err] = ((await mcp.call('list_server_requests', { app: '@acme/web', url_contains: '/payments' })).requests);
   const d = await mcp.call('get_server_request', { id: err.id });
   assert.equal(d.method, 'POST');
   assert.equal(d.status, 500);
@@ -83,9 +83,9 @@ test('zwraca szczegóły zapytania z nagłówkami', async () => {
 });
 
 test('filtr app i clear działają per aplikacja', async () => {
-  const before = (await mcp.call('list_server_requests', { app: '@acme/admin', limit: 100 })).length;
+  const before = ((await mcp.call('list_server_requests', { app: '@acme/admin', limit: 100 })).requests).length;
   assert.ok(before > 0);
   await mcp.call('clear_server_requests', { app: '@acme/admin' });
-  assert.equal((await mcp.call('list_server_requests', { app: '@acme/admin' })).length, 0);
-  assert.ok((await mcp.call('list_server_requests', { app: '@acme/web' })).length > 0);
+  assert.equal(((await mcp.call('list_server_requests', { app: '@acme/admin' })).requests).length, 0);
+  assert.ok(((await mcp.call('list_server_requests', { app: '@acme/web' })).requests).length > 0);
 });

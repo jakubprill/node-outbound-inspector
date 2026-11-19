@@ -1,11 +1,13 @@
-// Redakcja sekretów przy przyjęciu danych (przed zapisem do magazynu): nagłówki i parametry URL.
+// Redakcja sekretów przy przyjęciu danych (przed zapisem do magazynu): nagłówki, parametry URL i pola treści JSON.
 // Wartość zastępuje opis ze schematem, długością i krótkim skrótem — agent może stwierdzić,
 // czy dwa zapytania niosły ten sam sekret, ale nie odczyta go. Skrót to HMAC-SHA256 z kluczem
 // losowanym przy starcie kolektora: porównywalny w obrębie sesji, bezużyteczny do zgadywania poza nią.
 import { createHmac, randomBytes } from 'node:crypto';
 
 export const SENSITIVE_HEADERS = Object.freeze(['authorization', 'proxy-authorization', 'cookie', 'set-cookie', 'x-api-key']);
-const SENSITIVE_NAME = /token|secret|password|passwd|session|api[-_]?key|(^|[-_])key($|[-_])|auth|signature|credential/i;
+const SENSITIVE_NAME = /token|secret|password|passwd|session|api[-_]?key|(^|[-_])key($|[-_])|auth(?!or)|signature|credential/i;
+// Pole JSON z wartością skalarną: "nazwa": "tekst" albo "nazwa": liczba. Obiekty i tablice nie są redagowane.
+const JSON_FIELD = /"((?:[^"\\]|\\.){1,100})"(\s*:\s*)("(?:[^"\\]|\\.)*"|-?\d[\d.eE+-]*)/g;
 const SCHEME = /^(Bearer|Basic|Digest|Negotiate|Token|ApiKey)\s/i;
 
 /** Czy nazwa (parametru, pola) wygląda na sekret — ta sama reguła co dla nagłówków i parametrów URL. */
@@ -43,5 +45,23 @@ export function createRedactor({ enabled = true, extraHeaders = [], key = random
     return changed ? parsed.toString() : u;
   }
 
-  return { enabled, headers, url, describe, isSensitive };
+  /**
+   * Treść JSON (także przycięta): wartości pól o nazwach sekretów zastępuje opis. Działa na tekście,
+   * więc zachowuje formatowanie i nie wymaga poprawnego JSON-a.
+   * @returns {{ text: string, count: number }}
+   */
+  function jsonBody(text) {
+    if (!enabled || typeof text !== 'string' || !text.includes('"')) return { text, count: 0 };
+    let count = 0;
+    const out = text.replace(JSON_FIELD, (m, name, sep, val) => {
+      if (!isSensitive(name)) return m;
+      count++;
+      let raw = val;
+      if (val.startsWith('"')) { try { raw = JSON.parse(val); } catch { raw = val.slice(1, -1); } }
+      return `"${name}"${sep}"${describe(raw)}"`;
+    });
+    return { text: out, count };
+  }
+
+  return { enabled, headers, url, jsonBody, describe, isSensitive };
 }

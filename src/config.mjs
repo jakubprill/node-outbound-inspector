@@ -24,6 +24,7 @@ export function loadConfig({ env = {} } = {}) {
     // eksport OpenTelemetry (OTLP, np. @vercel/otel → localhost:4318/v1/traces) to szum, gdy lokalnie nie ma kolektora
     ignoreOtlp: env.OUTBOUND_IGNORE_OTLP !== '0',
     maxRequests: Number(env.MAX_REQUESTS || 5000),
+    maxResponseChars: Math.max(4000, Number(env.OUTBOUND_MAX_RESPONSE_CHARS || 20000)), // twardy limit znaków odpowiedzi narzędzia
     pageCorrelation: env.PAGE_CORRELATION !== '0',
     redact: env.OUTBOUND_REDACT !== '0',
     // dodatkowe fragmenty ścieżek traktowane jak biblioteki przy wyborze miejsca wywołania (frames.mjs)

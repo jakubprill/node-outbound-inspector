@@ -1,5 +1,6 @@
 // Kształt pojedynczego wiersza zapytania w odpowiedziach narzędzi (czyste).
 import { duration } from '../analyze/timeline.mjs';
+import { shortUrl } from './budget.mjs';
 
 export const NO_ORIGIN = '(no frame from app code — e.g. fetch wrapped by Next.js; search by URL)';
 
@@ -30,7 +31,7 @@ const failedStatus = error => error?.trim() ? `FAILED: ${error}` : FAILED_NO_TEX
 /** @param {any} r rekord zapytania  @param {number} [t0] początek osi czasu (sekundy inspektora) */
 export function row(r, t0) {
   return {
-    id: r.id, app: r.app, page: r.page ? `${r.page.method} ${r.page.url}` : null, method: r.method, url: r.url,
+    id: r.id, app: r.app, page: r.page ? `${r.page.method} ${r.page.url}` : null, method: r.method, url: shortUrl(r.url),
     status: r.state === 'failed' ? failedStatus(r.error) : (r.status ?? 'pending'),
     start_ms: t0 != null ? Math.round((r.tsStart - t0) * 1000) : undefined,
     duration_ms: duration(r),
@@ -42,17 +43,23 @@ export function row(r, t0) {
 export const ttfb = r => (r.tsResponse != null && r.tsStart != null) ? Math.round((r.tsResponse - r.tsStart) * 1000) : null;
 
 /** Szczegóły jednego zapytania (narzędzie get_server_request). Nagłówki są już zredagowane przy przyjęciu. */
-export function details(r, maxBodyChars) {
+export function details(r, maxBodyChars, bodyOffset = 0) {
   const data = r.body?.data;
+  const off = Math.max(0, Math.floor(bodyOffset) || 0), end = off + maxBodyChars;
+  const more = (data?.length ?? 0) > end;
   return {
-    ...row(r), port: r.port, pid: r.pid, statusText: r.statusText, mimeType: r.mimeType,
+    ...row(r), url: r.url, port: r.port, pid: r.pid, statusText: r.statusText, mimeType: r.mimeType,
     requestHeaders: r.requestHeaders, responseHeaders: r.responseHeaders,
-    body: data == null ? null : data.slice(0, maxBodyChars), body_truncated: (data?.length ?? 0) > maxBodyChars,
+    body: data == null ? null : data.slice(off, end), body_truncated: more,
+    // M6: stronicowanie treści (tylko gdy dotyczy)
+    ...(off > 0 ? { body_offset: off } : {}), ...(more ? { body_next_offset: end } : {}),
     error: r.error, call_stack: r.origin, wallStart: new Date(r.wallStart).toISOString(),
     // M2: stan treści zamiast pustego łańcucha; czas do pierwszego bajtu
     body_state: r.body?.state ?? 'none', body_bytes: r.body?.bytes ?? null, body_reason: r.body?.reason ?? null,
     // tylko dla treści z content-encoding (bez klucza w pozostałych): kodowanie i rozmiar przed dekompresją
     body_encoding: r.body?.encoding, body_encoded_bytes: r.body?.encodedBytes,
+    // liczba pól JSON w treści zastąpionych opisem (tylko gdy były)
+    body_redacted_fields: r.body?.redactedFields,
     ttfb_ms: ttfb(r),
     // issue #3: rodzaj błędu (tylko dla nieudanych) i wyjaśnienie pustego opisu
     ...(r.state === 'failed' ? { error_kind: errorKind(r.error) } : {}),

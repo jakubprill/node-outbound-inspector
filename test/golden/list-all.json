@@ -1,112 +1,115 @@
-[
-  {
-    "app": "@acme/admin",
-    "duration_ms": "<num>",
-    "id": "<num>",
-    "method": "GET",
-    "origin": "(anonymous) @ <root>/test/fixtures/fake-app.mjs:10:41",
-    "page": "GET /http",
-    "status": 200,
-    "url": "http://127.0.0.1:<port>/legacy?ms=30"
-  },
-  {
-    "app": "@acme/admin",
-    "duration_ms": "<num>",
-    "id": "<num>",
-    "method": "GET",
-    "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
-    "page": "GET /par",
-    "status": 200,
-    "url": "http://127.0.0.1:<port>/audit?ms=150"
-  },
-  {
-    "app": "@acme/admin",
-    "duration_ms": "<num>",
-    "id": "<num>",
-    "method": "GET",
-    "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
-    "page": "GET /par",
-    "status": 200,
-    "url": "http://127.0.0.1:<port>/reports?ms=150"
-  },
-  {
-    "app": "@acme/admin",
-    "duration_ms": "<num>",
-    "id": "<num>",
-    "method": "GET",
-    "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
-    "page": "GET /par",
-    "status": 200,
-    "url": "http://127.0.0.1:<port>/user?ms=150"
-  },
-  {
-    "app": "@acme/admin",
-    "duration_ms": "<num>",
-    "id": "<num>",
-    "method": "GET",
-    "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
-    "page": "GET /seq",
-    "status": 200,
-    "url": "http://127.0.0.1:<port>/offers?ms=150"
-  },
-  {
-    "app": "@acme/admin",
-    "duration_ms": "<num>",
-    "id": "<num>",
-    "method": "GET",
-    "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
-    "page": "GET /seq",
-    "status": 200,
-    "url": "http://127.0.0.1:<port>/orders?ms=150"
-  },
-  {
-    "app": "@acme/admin",
-    "duration_ms": "<num>",
-    "id": "<num>",
-    "method": "GET",
-    "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
-    "page": "GET /seq",
-    "status": 200,
-    "url": "http://127.0.0.1:<port>/user?ms=150"
-  },
-  {
-    "app": "@acme/web",
-    "duration_ms": "<num>",
-    "id": "<num>",
-    "method": "GET",
-    "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
-    "page": "GET /seq",
-    "status": 200,
-    "url": "http://127.0.0.1:<port>/offers?ms=150"
-  },
-  {
-    "app": "@acme/web",
-    "duration_ms": "<num>",
-    "id": "<num>",
-    "method": "GET",
-    "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
-    "page": "GET /seq",
-    "status": 200,
-    "url": "http://127.0.0.1:<port>/orders?ms=150"
-  },
-  {
-    "app": "@acme/web",
-    "duration_ms": "<num>",
-    "id": "<num>",
-    "method": "GET",
-    "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
-    "page": "GET /seq",
-    "status": 200,
-    "url": "http://127.0.0.1:<port>/user?ms=150"
-  },
-  {
-    "app": "@acme/web",
-    "duration_ms": "<num>",
-    "id": "<num>",
-    "method": "POST",
-    "origin": "/err @ <root>/test/fixtures/fake-app.mjs:9:31",
-    "page": "GET /err",
-    "status": 500,
-    "url": "http://127.0.0.1:<port>/payments?ms=60&status=500"
-  }
-]
+{
+  "next_since_id": "<num>",
+  "requests": [
+    {
+      "app": "@acme/admin",
+      "duration_ms": "<num>",
+      "id": "<num>",
+      "method": "GET",
+      "origin": "(anonymous) @ <root>/test/fixtures/fake-app.mjs:10:41",
+      "page": "GET /http",
+      "status": 200,
+      "url": "http://127.0.0.1:<port>/legacy?ms=30"
+    },
+    {
+      "app": "@acme/admin",
+      "duration_ms": "<num>",
+      "id": "<num>",
+      "method": "GET",
+      "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
+      "page": "GET /par",
+      "status": 200,
+      "url": "http://127.0.0.1:<port>/audit?ms=150"
+    },
+    {
+      "app": "@acme/admin",
+      "duration_ms": "<num>",
+      "id": "<num>",
+      "method": "GET",
+      "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
+      "page": "GET /par",
+      "status": 200,
+      "url": "http://127.0.0.1:<port>/reports?ms=150"
+    },
+    {
+      "app": "@acme/admin",
+      "duration_ms": "<num>",
+      "id": "<num>",
+      "method": "GET",
+      "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
+      "page": "GET /par",
+      "status": 200,
+      "url": "http://127.0.0.1:<port>/user?ms=150"
+    },
+    {
+      "app": "@acme/admin",
+      "duration_ms": "<num>",
+      "id": "<num>",
+      "method": "GET",
+      "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
+      "page": "GET /seq",
+      "status": 200,
+      "url": "http://127.0.0.1:<port>/offers?ms=150"
+    },
+    {
+      "app": "@acme/admin",
+      "duration_ms": "<num>",
+      "id": "<num>",
+      "method": "GET",
+      "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
+      "page": "GET /seq",
+      "status": 200,
+      "url": "http://127.0.0.1:<port>/orders?ms=150"
+    },
+    {
+      "app": "@acme/admin",
+      "duration_ms": "<num>",
+      "id": "<num>",
+      "method": "GET",
+      "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
+      "page": "GET /seq",
+      "status": 200,
+      "url": "http://127.0.0.1:<port>/user?ms=150"
+    },
+    {
+      "app": "@acme/web",
+      "duration_ms": "<num>",
+      "id": "<num>",
+      "method": "GET",
+      "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
+      "page": "GET /seq",
+      "status": 200,
+      "url": "http://127.0.0.1:<port>/offers?ms=150"
+    },
+    {
+      "app": "@acme/web",
+      "duration_ms": "<num>",
+      "id": "<num>",
+      "method": "GET",
+      "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
+      "page": "GET /seq",
+      "status": 200,
+      "url": "http://127.0.0.1:<port>/orders?ms=150"
+    },
+    {
+      "app": "@acme/web",
+      "duration_ms": "<num>",
+      "id": "<num>",
+      "method": "GET",
+      "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
+      "page": "GET /seq",
+      "status": 200,
+      "url": "http://127.0.0.1:<port>/user?ms=150"
+    },
+    {
+      "app": "@acme/web",
+      "duration_ms": "<num>",
+      "id": "<num>",
+      "method": "POST",
+      "origin": "/err @ <root>/test/fixtures/fake-app.mjs:9:31",
+      "page": "GET /err",
+      "status": 500,
+      "url": "http://127.0.0.1:<port>/payments?ms=60&status=500"
+    }
+  ]
+}

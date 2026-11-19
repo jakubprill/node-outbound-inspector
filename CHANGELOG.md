@@ -4,6 +4,20 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/), wersj
 
 ## [Unreleased]
 
+### Zmienione (niezgodne z 0.4.0)
+- **`list_server_requests` zwraca obiekt** `{ requests, next_since_id }` zamiast tablicy, z `has_more`/`remaining` przy stronicowaniu i `older_not_shown`, gdy nie pokazano starszych. Obiekt jest potrzebny, żeby wynik mógł nieść kursor i znacznik przycięcia.
+- **`analyze_server_timeline` domyślnie zwraca podsumowanie** (M6, ADR 0008): 20 najnowszych żądań stron bez `timeline`, do 10 błędów (`errors_total`, gdy jest ich więcej), do 10 serii bez strony, pole `detail: "summary"`. Pełny raport po podaniu `page_request_id` albo `detail: "full"`. Pola używane dotąd (`by_page_request`, `verdict`, `verdict_code`, `sequential_chains`, `errors`, `in_flight`) zostają.
+- Wyniki narzędzi to JSON bez wcięć. W listach i analizie query string dłuższy niż 80 znaków jest skracany do `?…`; pełny URL zwraca `get_server_request`.
+- Reguła nazw sekretów nie obejmuje już `author…` (`auth(?!or)`).
+
+### Dodane
+- **Twardy budżet odpowiedzi** (wada 5, M6): każdy wynik mieści się w `OUTBOUND_MAX_RESPONSE_CHARS` (domyślnie 20 000 znaków). Wynik przycięty ma `truncated: true` i `truncation_hint`. Przycinane są najpierw najstarsze elementy największych tablic. Test własności na losowych magazynach do 5000 zapytań; 132 zapytania dają podsumowanie poniżej 6000 znaków.
+- `list_server_requests`: kursor (`since_id` → `next_since_id`, każdy rekord dokładnie raz), filtry `page_request_id` i `status` (`404`, `5xx`, `error`, `failed`, `pending`; także w `analyze_server_timeline`).
+- `get_server_request`: stronicowanie treści (`body_offset`, `body_next_offset`), pełny URL.
+- `analyze_server_timeline`: `settle_ms` (czeka, aż nic nie jest w toku i ruch ucichł, najwyżej 15 s; wynik ma `settle`), ustalenia `findings.duplicates` (ta sama metoda i URL w obrębie żądania strony albo serii) i `findings.slow` (`slow_ms`, domyślnie 1000).
+- **Redakcja sekretów w treściach JSON:** wartości skalarne pól o nazwach jak sekrety (`access_token`, `client_secret`, `password`, …) są zastępowane opisem przy przyjęciu, także w treści przyciętej; `body_redacted_fields` w `get_server_request`.
+- **Era MCP 2026-07-28** obok `initialize`: `server/discover`, wersja i możliwości klienta w `_meta` każdego żądania, `resultType: "complete"` i `serverInfo` w `_meta` wyników, błąd `-32022` dla nieobsługiwanej wersji, `-32602` przy braku wymaganych pól.
+
 ## [0.4.0] — 2026-11-19
 
 ### Dodane

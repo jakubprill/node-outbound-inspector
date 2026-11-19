@@ -17,7 +17,7 @@ test('aplikacja z setEncoding() działa przy podłączonym kolektorze, treść j
     for (let i = 0; i < 3; i++) assert.equal(await sc.hit(sc.apps[0], '/', { signal: AbortSignal.timeout(3000) }), '{"service":"/small"}', 'odpowiedź dotarła do aplikacji');
     await sleep(300);
     assert.equal(sc.apps[0].proc.exitCode, null, 'proces aplikacji żyje');
-    const [r] = await m.call('list_server_requests', { url_contains: '/small', limit: 1 });
+    const [r] = (await m.call('list_server_requests', { url_contains: '/small', limit: 1 })).requests;
     const d = await m.call('get_server_request', { id: r.id });
     assert.equal(d.body_state, 'available');
     assert.equal(d.body, '{"service":"/small"}');

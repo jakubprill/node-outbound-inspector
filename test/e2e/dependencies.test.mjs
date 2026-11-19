@@ -15,7 +15,7 @@ test('POST /orders → GET /orders/status?orderId=…: zależne; para niezależn
     await m.waitForApps(1);
     for (const p of ['/order', '/order-full', '/indep']) await sc.hit(sc.apps[0], p);
     await sleep(500);
-    const res = await m.call('analyze_server_timeline', { app: '@acme/web' });
+    const res = await m.call('analyze_server_timeline', { app: '@acme/web', detail: 'full' });
     const page = p => res['@acme/web'].by_page_request.find(x => x.page === `GET ${p}`);
 
     const order = page('/order'), [dep] = order.sequential_chains;

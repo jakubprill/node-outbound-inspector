@@ -24,41 +24,6 @@
             "wall_ms": "<num>"
           }
         ],
-        "timeline": [
-          {
-            "app": "@acme/web",
-            "duration_ms": "<num>",
-            "id": "<num>",
-            "method": "GET",
-            "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
-            "page": "GET /seq",
-            "start_ms": "<num>",
-            "status": 200,
-            "url": "http://127.0.0.1:<port>/offers?ms=150"
-          },
-          {
-            "app": "@acme/web",
-            "duration_ms": "<num>",
-            "id": "<num>",
-            "method": "GET",
-            "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
-            "page": "GET /seq",
-            "start_ms": "<num>",
-            "status": 200,
-            "url": "http://127.0.0.1:<port>/orders?ms=150"
-          },
-          {
-            "app": "@acme/web",
-            "duration_ms": "<num>",
-            "id": "<num>",
-            "method": "GET",
-            "origin": "get @ <root>/test/fixtures/fake-app.mjs:5:18",
-            "page": "GET /seq",
-            "start_ms": "<num>",
-            "status": 200,
-            "url": "http://127.0.0.1:<port>/user?ms=150"
-          }
-        ],
         "verdict": "SEQUENTIAL (waterfall) — each request waits for the previous one",
         "verdict_code": "sequential",
         "wall_ms": "<num>"
@@ -70,24 +35,12 @@
         "potential_saving_ms_if_fully_parallel": "<num>",
         "requests": 1,
         "sequential_chains": [],
-        "timeline": [
-          {
-            "app": "@acme/web",
-            "duration_ms": "<num>",
-            "id": "<num>",
-            "method": "POST",
-            "origin": "/err @ <root>/test/fixtures/fake-app.mjs:9:31",
-            "page": "GET /err",
-            "start_ms": "<num>",
-            "status": 500,
-            "url": "http://127.0.0.1:<port>/payments?ms=60&status=500"
-          }
-        ],
         "verdict": "single request",
         "verdict_code": "single",
         "wall_ms": "<num>"
       }
     ],
+    "detail": "summary",
     "errors": [
       {
         "app": "@acme/web",

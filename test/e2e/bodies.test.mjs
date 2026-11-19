@@ -16,7 +16,7 @@ async function withApp(a, env, fn) {
 test('fetch i node:http: treść albo jawny powód jej braku', () => withApp(app(), {}, async (sc, m) => {
   await sc.hit(sc.apps[0], '/fetch'); await sc.hit(sc.apps[0], '/http'); await sleep(400);
   const get = async path => {
-    const rows = await m.call('list_server_requests', { url_contains: '/small' });
+    const rows = (await m.call('list_server_requests', { url_contains: '/small' })).requests;
     const r = rows.find(x => x.page === `GET ${path}`) ?? rows[path === '/fetch' ? 0 : 1];
     return m.call('get_server_request', { id: r.id });
   };
@@ -32,7 +32,7 @@ test('fetch i node:http: treść albo jawny powód jej braku', () => withApp(app
 test('limit bufora inspektora: najstarsza z 40 odpowiedzi po 2 MB znika z Node (tryb lazy → evicted)',
   () => withApp(app(), { OUTBOUND_BODIES: 'lazy', OUTBOUND_INSPECTOR_BUFFER_MB: '32', OUTBOUND_INSPECTOR_RESOURCE_MB: '3' }, async (sc, m) => {
     await sc.hit(sc.apps[0], '/big?n=40'); await sleep(500);
-    const rows = await m.call('list_server_requests', { url_contains: '/big', limit: 100 });
+    const rows = (await m.call('list_server_requests', { url_contains: '/big', limit: 100 })).requests;
     assert.equal(rows.length, 40);
     const oldest = await m.call('get_server_request', { id: rows[0].id, max_body_chars: 10 });
     const newest = await m.call('get_server_request', { id: rows.at(-1).id, max_body_chars: 10 });
@@ -44,7 +44,7 @@ test('limit bufora inspektora: najstarsza z 40 odpowiedzi po 2 MB znika z Node (
 test('tryb eager: treść najstarszej odpowiedzi pobrana od razu, zanim Node ją usunie',
   () => withApp(app(), { OUTBOUND_INSPECTOR_BUFFER_MB: '32', OUTBOUND_INSPECTOR_RESOURCE_MB: '3' }, async (sc, m) => {
     await sc.hit(sc.apps[0], '/big?n=40'); await sleep(800);
-    const rows = await m.call('list_server_requests', { url_contains: '/big', limit: 100 });
+    const rows = (await m.call('list_server_requests', { url_contains: '/big', limit: 100 })).requests;
     const oldest = await m.call('get_server_request', { id: rows[0].id, max_body_chars: 10 });
     assert.equal(oldest.body_state, 'truncated');
     assert.ok(oldest.body_bytes > 2_000_000, String(oldest.body_bytes));
@@ -53,7 +53,7 @@ test('tryb eager: treść najstarszej odpowiedzi pobrana od razu, zanim Node ją
 
 test('tryb off: treści nie są pobierane', () => withApp(app(), { OUTBOUND_BODIES: 'off' }, async (sc, m) => {
   await sc.hit(sc.apps[0], '/http'); await sleep(300);
-  const [r] = await m.call('list_server_requests', { url_contains: '/small' });
+  const [r] = (await m.call('list_server_requests', { url_contains: '/small' })).requests;
   const d = await m.call('get_server_request', { id: r.id });
   assert.equal(d.body_state, 'skipped');
   assert.equal(d.body, null);
@@ -61,7 +61,7 @@ test('tryb off: treści nie są pobierane', () => withApp(app(), { OUTBOUND_BODI
 
 test('node:http: treść gzip, br i deflate czytelna po dekompresji (issue #1)', () => withApp(app(), {}, async (sc, m) => {
   await sc.hit(sc.apps[0], '/gzip'); await sleep(400);
-  const rows = await m.call('list_server_requests', { url_contains: '/packed' });
+  const rows = (await m.call('list_server_requests', { url_contains: '/packed' })).requests;
   assert.equal(rows.length, 4);
   const [gzip, br, deflate, charset] = await Promise.all(rows.map(r => m.call('get_server_request', { id: r.id })));
   for (const [d, enc] of [[gzip, 'gzip'], [br, 'br'], [deflate, 'deflate']]) {

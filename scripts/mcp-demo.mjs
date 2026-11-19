@@ -20,7 +20,7 @@ await mcp.call('clear_server_requests');
 await hitAll(); await sleep(1500);             // pomiar: wszystkie strony wszystkich aplikacji naraz
 
 console.log('\n### Outbound requests');
-for (const r of await mcp.call('list_server_requests', { limit: 200 }))
+for (const r of (await mcp.call('list_server_requests', { limit: 200 })).requests)
   console.log(`  #${r.id} ${r.app.padEnd(14)} ${String(r.page).padEnd(12)} → ${r.method} ${r.url} ${r.status} ${r.duration_ms} ms`);
 
 console.log('\n### Analysis');

@@ -1,37 +1,85 @@
 // Serwer MCP: JSON-RPC 2.0, jedna wiadomość na linię (stdio). `handle` nie dotyka strumieni.
+// Dwie ery protokołu (ADR 0007): dawna z `initialize` i bieżąca (2026-07-28), bezstanowa, z wersją
+// protokołu w `_meta` każdego żądania. Żądanie z `_meta` jest obsługiwane po nowemu, bez niego po staremu.
 
-/** Wspierane wersje protokołu MCP (era z `initialize`), od najnowszej. */
+/** Wspierane wersje protokołu MCP z `initialize` (dawna era), od najnowszej. */
 export const SUPPORTED_PROTOCOL_VERSIONS = Object.freeze(['2025-06-18', '2025-03-26', '2024-11-05']);
+/** Wspierane wersje bezstanowe (wersja w `_meta` każdego żądania). */
+export const MODERN_PROTOCOL_VERSIONS = Object.freeze(['2026-07-28']);
+
+const META = 'io.modelcontextprotocol/';
+export const ERR = Object.freeze({ invalidParams: -32602, methodNotFound: -32601, internal: -32603, unsupportedVersion: -32022 });
 
 /** Wersja wybrana dla klienta: jego, jeśli ją znamy; w przeciwnym razie najnowsza nasza. */
 export const negotiateVersion = requested => SUPPORTED_PROTOCOL_VERSIONS.includes(requested) ? requested : SUPPORTED_PROTOCOL_VERSIONS[0];
+
+class RpcError extends Error {
+  constructor(code, message, data) { super(message); this.code = code; this.data = data; }
+}
 
 /**
  * @param {{ info: { name: string, version: string }, instructions?: string, tools: Record<string, { description: string, inputSchema: object, run: Function }>, beforeCall?: () => Promise<unknown> }} opts
  */
 export function createMcpServer({ info, instructions, tools, beforeCall = async () => {} }) {
+  const serverInfo = { name: info.name, version: info.version };
+  const toolList = () => ({ tools: Object.entries(tools).map(([name, t]) => ({ name, description: t.description, inputSchema: t.inputSchema })) });
+
+  async function callTool(params) {
+    const t = tools[params?.name]; if (!t) throw new Error(`Unknown tool: ${params?.name}`);
+    await beforeCall();
+    try { return { content: [{ type: 'text', text: JSON.stringify(await t.run(params.arguments || {})) }] }; }
+    catch (e) { return { content: [{ type: 'text', text: String(e.message || e) }], isError: true }; }
+  }
+
+  /** Dawna era: sesja otwarta przez `initialize`, wyniki bez `resultType`. */
+  async function legacy(method, params) {
+    if (method === 'initialize') return {
+      protocolVersion: negotiateVersion(params?.protocolVersion),
+      capabilities: { tools: {} },
+      serverInfo,
+      ...(instructions ? { instructions } : {}),
+    };
+    if (method === 'ping') return {};
+    if (method === 'tools/list') return toolList();
+    if (method === 'tools/call') return callTool(params);
+    if (method === 'server/discover') throw new RpcError(ERR.invalidParams, `Invalid params: missing _meta["${META}protocolVersion"]`);
+    return null;
+  }
+
+  /** Bieżąca era: każde żądanie niesie wersję i możliwości klienta w `_meta`; wynik ma `resultType`. */
+  async function modern(method, params, meta) {
+    const requested = meta[`${META}protocolVersion`];
+    if (!MODERN_PROTOCOL_VERSIONS.includes(requested)) {
+      throw new RpcError(ERR.unsupportedVersion, 'Unsupported protocol version', { supported: [...MODERN_PROTOCOL_VERSIONS], requested });
+    }
+    if (meta[`${META}clientCapabilities`] == null) throw new RpcError(ERR.invalidParams, `Invalid params: missing _meta["${META}clientCapabilities"]`);
+    let result;
+    if (method === 'server/discover') result = {
+      supportedVersions: [...MODERN_PROTOCOL_VERSIONS],
+      capabilities: { tools: {} },
+      ...(instructions ? { instructions } : {}),
+    };
+    else if (method === 'ping') result = {};
+    else if (method === 'tools/list') result = toolList();
+    else if (method === 'tools/call') result = await callTool(params);
+    else return null;
+    return { resultType: 'complete', ...result, _meta: { [`${META}serverInfo`]: serverInfo } };
+  }
+
   /** @returns {Promise<object | null>} odpowiedź albo null (notyfikacja lub nieczytelna wiadomość) */
   async function handle(msg) {
     const { id, method, params } = msg;
     if (id === undefined) return null; // notyfikacje
     try {
-      let result;
-      if (method === 'initialize') result = {
-        protocolVersion: negotiateVersion(params?.protocolVersion),
-        capabilities: { tools: {} },
-        serverInfo: { name: info.name, version: info.version },
-        ...(instructions ? { instructions } : {}),
-      };
-      else if (method === 'ping') result = {};
-      else if (method === 'tools/list') result = { tools: Object.entries(tools).map(([name, t]) => ({ name, description: t.description, inputSchema: t.inputSchema })) };
-      else if (method === 'tools/call') {
-        const t = tools[params.name]; if (!t) throw new Error(`Unknown tool: ${params.name}`);
-        await beforeCall();
-        try { result = { content: [{ type: 'text', text: JSON.stringify(await t.run(params.arguments || {}), null, 2) }] }; }
-        catch (e) { result = { content: [{ type: 'text', text: String(e.message || e) }], isError: true }; }
-      } else return { jsonrpc: '2.0', id, error: { code: -32601, message: `Method not found: ${method}` } };
+      const meta = params?._meta;
+      const isModern = method !== 'initialize' && meta && typeof meta === 'object' && `${META}protocolVersion` in meta;
+      const result = isModern ? await modern(method, params, meta) : await legacy(method, params);
+      if (result === null) return { jsonrpc: '2.0', id, error: { code: ERR.methodNotFound, message: `Method not found: ${method}` } };
       return { jsonrpc: '2.0', id, result };
-    } catch (e) { return { jsonrpc: '2.0', id, error: { code: -32603, message: String(e.message || e) } }; }
+    } catch (e) {
+      const code = e instanceof RpcError ? e.code : ERR.internal;
+      return { jsonrpc: '2.0', id, error: { code, message: String(e.message || e), ...(e.data !== undefined ? { data: e.data } : {}) } };
+    }
   }
   return { handle };
 }
