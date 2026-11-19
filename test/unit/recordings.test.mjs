@@ -41,4 +41,13 @@ for (const file of files) {
       else { assert.equal(r.body.state, 'unavailable', r.url); assert.match(r.body.reason, /Node 2\d/); }
     }
   });
+
+  test(`${file} (${node}): zależności danych — bez treści fetch stan nieznany, nie „niezależne” (issue #6)`, () => {
+    const { store } = replay(entries);
+    const seq = analyze(store.select(), {})['@acme/web'].by_page_request.find(x => x.page === 'GET /seq');
+    const [ch] = seq.sequential_chains;
+    assert.deepEqual(ch.dependencies, [], 'zapytania /user, /orders, /offers nie przekazują sobie danych');
+    assert.equal(ch.dependency_check.status, major >= 24 ? 'complete' : 'unavailable');
+    assert.ok(ch.potential_saving_ms > 250, 'brak dowodu zależności — oszczędność jak dawniej');
+  });
 }

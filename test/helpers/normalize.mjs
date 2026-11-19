@@ -4,7 +4,8 @@ const VOLATILE_NUM = new Set(['id', 'pid', 'port', 'start_ms', 'duration_ms', 'w
   'if_parallel_ms', 'potential_saving_ms', 'potential_saving_ms_if_fully_parallel', 'last_id', 'since_id', 'ttfb_ms']);
 const VOLATILE_STR = new Set(['since', 'wallStart', 'page_request_id', 'connectedAt', 'node']);
 // Treść odpowiedzi fetch zależy od wersji Node (na 22 niedostępna) — sprawdzają ją osobne testy e2e.
-const NODE_DEPENDENT = new Set(['body', 'body_state', 'body_bytes', 'body_reason']);
+// Tak samo stan sprawdzenia zależności danych, który wynika z dostępności treści (issue #6).
+const NODE_DEPENDENT = new Set(['body', 'body_state', 'body_bytes', 'body_reason', 'dependency_check']);
 const NODE_WARNING = /^Node \d+: /;
 
 const key = v => JSON.stringify(v);
