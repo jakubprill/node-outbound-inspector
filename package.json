@@ -1,7 +1,7 @@
 {
   "name": "node-outbound-inspector",
   "version": "0.7.0",
-  "description": "Inspekcja wychodzącego ruchu HTTP procesów Node.js/Next.js w Chrome DevTools i dla agentów AI (MCP): wiele aplikacji, przypisanie do żądania strony, wykrywanie zapytań sekwencyjnych.",
+  "description": "Inspect the outbound HTTP traffic of Node.js/Next.js processes in Chrome DevTools and for AI agents (MCP): several apps, assignment to the page request, sequential request detection.",
   "license": "MIT",
   "author": "Jakub Prill",
   "repository": {

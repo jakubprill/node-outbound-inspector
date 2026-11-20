@@ -127,7 +127,7 @@ npm run record                   # record inspector events into test/fixtures/re
 npm run golden:update            # refresh golden snapshots (contract change → CHANGELOG entry)
 ```
 
-Code structure and roadmap: [`docs/architecture.md`](docs/architecture.md), decisions: [`docs/adr/`](docs/adr/) (in Polish).
+Code structure and roadmap: [`docs/architecture.md`](docs/architecture.md), decisions: [`docs/adr/`](docs/adr/).
 
 Example monorepo with two Next.js apps: [`examples/nextjs-monorepo`](examples/nextjs-monorepo/README.md)
 ```bash
@@ -157,7 +157,7 @@ Next.js 16 has its own MCP server (`/_next/mcp`, used through `next-devtools-mcp
 | Waterfall detection, `Promise.all` saving, duplicates, slow requests | — | ✓ |
 | Any Node process, not only Next | — | ✓ |
 
-Full comparison (Polish): [docs/nextjs-mcp-comparison.md](docs/nextjs-mcp-comparison.md).
+Full comparison: [docs/nextjs-mcp-comparison.md](docs/nextjs-mcp-comparison.md).
 
 - Page requests carry `next_request_id` / `next_html_request_id` when the browser sent Next's `x-nextjs-request-id` / `x-nextjs-html-request-id` headers (client navigations, Server Actions in dev). Pass them to `get_request_insights` as `requestId` / `htmlRequestId`, or use them as filters here.
 - `inspector_status` lists each app's `http_ports`, the port to pass to `nextjs_call`. `next-devtools-mcp` found both apps of a two-app monorepo started with `outbound-next … --inspect=…` on its own (Next 16.4, macOS); if it misses one, pass the port to `nextjs_index`.
@@ -182,11 +182,11 @@ Full comparison (Polish): [docs/nextjs-mcp-comparison.md](docs/nextjs-mcp-compar
 - Keep a **separate inspector port per app**. `portless -- --inspect` (or `next dev --inspect` without a port) gives every app 9229: one wins, the rest run without an inspector, and 9229 is the hub's port. `outbound-next` warns about this.
 - HTTPS mode (portless default) was not tested; it does not touch the inspector, and portless sets `NODE_EXTRA_CA_CERTS` for server calls to `https://*.localhost`.
 
-Details (Polish): [docs/portless.md](docs/portless.md).
+Details: [docs/portless.md](docs/portless.md).
 
 ## Security model
 
-The Node inspector gives full control over a process, and whatever the tools return goes to your AI model provider. The tool is built for local development only, with these safeguards (security review: [docs/security-audit-2026-11-20.md](docs/security-audit-2026-11-20.md), in Polish):
+The Node inspector gives full control over a process, and whatever the tools return goes to your AI model provider. The tool is built for local development only, with these safeguards (security review: [docs/security-audit-2026-11-20.md](docs/security-audit-2026-11-20.md)):
 
 - **Consent.** The MCP server attaches to every inspector on ports 9230–9249, but injects code, patches and enables network inspection only in processes of the same user that opted in: started with `outbound-next` (sets `OUTBOUND_INSPECT=1`), with `OUTBOUND_INSPECT=1`, or with `--experimental-network-inspection`. Other processes show up in `inspector_status` with `skipped: "no_consent"` or `"other_user"`. Port 9229 (plain `node --inspect`) is not scanned by default.
 - **Loopback only.** Targets are accepted only when their WebSocket address points to the scanned port on 127.0.0.1/localhost. `outbound-next` refuses an inspector on another address (`--inspect=0.0.0.0`, `--inspect-port`, `NODE_OPTIONS`) unless `OUTBOUND_ALLOW_REMOTE_INSPECT=1`. In Docker publish the port as `-p 127.0.0.1:<port>:<port>`. `outbound-hub` listens on 127.0.0.1, checks the `Host` header (DNS rebinding) and forwards only to apps it found.
@@ -209,10 +209,12 @@ The Node inspector gives full control over a process, and whatever the tools ret
 
 ## Documentation
 - [`llms.txt`](llms.txt): integration and usage guide for AI agents
-- The documents below are in Polish:
-  - [Full analysis: the problem, alternatives (proxy, OpenTelemetry/Jaeger), WebMCP, recommendations](docs/analysis.md)
-  - [Test results](docs/test-results.md)
-  - [Changelog](CHANGELOG.md)
+- [Architecture and roadmap](docs/architecture.md), [decision records](docs/adr/)
+- [Security audit](docs/security-audit-2026-11-20.md), [comparison with Next DevTools MCP](docs/nextjs-mcp-comparison.md)
+- [portless](docs/portless.md), [built app and staging](docs/staging-built-app.md)
+- [Original analysis: the problem, alternatives (proxy, OpenTelemetry/Jaeger), WebMCP, recommendations](docs/analysis.md)
+- [Test results](docs/test-results.md)
+- [Changelog](CHANGELOG.md)
 
 ## License
 [MIT](LICENSE) © 2026 Jakub Prill

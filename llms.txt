@@ -115,6 +115,6 @@ Next's own dev endpoints (`/_next/mcp`, HMR, `/__nextjs_*`) are not page request
 
 - [README](README.md): quick start, full table of environment variables, limitations ([Polish version](README.pl.md))
 - [Example monorepo with two Next.js apps](examples/nextjs-monorepo/README.md)
-- [Architecture and roadmap](docs/architecture.md) (Polish)
-- [Decision records](docs/adr/) (Polish)
-- [Changelog](CHANGELOG.md) (Polish)
+- [Architecture and roadmap](docs/architecture.md)
+- [Decision records](docs/adr/)
+- [Changelog](CHANGELOG.md)

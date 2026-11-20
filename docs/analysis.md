@@ -1,132 +1,132 @@
-# Next.js: inspekcja ruchu sieciowego po stronie serwera (Chrome DevTools + MCP dla agentów)
+# Next.js: server-side network traffic inspection (Chrome DevTools + MCP for agents)
 
-_Analiza i wyniki testów · stan na 2026-11-19_
+_Analysis and test results · as of 2026-11-19 (historical: written for the prototype; current usage is in the README)_
 
-## Spis treści
+## Contents
 1. [Problem](#1-problem)
-2. [Rozwiązanie bazowe: inspekcja sieci w Node](#2-rozwiązanie-bazowe-inspekcja-sieci-w-node)
-3. [Wyniki testów](#3-wyniki-testów)
-4. [Pułapki](#4-pułapki)
-5. [Monorepo: kilka aplikacji naraz](#5-monorepo-kilka-aplikacji-naraz)
-6. [Agent AI: serwer MCP `outbound-mcp`](#6-agent-ai-serwer-mcp-outbound-mcp)
-7. [WebMCP i Chrome DevTools MCP: co pasuje, a co nie](#7-webmcp-i-chrome-devtools-mcp-co-pasuje-a-co-nie)
-8. [Alternatywy](#8-alternatywy)
-9. [Rekomendacja i kroki wdrożenia](#9-rekomendacja-i-kroki-wdrożenia)
-10. [Ograniczenia i bezpieczeństwo](#10-ograniczenia-i-bezpieczeństwo)
+2. [Base solution: network inspection in Node](#2-base-solution-network-inspection-in-node)
+3. [Test results](#3-test-results)
+4. [Pitfalls](#4-pitfalls)
+5. [Monorepo: several apps at once](#5-monorepo-several-apps-at-once)
+6. [AI agent: the `outbound-mcp` MCP server](#6-ai-agent-the-outbound-mcp-mcp-server)
+7. [WebMCP and Chrome DevTools MCP: what fits and what does not](#7-webmcp-and-chrome-devtools-mcp-what-fits-and-what-does-not)
+8. [Alternatives](#8-alternatives)
+9. [Recommendation and rollout steps](#9-recommendation-and-rollout-steps)
+10. [Limitations and security](#10-limitations-and-security)
 
 ---
 
 ## 1. Problem
-W aplikacji Next.js większość wywołań do integracji wykonuje serwer (Node), a nie przeglądarka. Dlatego nie widać ich w zakładce **Network** w Chrome DevTools. Celem jest podgląd tego ruchu w trybie deweloperskim (URL, nagłówki, status, treść, czasy) oraz automatyczna analiza: błędy, zapytania sekwencyjne i równoległe.
+In a Next.js app most calls to integrations are made by the server (Node), not the browser. That is why they do not show up in the **Network** tab in Chrome DevTools. The goal is to view this traffic in development mode (URL, headers, status, body, timings) and to analyze it automatically: errors, sequential and parallel requests.
 
-## 2. Rozwiązanie bazowe: inspekcja sieci w Node
-Node ma wbudowaną, eksperymentalną flagę `--experimental-network-inspection`, która wysyła zdarzenia `Network.*` protokołu Chrome DevTools (CDP) dla `fetch` (undici), `node:http`/`https` oraz HTTP/2.
+## 2. Base solution: network inspection in Node
+Node has a built-in, experimental `--experimental-network-inspection` flag that emits Chrome DevTools Protocol (CDP) `Network.*` events for `fetch` (undici), `node:http`/`https` and HTTP/2.
 
 ```json
 "dev:inspect": "node --experimental-network-inspection $(node -p \"require.resolve('next/dist/bin/next')\") dev --inspect"
 ```
 
-Zapis `$(…)` wymaga powłoki POSIX; na Windows (`cmd.exe`) użyj `outbound-next dev --inspect` albo ścieżki `./node_modules/next/dist/bin/next` (README, „Szybki start”).
+The `$(…)` syntax needs a POSIX shell; on Windows (`cmd.exe`) use `outbound-next dev --inspect` or the path `./node_modules/next/dist/bin/next` (README, "Quick start").
 
-Użycie:
+Usage:
 1. `npm run dev:inspect`
-2. Chrome → `chrome://inspect` → **Open dedicated DevTools for Node** → zakładka **Network**
-3. Otwórz aplikację. Wywołania serwera pojawiają się w tym osobnym oknie DevTools.
+2. Chrome → `chrome://inspect` → **Open dedicated DevTools for Node** → **Network** tab
+3. Open the app. Server calls appear in that separate DevTools window.
 
-## 3. Wyniki testów
-Środowisko: MacBook (Apple Silicon), Next.js 16.4.0, testy wykonane 2026-11-18/19.
+## 3. Test results
+Environment: MacBook (Apple Silicon), Next.js 16.4.0, tests run on 2026-11-18/19.
 
-| Środowisko | `fetch` (undici) | `node:http` (axios/got) |
+| Environment | `fetch` (undici) | `node:http` (axios/got) |
 |---|---|---|
-| Node 26.12 + Next 16.4 **Turbopack** | ✅ URL, nagłówki, status, treść | ✅ pełne |
-| Node 26.12 + Next 16.4 webpack | ✅ pełne | ✅ pełne |
-| Node 22.23 (bez Next) | ⚠️ brak treści odpowiedzi | ✅ pełne |
-| Bun 1.4 jako runtime | ❌ (WebKit Inspector, nie CDP) | ❌ |
+| Node 26.12 + Next 16.4 **Turbopack** | ✅ URL, headers, status, body | ✅ complete |
+| Node 26.12 + Next 16.4 webpack | ✅ complete | ✅ complete |
+| Node 22.23 (no Next) | ⚠️ no response body | ✅ complete |
+| Bun 1.4 as the runtime | ❌ (WebKit Inspector, not CDP) | ❌ |
 
-- W trybie dev Next 16 działa w **jednym procesie** z inspektorem, więc wystarczy jedno podłączenie.
-- Okno Chrome DevTools i agent (MCP) mogą być podłączone **jednocześnie** i oba widzą te same zdarzenia.
+- In dev mode Next 16 runs in **one process** with the inspector, so one connection is enough.
+- A Chrome DevTools window and an agent (MCP) can be attached **at the same time**, and both see the same events.
 
-## 4. Pułapki
-- ❌ `NODE_OPTIONS='--experimental-network-inspection'` **nie działa**: Node odrzuca tę flagę w `NODE_OPTIONS`. Trzeba ją przekazać bezpośrednio do `node`.
-- `--inspect` podajemy jako argument `next dev`.
-- Wymagany **Node ≥ 24**. Na Node 22 brakuje treści odpowiedzi z `fetch`.
-- Funkcja jest eksperymentalna i może się zmieniać między wersjami Node.
-- Ruch serwera jest w **osobnym** oknie DevTools, nie razem z ruchem strony.
-- Next sam odpytuje `registry.npmjs.org` (sprawdzanie aktualizacji). Wystarczy to odfiltrować.
-- Bun jako runtime (`bun --bun next dev`) nie jest obsługiwany. Zostaje `BUN_CONFIG_VERBOSE_FETCH=curl`. Jeśli Bun służy tylko do instalowania pakietów i uruchamiania skryptów, a Next działa na Node, wszystko działa.
-- Docker: w kontenerze `--inspect=0.0.0.0:<port>` (z `outbound-next` wymaga `OUTBOUND_ALLOW_REMOTE_INSPECT=1`), a port wystawiony **tylko na pętli zwrotnej hosta**: `-p 127.0.0.1:<port>:<port>`. Samo `-p <port>:<port>` wystawia inspektor, czyli wykonanie kodu w procesie, każdemu w sieci. Edge runtime nie jest objęty.
+## 4. Pitfalls
+- ❌ `NODE_OPTIONS='--experimental-network-inspection'` **does not work**: Node rejects this flag in `NODE_OPTIONS`. It must be passed to `node` directly.
+- `--inspect` is passed as an argument of `next dev`.
+- **Node ≥ 24** is required. On Node 22 the `fetch` response body is missing.
+- The feature is experimental and may change between Node versions.
+- Server traffic is in a **separate** DevTools window, not together with page traffic.
+- Next itself polls `registry.npmjs.org` (update check). Just filter it out.
+- Bun as the runtime (`bun --bun next dev`) is not supported. `BUN_CONFIG_VERBOSE_FETCH=curl` remains. If Bun is used only to install packages and run scripts while Next runs on Node, everything works.
+- Docker: inside the container `--inspect=0.0.0.0:<port>` (with `outbound-next` this needs `OUTBOUND_ALLOW_REMOTE_INSPECT=1`), and the port published **only on the host loopback**: `-p 127.0.0.1:<port>:<port>`. A plain `-p <port>:<port>` exposes the inspector, i.e. code execution in the process, to anyone on the network. Edge runtime is not covered.
 
-## 5. Monorepo: kilka aplikacji naraz
-**Problem:** przy równoległym `dev` (turbo / workspaces) wszystkie aplikacje próbują zająć port 9229.
+## 5. Monorepo: several apps at once
+**Problem:** with a parallel `dev` (turbo / workspaces) all apps try to take port 9229.
 
-| Scenariusz | Wynik |
+| Scenario | Result |
 |---|---|
-| A: każda aplikacja z gołym `--inspect` | ❌ Pierwsza zajmuje 9229. Druga wypisuje tylko `Starting inspector on 127.0.0.1:9229 failed: address already in use` i **działa dalej bez inspektora**. Next pokazuje „Debugger port” tylko przy pierwszej, więc łatwo to przeoczyć. Obie aplikacje mają ten sam `next` z `node_modules`, więc w inspektorze wyglądają identycznie. |
-| B: osobny port na aplikację | ✅ Obie widoczne, a jeden serwer MCP rozróżnia je poprawnie. |
+| A: every app with a bare `--inspect` | ❌ The first takes 9229. The second only prints `Starting inspector on 127.0.0.1:9229 failed: address already in use` and **keeps running without an inspector**. Next shows "Debugger port" only for the first, so it is easy to miss. Both apps use the same `next` from `node_modules`, so they look identical in the inspector. |
+| B: a separate port per app | ✅ Both visible, and one MCP server tells them apart correctly. |
 
-**Konfiguracja (każda aplikacja ma własny port inspektora):**
+**Configuration (every app has its own inspector port):**
 ```jsonc
 // apps/web/package.json
 "dev:inspect": "node --experimental-network-inspection $(node -p \"require.resolve('next/dist/bin/next')\") dev --port 3101 --inspect=9231"
 // apps/admin/package.json
 "dev:inspect": "node --experimental-network-inspection $(node -p \"require.resolve('next/dist/bin/next')\") dev --port 3102 --inspect=9241"
-// package.json (root) — równolegle, jak `dev`
+// package.json (root) — in parallel, like `dev`
 "dev:inspect": "npm run dev:inspect -w @acme/web & npm run dev:inspect -w @acme/admin & wait"
 ```
-`require.resolve` znajduje `next` niezależnie od tego, gdzie menedżer pakietów go umieścił (wersja hoisted albo pnpm). Składnia `$(...)` nie działa w Windowsowym cmd. Przenośny zapis, niezależny od powłoki: `"dev:inspect": "outbound-next dev --port 3101 --inspect=9231"` (README, „Szybki start”; issue #5).
+`require.resolve` finds `next` wherever the package manager put it (hoisted or pnpm). The `$(...)` syntax does not work in Windows cmd. The portable, shell-independent form: `"dev:inspect": "outbound-next dev --port 3101 --inspect=9231"` (README, "Quick start"; issue #5).
 
-**Wynik testu (2 × Next 16.4 Turbopack uruchomione równolegle, ruch generowany jednocześnie w obu):**
+**Test result (2 × Next 16.4 Turbopack started in parallel, traffic generated in both at once):**
 
-| Aplikacja | Strona | Zapytania | Czas | Werdykt |
+| App | Page | Requests | Time | Verdict |
 |---|---|---|---|---|
-| `@acme/web` | `GET /seq` | 3 | 469 ms | SEKWENCYJNIE, możliwa oszczędność 313 ms |
-| `@acme/web` | `GET /err` | 1 | 89 ms | błąd 500 z `/payments` |
-| `@acme/admin` | `GET /par` | 3 | 163 ms | RÓWNOLEGLE |
-| `@acme/admin` | `GET /seq` | 2 | 320 ms | SEKWENCYJNIE, możliwa oszczędność 161 ms |
+| `@acme/web` | `GET /seq` | 3 | 469 ms | SEQUENTIAL, possible saving 313 ms |
+| `@acme/web` | `GET /err` | 1 | 89 ms | 500 error from `/payments` |
+| `@acme/admin` | `GET /par` | 3 | 163 ms | PARALLEL |
+| `@acme/admin` | `GET /seq` | 2 | 320 ms | SEQUENTIAL, possible saving 161 ms |
 
-Ten sam URL (`/user`) wołany przez obie aplikacje w tej samej chwili został poprawnie przypisany do każdej z nich.
+The same URL (`/user`) called by both apps at the same moment was assigned correctly to each of them.
 
-## 6. Agent AI: serwer MCP `outbound-mcp`
-Prototyp serwera MCP (jeden plik `src/outbound-mcp.mjs`, bez zależności, Node ≥ 22). Podłącza się do inspektorów Node i daje agentowi (Claude Code, Cursor, Copilot…) dostęp do ruchu serwera razem z analizą.
+## 6. AI agent: the `outbound-mcp` MCP server
+A prototype MCP server (a single file `src/outbound-mcp.mjs`, no dependencies, Node ≥ 22). It attaches to Node inspectors and gives the agent (Claude Code, Cursor, Copilot…) access to server traffic together with analysis.
 
-**Narzędzia:**
-| Narzędzie | Opis |
+**Tools:**
+| Tool | Description |
 |---|---|
-| `inspector_status` | Podłączone aplikacje: nazwa, port, pid, katalog |
-| `list_server_requests` | Zapytania: aplikacja, strona, metoda, URL, status, czas |
-| `get_server_request` | Nagłówki żądania i odpowiedzi, treść, stos wywołań |
-| `analyze_server_timeline` | Osobno dla każdej aplikacji i każdego żądania strony: wykrywa zapytania sekwencyjne i równoległe, liczy zysk z `Promise.all` i zbiera błędy |
-| `clear_server_requests` | Czyści bufor (całość albo jedną aplikację) |
+| `inspector_status` | Attached apps: name, port, pid, directory |
+| `list_server_requests` | Requests: app, page, method, URL, status, time |
+| `get_server_request` | Request and response headers, body, call stack |
+| `analyze_server_timeline` | Per app and per page request: detects sequential and parallel requests, computes the `Promise.all` gain and collects errors |
+| `clear_server_requests` | Clears the buffer (all or one app) |
 
-**Jak działa:**
-- Skanuje porty inspektorów (domyślnie `9229-9249`) i podłącza się do każdego procesu.
-- **Rozpoznaje aplikację:** odczytuje z procesu jego katalog roboczy i nazwę pakietu, a dodatkowo `name` z `package.json`. Można to nadpisać zmienną `APP_NAMES`.
-- **Przypisuje zapytanie do strony:** wstrzykuje do procesu mały kod nasłuchujący (`diagnostics_channel` i `AsyncLocalStorage`), który zapamiętuje, które przychodzące żądanie strony wywołało dane zapytanie. Dzięki temu równoległe renderowanie kilku stron się nie miesza. W kodzie aplikacji nic nie trzeba zmieniać.
+**How it works:**
+- Scans inspector ports (`9229-9249` by default) and attaches to every process.
+- **Recognizes the app:** reads the working directory and package name from the process, plus `name` from `package.json`. `APP_NAMES` can override this.
+- **Assigns a request to a page:** injects a small listener into the process (`diagnostics_channel` and `AsyncLocalStorage`) that remembers which incoming page request caused a given request. Parallel rendering of several pages therefore does not mix. Nothing has to change in the app code.
 
-**Podłączenie:**
+**Connecting:**
 ```bash
-claude mcp add outbound -- node /ścieżka/node-outbound-inspector/src/outbound-mcp.mjs
-# opcjonalnie: -e INSPECTOR_PORTS=9231,9241 -e APP_NAMES=9231=web,9241=admin
+claude mcp add outbound -- node /path/node-outbound-inspector/src/outbound-mcp.mjs
+# optionally: -e INSPECTOR_PORTS=9231,9241 -e APP_NAMES=9231=web,9241=admin
 ```
 
-**Zalecany przebieg pracy agenta:** `clear_server_requests` → otwarcie strony (np. przez Chrome DevTools MCP) → `analyze_server_timeline` → `get_server_request` dla błędów.
+**Recommended agent workflow:** `clear_server_requests` → open the page (e.g. through Chrome DevTools MCP) → `analyze_server_timeline` → `get_server_request` for errors.
 
-## 7. WebMCP i Chrome DevTools MCP: co pasuje, a co nie
-- **WebMCP** (`document.modelContext`, dawniej `navigator.modelContext`) służy do czegoś innego: strona udostępnia przez nie **swoje akcje** agentowi w przeglądarce. Nie daje dostępu do ruchu serwera. Na razie jest dostępne tylko w Chrome, w ramach origin trial. **Nie nadaje się do tego celu.**
-- **Chrome DevTools MCP** (oficjalny, Google) obsługuje stronę w przeglądarce: nawigację, Network, konsolę i wydajność. Do procesu Node się nie podłącza. **Dobrze uzupełnia `outbound-mcp`:** razem dają agentowi pełny obraz jednego żądania, od przeglądarki po serwer.
+## 7. WebMCP and Chrome DevTools MCP: what fits and what does not
+- **WebMCP** (`document.modelContext`, formerly `navigator.modelContext`) serves another purpose: through it a page exposes **its own actions** to an agent in the browser. It gives no access to server traffic. For now it is available only in Chrome, as an origin trial. **Not suitable for this goal.**
+- **Chrome DevTools MCP** (official, Google) handles the page in the browser: navigation, Network, console and performance. It does not attach to a Node process. **A good complement to `outbound-mcp`:** together they give the agent the full picture of one request, from browser to server.
 
-## 8. Alternatywy
-- **Proxy przechwytujące** (HTTP Toolkit, mitmproxy, Proxyman): jeden widok na ruch przeglądarki i serwera, działa niezależnie od runtime'u. Wymaga przekierowania undici (`setGlobalDispatcher(new ProxyAgent(...))`) oraz `http`/`https`. Przy HTTPS dodaj `NODE_EXTRA_CA_CERTS`.
-- **`node-network-devtools`** (npm): podgląd w Chrome DevTools przez `register()` w `instrumentation.ts`. Nie obsługuje Buna.
-- **OpenTelemetry + Jaeger**: inny cel. Pokazuje czasy i przepływ między serwisami oraz działa na stagingu i produkcji. Next ma wbudowaną obsługę (`instrumentation.ts`, `@vercel/otel`). Domyślnie nie pokazuje treści żądań i odpowiedzi. **Uzupełnia inspekcję sieci, nie zastępuje jej.**
+## 8. Alternatives
+- **An intercepting proxy** (HTTP Toolkit, mitmproxy, Proxyman): one view of browser and server traffic, runtime-independent. Needs undici redirected (`setGlobalDispatcher(new ProxyAgent(...))`) as well as `http`/`https`. For HTTPS add `NODE_EXTRA_CA_CERTS`.
+- **`node-network-devtools`** (npm): a view in Chrome DevTools through `register()` in `instrumentation.ts`. Does not support Bun.
+- **OpenTelemetry + Jaeger**: a different goal. Shows timings and flow between services and works on staging and production. Next has built-in support (`instrumentation.ts`, `@vercel/otel`). No request and response bodies by default. **It complements network inspection, it does not replace it.**
 
-## 9. Rekomendacja i kroki wdrożenia
-1. **Teraz:** dodać `dev:inspect` z osobnym portem inspektora dla każdej aplikacji w monorepo. Używać Node ≥ 24.
-2. **Dla agentów:** `outbound-mcp` razem z Chrome DevTools MCP. Pilotaż na jednej prawdziwej stronie z monorepo.
-3. **Do zrobienia w prototypie:** rozwiązywanie map źródeł (`.map` w `.next/dev`), żeby wskazywać pliki źródłowe zamiast skompilowanych chunków.
-4. **Później, jeśli potrzebna będzie widoczność między serwisami i na środowiskach:** OpenTelemetry z Jaegerem (lokalnie kontener `jaegertracing/all-in-one`).
+## 9. Recommendation and rollout steps
+1. **Now:** add `dev:inspect` with a separate inspector port for every app in the monorepo. Use Node ≥ 24.
+2. **For agents:** `outbound-mcp` together with Chrome DevTools MCP. A pilot on one real page of the monorepo.
+3. **To do in the prototype:** resolving source maps (`.map` in `.next/dev`), to point at source files instead of compiled chunks.
+4. **Later, if visibility across services and environments is needed:** OpenTelemetry with Jaeger (locally the `jaegertracing/all-in-one` container).
 
-## 10. Ograniczenia i bezpieczeństwo
-- W Next.js `fetch` jest opakowany przez sam Next (`dedupeFetch`), więc stos wywołań kończy się w jego wnętrzu. **Linii kodu strony nie widać.** Kod znajduje się po URL-u zapytania i po przypisanej stronie. Poza Next (zwykły Node) dokładna linia jest widoczna.
-- Zapytania wykonywane poza kontekstem żądania strony (start serwera, zadania w tle) trafiają do grupy „bez strony”.
-- Inspektor daje **pełną kontrolę nad procesem**, a `outbound-mcp` wstrzykuje do niego kod. To narzędzie **tylko do lokalnego developmentu**. Inspektor powinien zostać na domyślnym adresie `127.0.0.1` i nie może trafić na żadne współdzielone środowisko.
+## 10. Limitations and security
+- In Next.js `fetch` is wrapped by Next itself (`dedupeFetch`), so the call stack ends inside it. **The page code line is not visible.** The code is found by the request URL and the assigned page. Outside Next (plain Node) the exact line is visible.
+- Requests made outside a page request context (server start, background jobs) go to the "no page" group.
+- The inspector gives **full control over the process**, and `outbound-mcp` injects code into it. This is a tool **for local development only**. The inspector should stay on the default address `127.0.0.1` and must never reach a shared environment.

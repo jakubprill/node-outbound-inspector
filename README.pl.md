@@ -208,8 +208,12 @@ Inspektor Node daje pełną kontrolę nad procesem, a to, co zwracają narzędzi
 - Redakcja to najlepsze staranie; zob. [Model bezpieczeństwa](#model-bezpieczeństwa).
 
 ## Dokumentacja
-- [`llms.txt`](llms.txt): instrukcja integracji i użycia dla agentów AI (po angielsku)
-- [Pełna analiza: problem, alternatywy (proxy, OpenTelemetry/Jaeger), WebMCP, rekomendacje](docs/analysis.md)
+Dokumentacja w `docs/` i CHANGELOG są po angielsku.
+- [`llms.txt`](llms.txt): instrukcja integracji i użycia dla agentów AI
+- [Architektura i plan](docs/architecture.md), [decyzje (ADR)](docs/adr/)
+- [Audyt bezpieczeństwa](docs/security-audit-2026-11-20.md), [porównanie z Next DevTools MCP](docs/nextjs-mcp-comparison.md)
+- [portless](docs/portless.md), [zbudowana aplikacja i staging](docs/staging-built-app.md)
+- [Pierwotna analiza: problem, alternatywy (proxy, OpenTelemetry/Jaeger), WebMCP, rekomendacje](docs/analysis.md)
 - [Wyniki testów](docs/test-results.md)
 - [Changelog](CHANGELOG.md)
 

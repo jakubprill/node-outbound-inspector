@@ -1,261 +1,261 @@
-# Architektura docelowa `node-outbound-inspector`
+# Target architecture of `node-outbound-inspector`
 
-_Status: propozycja do akceptacji · 2026-11-19 · punkt wyjścia: prototyp 0.3.0 (`src/outbound-mcp.mjs`) · decyzje: [`docs/adr/`](adr/)_
+_Status: proposal for acceptance · 2026-11-19 · starting point: prototype 0.3.0 (`src/outbound-mcp.mjs`) · decisions: [`docs/adr/`](adr/)_
 
-Dokument opisuje, jak z jednoplikowego prototypu zrobić małe, utrzymywalne narzędzie dla zespołu: podział na moduły, wykrywanie aplikacji bez sztywnych portów, wskazywanie kodu źródłowego, korelację z przeglądarką, kontrakt dla agentów, bezpieczeństwo i plan wdrożenia małymi krokami.
+This document describes how to turn a single-file prototype into a small, maintainable tool for a team: the module split, app discovery without fixed ports, pointing at source code, correlation with the browser, the agent contract, security, and a rollout plan in small steps.
 
-**Oznaczenia dowodów.** Każde istotne twierdzenie techniczne ma jedno z czterech oznaczeń:
+**Evidence markers.** Every significant technical claim carries one of four markers:
 
-| Znak | Znaczenie |
+| Marker | Meaning |
 |---|---|
-| **[Z]** | zweryfikowane eksperymentem przy pisaniu tego dokumentu: kontener Linux, Node 22.23.5 i 24.22.3, Bun 1.4.4, **bez Next.js i bez dostępu do npm**. Opis w [załączniku A](#załącznik-a-eksperymenty). |
-| **[U]** | zweryfikowane wcześniej przez autora na macOS (Node 26.12, Next 16.4): [`test-results.md`](test-results.md). |
-| **[D]** | wg dokumentacji zewnętrznej: [załącznik C](#załącznik-c-źródła). |
-| **[A]** | założenie. Przy każdym podany jest kamień milowy, w którym trzeba je sprawdzić. |
+| **[Z]** | verified by experiment while writing this document: Linux container, Node 22.23.5 and 24.22.3, Bun 1.4.4, **without Next.js and without npm access**. Described in [appendix A](#appendix-a-experiments). |
+| **[U]** | verified earlier by the author on macOS (Node 26.12, Next 16.4): [`test-results.md`](test-results.md). |
+| **[D]** | according to external documentation: [appendix C](#appendix-c-sources). |
+| **[A]** | an assumption. Each lists the milestone in which it must be checked. |
 
-## Spis treści
+## Contents
 
-1. [Cel, zakres i zasady](#1-cel-zakres-i-zasady)
-2. [Punkt wyjścia: co działa, a co wyszło w eksperymentach](#2-punkt-wyjścia-co-działa-a-co-wyszło-w-eksperymentach)
-3. [Architektura w skrócie](#3-architektura-w-skrócie)
-4. [Moduły i interfejsy](#4-moduły-i-interfejsy)
-5. [Przepływ danych](#5-przepływ-danych)
-6. [Decyzje](#6-decyzje)
-7. [Ryzyka](#7-ryzyka)
-8. [Plan wdrożenia](#8-plan-wdrożenia)
-9. [Otwarte pytania](#9-otwarte-pytania)
+1. [Goal, scope and principles](#1-goal-scope-and-principles)
+2. [Starting point: what works and what experiments showed](#2-starting-point-what-works-and-what-experiments-showed)
+3. [Architecture at a glance](#3-architecture-at-a-glance)
+4. [Modules and interfaces](#4-modules-and-interfaces)
+5. [Data flow](#5-data-flow)
+6. [Decisions](#6-decisions)
+7. [Risks](#7-risks)
+8. [Rollout plan](#8-rollout-plan)
+9. [Open questions](#9-open-questions)
 
-Załączniki:
+Appendices:
 
-- [Załącznik A: eksperymenty](#załącznik-a-eksperymenty)
-- [Załącznik B: sonda dla prawdziwego Next.js](#załącznik-b-sonda-dla-prawdziwego-nextjs)
-- [Załącznik C: źródła](#załącznik-c-źródła)
-
----
-
-## 1. Cel, zakres i zasady
-
-**Cel się nie zmienia:** dać deweloperom (Chrome DevTools) i agentom AI (MCP) wgląd w wychodzący ruch HTTP serwera Next.js, którego nie widać w zakładce Network przeglądarki.
-
-**Wersja docelowa ma dodatkowo:**
-
-1. działać w monorepo bez planowania portów i bez cichych awarii;
-2. wskazywać plik i linię kodu aplikacji, która wykonała zapytanie (dziś w Next.js tego nie ma);
-3. odpowiadać agentowi krótko: domyślnie podsumowanie, szczegóły na żądanie;
-4. nie wysyłać sekretów do modelu;
-5. przetrwać zmiany eksperymentalnej flagi Node bez przepisywania narzędzia.
-
-**Zasady projektowe** (rozstrzygają spory przy implementacji):
-
-- **Małe.** Około 25 krótkich plików źródłowych, zero zależności uruchomieniowych, bez kroku budowania. Podział idzie po szwach potrzebnych testom, nie po rzeczownikach.
-- **Nic po cichu.** Każdy stan „brak danych” ma jawny powód w `inspector_status`: brak flagi, brak inspektora, brak haka, Node < 24, port zajęty.
-- **Proces aplikacji dotykamy minimalnie i tylko za zgodą.** Kod w procesie aplikacji (hak) jest mały, nie rzuca wyjątków do aplikacji i nie zmienia jej zachowania.
-- **Czysty rdzeń, I/O na krawędziach.** Analizatory, magazyn, korelacja i redakcja to funkcje bez sieci, plików i zegarów.
-- **Możliwości zamiast wersji.** Kolektor sprawdza, co dany proces potrafi, zamiast zakładać to z numeru wersji Node.
-- **Wynik narzędzia MCP to publiczne API.** Nazwy narzędzi, parametry i pola wyniku zmieniamy tylko addytywnie.
-
-**Poza zakresem:** środowiska inne niż lokalny dev; Bun jako runtime; Edge runtime; trwałe przechowywanie ruchu; tracing rozproszony (to zadanie OpenTelemetry, patrz [`analysis.md`](analysis.md)); trafienia w cache Next.js (nie ma zapytania, więc nie ma zdarzenia).
+- [Appendix A: experiments](#appendix-a-experiments)
+- [Appendix B: a probe for real Next.js](#appendix-b-a-probe-for-real-nextjs)
+- [Appendix C: sources](#appendix-c-sources)
 
 ---
 
-## 2. Punkt wyjścia: co działa, a co wyszło w eksperymentach
+## 1. Goal, scope and principles
 
-**Zostaje bez zmian koncepcyjnych:**
+**The goal does not change:** give developers (Chrome DevTools) and AI agents (MCP) insight into the outbound HTTP traffic of a Next.js server, which is not visible in the browser's Network tab.
 
-- mechanizm bazowy: `--inspect` i `--experimental-network-inspection` oraz zdarzenia CDP `Network.*` **[U, Z]**;
-- kilka klientów CDP naraz (DevTools i agent) **[U, Z]**;
-- przypisanie zapytania do żądania strony przez `http.server.request.start` i `AsyncLocalStorage` **[U, Z]**;
-- algorytm analizatora (serie, współbieżność, łańcuchy sekwencyjne, oszczędność);
-- test e2e: 5/5 na Node 22.23.5 i 24.22.3 **[Z, E1]**.
+**The target version additionally:**
 
-**Wady i luki prototypu znalezione przy projektowaniu.** Każda ma dowód i miejsce w planie:
+1. works in a monorepo without port planning and without silent failures;
+2. points at the file and line of app code that made the request (Next.js has nothing for this today);
+3. answers the agent briefly: a summary by default, details on request;
+4. does not send secrets to the model;
+5. survives changes to Node's experimental flag without rewriting the tool.
 
-| # | Wada | Skutek dla użytkownika | Dowód | Naprawa |
+**Design principles** (they settle disputes during implementation):
+
+- **Small.** About 25 short source files, zero runtime dependencies, no build step. The split follows the seams tests need, not nouns.
+- **Nothing silent.** Every "no data" state has an explicit reason in `inspector_status`: no flag, no inspector, no hook, Node < 24, port taken.
+- **We touch the app process minimally and only with consent.** The code in the app process (the hook) is small, does not throw into the app and does not change its behavior.
+- **A pure core, I/O at the edges.** Analyzers, store, correlation and redaction are functions without network, files or clocks.
+- **Capabilities instead of versions.** The collector checks what a given process can do instead of assuming it from the Node version number.
+- **The MCP tool result is public API.** Tool names, parameters and result fields change only additively.
+
+**Out of scope:** environments other than local dev; Bun as the runtime; Edge runtime; persistent storage of traffic; distributed tracing (OpenTelemetry's job, see [`analysis.md`](analysis.md)); Next.js cache hits (no request, so no event).
+
+---
+
+## 2. Starting point: what works and what experiments showed
+
+**Stays without conceptual changes:**
+
+- the base mechanism: `--inspect` and `--experimental-network-inspection` and CDP `Network.*` events **[U, Z]**;
+- several CDP clients at once (DevTools and an agent) **[U, Z]**;
+- assigning a request to the page request via `http.server.request.start` and `AsyncLocalStorage` **[U, Z]**;
+- the analyzer algorithm (bursts, concurrency, sequential chains, savings);
+- the e2e test: 5/5 on Node 22.23.5 and 24.22.3 **[Z, E1]**.
+
+**Prototype defects and gaps found during design.** Each has evidence and a place in the plan:
+
+| # | Defect | Effect for the user | Evidence | Fix |
 |---|---|---|---|---|
-| 1 | Dwa serwery MCP podłączone do tej samej aplikacji: bufor korelacji w procesie jest opróżniany przez `log.splice(0)`, więc wpisy dostaje tylko ten, kto odpyta pierwszy. Wynik: 18/18 przypisań u jednego, 0/18 u drugiego. | Druga sesja agenta (np. drugie okno Claude Code albo Cursor obok) nie widzi stron. | **[Z, E15]** | M4 |
-| 2 | `Network.enable` zwraca sukces także wtedy, gdy proces wystartował **bez** `--experimental-network-inspection`. Prototyp pokazuje wtedy `network_inspection: true` i zero zapytań. | Cicha awaria numer 2, obok konfliktu portów. | **[Z, E3]** | M2 |
-| 3 | Klucz rekordu to `port:requestId`, a identyfikatory inspektora po restarcie procesu zaczynają się znów od `node-network-event-1`. Rekordy sprzed restartu są nadpisywane (3 zamiast 6). | Znika stan „przed poprawką”, gdy agent restartuje aplikację. | **[Z, E16]** | M2 |
-| 4 | Na Node 22 `Network.getResponseBody` dla `fetch` zwraca pusty łańcuch **bez błędu**. | Brak treści wygląda jak pusta odpowiedź serwisu. | **[Z, E5]** | M2 |
-| 5 | `analyze_server_timeline` rośnie liniowo z buforem: 132 zapytania dają 88 072 znaki, czyli okolice domyślnego limitu Claude Code (ostrzeżenie od 10 tys. tokenów, limit 25 tys. **[D]**). Zapytania w toku są pomijane bez informacji. | Odpowiedź obcinana przez klienta albo zapychająca kontekst. | **[Z, E23]** | M6, M2 |
-| 6 | Nagłówki żądań i odpowiedzi (`Authorization`, `Cookie`, `Set-Cookie`) trafiają do agenta bez zmian. | Sekrety integracji w kontekście modelu. | kod, **[Z, E4]** | M2 |
+| 1 | Two MCP servers attached to the same app: the in-process correlation buffer is drained with `log.splice(0)`, so only whoever polls first gets the entries. Result: 18/18 assignments for one, 0/18 for the other. | A second agent session (e.g. a second Claude Code window or Cursor next to it) does not see pages. | **[Z, E15]** | M4 |
+| 2 | `Network.enable` succeeds even when the process started **without** `--experimental-network-inspection`. The prototype then shows `network_inspection: true` and zero requests. | Silent failure number 2, next to the port conflict. | **[Z, E3]** | M2 |
+| 3 | The record key is `port:requestId`, and inspector ids start again at `node-network-event-1` after a process restart. Records from before the restart are overwritten (3 instead of 6). | The "before the fix" state disappears when the agent restarts the app. | **[Z, E16]** | M2 |
+| 4 | On Node 22, `Network.getResponseBody` for `fetch` returns an empty string **without an error**. | A missing body looks like an empty service response. | **[Z, E5]** | M2 |
+| 5 | `analyze_server_timeline` grows linearly with the buffer: 132 requests give 88,072 characters, around Claude Code's default limit (warning from 10k tokens, limit 25k **[D]**). In-flight requests are skipped without notice. | A response truncated by the client or flooding the context. | **[Z, E23]** | M6, M2 |
+| 6 | Request and response headers (`Authorization`, `Cookie`, `Set-Cookie`) reach the agent unchanged. | Integration secrets in the model context. | code, **[Z, E4]** | M2 |
 
 ---
 
-## 3. Architektura w skrócie
+## 3. Architecture at a glance
 
 ```mermaid
 flowchart LR
-  B["Przeglądarka<br/>(+ Chrome DevTools MCP)"]
-  SV["Wewnętrzne serwisy"]
-  subgraph APP["Proces aplikacji: Node ≥ 24 (np. next dev)"]
-    H["hak (preload)<br/>żądanie strony · miejsce wywołania"]
-    I["inspektor Node<br/>CDP: Network.* · Runtime"]
+  B["Browser<br/>(+ Chrome DevTools MCP)"]
+  SV["Internal services"]
+  subgraph APP["App process: Node ≥ 24 (e.g. next dev)"]
+    H["hook (preload)<br/>page request · call site"]
+    I["Node inspector<br/>CDP: Network.* · Runtime"]
   end
   L["outbound run<br/>(launcher)"]
-  R[("rejestr<br/>~/.outbound-inspector")]
-  subgraph COL["Kolektor: proces serwera MCP (po jednym na sesję agenta)"]
-    D["discovery"] --> S["sesje CDP"]
-    S --> G["ingest + korelacja<br/>+ redakcja"]
-    G --> ST[("store<br/>w pamięci")]
-    ST --> AN["analizatory"]
-    ST --> SM["mapy źródeł"]
-    AN --> M["warstwa MCP<br/>(narzędzia, budżet odpowiedzi)"]
+  R[("registry<br/>~/.outbound-inspector")]
+  subgraph COL["Collector: MCP server process (one per agent session)"]
+    D["discovery"] --> S["CDP sessions"]
+    S --> G["ingest + correlation<br/>+ redaction"]
+    G --> ST[("store<br/>in memory")]
+    ST --> AN["analyzers"]
+    ST --> SM["source maps"]
+    AN --> M["MCP layer<br/>(tools, response budget)"]
     SM --> M
   end
-  A["Agent AI"]
-  CD["Chrome DevTools<br/>(człowiek)"]
-  B -->|"żądanie strony"| H
-  H -->|"zapytania wychodzące"| SV
-  L -->|"uruchamia z flagami,<br/>rezerwuje port"| I
-  H -->|"samorejestracja"| R
-  R -->|"wsUrl, pid, nazwa"| D
-  I <-->|"WebSocket CDP<br/>(127.0.0.1)"| S
-  H -.->|"komunikaty haka<br/>(Runtime.addBinding)"| I
+  A["AI agent"]
+  CD["Chrome DevTools<br/>(human)"]
+  B -->|"page request"| H
+  H -->|"outbound requests"| SV
+  L -->|"starts with flags,<br/>reserves a port"| I
+  H -->|"self-registration"| R
+  R -->|"wsUrl, pid, name"| D
+  I <-->|"CDP WebSocket<br/>(127.0.0.1)"| S
+  H -.->|"hook messages<br/>(Runtime.addBinding)"| I
   I <--> CD
   M <-->|"MCP stdio"| A
 ```
 
-Cztery części, każda z jedną odpowiedzialnością:
+Four parts, each with one responsibility:
 
-1. **Launcher** (`outbound run -- next dev`). Dokłada flagi, których nie da się podać przez `NODE_OPTIONS`, rezerwuje wolny port inspektora i głośno zgłasza, gdy inspektor nie wystartował. Żyje tak długo jak aplikacja.
-2. **Hak** (kod w procesie aplikacji, ładowany przez `--import`). Rejestruje proces w rejestrze, pamięta, które żądanie strony wywołało zapytanie, i łapie miejsce wywołania `fetch` w kodzie aplikacji. Niczego nie przechowuje: wypycha krótkie komunikaty do podłączonych kolektorów.
-3. **Kolektor** (proces serwera MCP albo polecenie CLI). Znajduje aplikacje w rejestrze, podłącza się po CDP, składa zdarzenia w rekordy, redaguje sekrety, rozwiązuje mapy źródeł, analizuje.
-4. **Warstwa MCP i CLI.** Wystawia kolektor agentowi (`outbound mcp`) i człowiekowi (`outbound status`, `outbound tail`).
+1. **Launcher** (`outbound run -- next dev`). Adds the flags that cannot be passed through `NODE_OPTIONS`, reserves a free inspector port and loudly reports when the inspector did not start. Lives as long as the app.
+2. **Hook** (code in the app process, loaded with `--import`). Registers the process in the registry, remembers which page request caused a request, and captures the `fetch` call site in app code. Stores nothing: it pushes short messages to the attached collectors.
+3. **Collector** (the MCP server process or a CLI command). Finds apps in the registry, attaches over CDP, assembles events into records, redacts secrets, resolves source maps, analyzes.
+4. **MCP and CLI layer.** Exposes the collector to the agent (`outbound mcp`) and to people (`outbound status`, `outbound tail`).
 
-**Dwa kanały, jedno połączenie.** Z procesu aplikacji płyną dwa strumienie po tym samym WebSockecie CDP:
+**Two channels, one connection.** Two streams flow from the app process over the same CDP WebSocket:
 
-- kanał A, zdarzenia `Network.*`: _co_ zostało wysłane i co wróciło. To robi Node, nie my.
-- kanał B, komunikaty haka: _kto i skąd_ to wywołał. To robi hak.
+- channel A, `Network.*` events: _what_ was sent and what came back. Node does this, not us.
+- channel B, hook messages: _who and from where_ made the call. The hook does this.
 
-Oba łączy identyfikator `requestId`, który inspektor Node zapisuje na obiekcie żądania **[Z, E13]**. Dzięki temu nie ma dopasowywania po URL i czasie (zostaje jako ścieżka awaryjna).
+Both are joined by the `requestId`, which the Node inspector stores on the request object **[Z, E13]**. So there is no matching by URL and time (it stays as a fallback).
 
-### Słownik pojęć
+### Glossary
 
-W dokumentacji, kodzie i wynikach narzędzi używamy tych nazw konsekwentnie. „Żądanie” zawsze przychodzi do aplikacji, „zapytanie” zawsze z niej wychodzi.
+We use these names consistently in docs, code and tool results. A "page request" always comes into the app, an "outbound request" always leaves it.
 
-| Pojęcie | Znaczenie | Unikać |
+| Term | Meaning | Avoid |
 |---|---|---|
-| **Aplikacja** | Logiczna aplikacja z monorepo, rozpoznawana po nazwie pakietu, np. `@acme/web`. | „serwer”, „port” |
-| **Proces aplikacji** | Konkretny proces Node (pid) z aktywnym inspektorem. Aplikacja ma ich w czasie wiele (restarty). | „aplikacja” w znaczeniu procesu |
-| **Żądanie strony** | Żądanie HTTP, które przyszło do aplikacji i w którego kontekście powstały zapytania wychodzące: dokument, ładunek RSC, Server Action, Route Handler. | „strona”, „request” |
-| **Zapytanie wychodzące** | Zapytanie HTTP wykonane przez proces aplikacji do innego serwisu. | „zapytanie serwera”, „request” |
-| **Miejsce wywołania** | Plik i linia w kodzie aplikacji, które zainicjowały zapytanie wychodzące. | „stos”, „origin” w tekście dla ludzi |
-| **Kolektor** | Proces, który podłącza się do inspektorów, przechowuje i analizuje ruch. | „serwer” bez dopowiedzenia |
-| **Hak** | Kod narzędzia działający w procesie aplikacji. | „agent” (zarezerwowane dla agenta AI) |
-| **Rejestr** | Katalog z wpisami procesów aplikacji, które same się zgłosiły. | „lista portów” |
-| **Seria** | Grupa zapytań oddzielona od innych przerwą bez ruchu. | „burst” w tekście dla ludzi |
-| **Łańcuch sekwencyjny** | Zapytania, z których każde startuje tuż po zakończeniu poprzedniego (waterfall). | „kaskada” |
-| **Znacznik** | Wartość nagłówka ustawionego przez agenta w przeglądarce, po której filtruje się ruch. | „trace id” |
+| **App** | A logical app in the monorepo, recognized by package name, e.g. `@acme/web`. | "server", "port" |
+| **App process** | A concrete Node process (pid) with an active inspector. An app has many over time (restarts). | "app" meaning a process |
+| **Page request** | An HTTP request that came into the app and in whose context outbound requests were made: document, RSC payload, Server Action, Route Handler. | "page", "request" |
+| **Outbound request** | An HTTP request made by the app process to another service. | "server request", "request" |
+| **Call site** | The file and line in app code that initiated an outbound request. | "stack", "origin" in human-facing text |
+| **Collector** | The process that attaches to inspectors and stores and analyzes traffic. | "server" without qualification |
+| **Hook** | The tool's code running in the app process. | "agent" (reserved for the AI agent) |
+| **Registry** | A directory with entries of app processes that registered themselves. | "port list" |
+| **Burst** | A group of requests separated from others by a gap without traffic. | |
+| **Sequential chain** | Requests where each starts right after the previous one ends (waterfall). | "cascade" |
+| **Marker** | The value of a header set by the agent in the browser, used to filter traffic. | "trace id" |
 
 ---
 
-## 4. Moduły i interfejsy
+## 4. Modules and interfaces
 
-### Struktura katalogów
+### Directory structure
 
 ```text
 bin/
-  outbound.mjs            # jedyny plik wykonywalny: outbound <mcp|run|status|tail>
+  outbound.mjs            # the only executable: outbound <mcp|run|status|tail>
 src/
-  outbound-mcp.mjs        # zgodność wstecz: to samo co `outbound mcp` (do usunięcia w 1.0)
-  config.mjs              # env + outbound.config.json + flagi → zamrożony Config
-  collector.mjs           # korzeń kompozycji: jedyne miejsce z zegarami i efektami
-  registry.mjs            # format rejestru, zapis atomowy, rezerwacje portów
-  discovery.mjs           # rejestr + skanowanie portów (zgodność) → cele do podłączenia
-  cdp-client.mjs          # WebSocket + JSON-RPC protokołu CDP
-  session.mjs             # cykl życia jednej sesji CDP: identyfikacja, możliwości, hak
-  ingest.mjs              # zdarzenia CDP i komunikaty haka → zmiany w magazynie (czyste)
-  redact.mjs              # redakcja nagłówków, parametrów URL, pól JSON (czyste)
-  ignore.mjs              # reguły pomijania przy przyjęciu: IGNORE_HOSTS, inspektory, eksport OTLP (czyste)
-  store.mjs               # model w pamięci, indeksy, retencja, zapytania (czyste)
-  correlate.mjs           # złączenie komunikatu haka z rekordem: requestId, awaryjnie URL+czas (czyste)
-  frames.mjs              # klasyfikacja ramek, wybór miejsca wywołania (czyste)
-  sourcemap.mjs           # pozycja wygenerowana → źródłowa (node:module SourceMap)
+  outbound-mcp.mjs        # backward compatibility: same as `outbound mcp` (to remove in 1.0)
+  config.mjs              # env + outbound.config.json + flags → frozen Config
+  collector.mjs           # composition root: the only place with clocks and effects
+  registry.mjs            # registry format, atomic writes, port reservations
+  discovery.mjs           # registry + port scanning (compatibility) → targets to attach
+  cdp-client.mjs          # WebSocket + CDP JSON-RPC
+  session.mjs             # lifecycle of one CDP session: identity, capabilities, hook
+  ingest.mjs              # CDP events and hook messages → store changes (pure)
+  redact.mjs              # redaction of headers, URL parameters, JSON fields (pure)
+  ignore.mjs              # skip rules at ingestion: IGNORE_HOSTS, inspectors, OTLP export (pure)
+  store.mjs               # in-memory model, indexes, retention, queries (pure)
+  correlate.mjs           # joining a hook message with a record: requestId, fallback URL+time (pure)
+  frames.mjs              # frame classification, call site choice (pure)
+  sourcemap.mjs           # generated position → source position (node:module SourceMap)
   analyze/
-    timeline.mjs          # spany, serie, współbieżność (czyste)
-    waterfall.mjs         # łańcuchy sekwencyjne i oszczędność (czyste)
-    dependencies.mjs      # zależności danych między zapytaniami: heurystyka (czyste)
-    findings.mjs          # błędy, duplikaty, wolne, w toku; raport (czyste)
+    timeline.mjs          # spans, bursts, concurrency (pure)
+    waterfall.mjs         # sequential chains and savings (pure)
+    dependencies.mjs      # data dependencies between requests: heuristic (pure)
+    findings.mjs          # errors, duplicates, slow, in flight; report (pure)
   hook/
-    hook.mjs              # installHook(): kod działający w procesie aplikacji
-    preload.mjs           # wejście dla --import: samorejestracja + installHook
+    hook.mjs              # installHook(): code running in the app process
+    preload.mjs           # entry for --import: self-registration + installHook
   mcp/
-    server.mjs            # JSON-RPC po stdio, obie ery protokołu MCP
-    tools.mjs             # definicje narzędzi: schematy + wywołania kolektora
-    render.mjs            # kształt odpowiedzi: wiersze, skróty, budżet, kursory (czyste)
+    server.mjs            # JSON-RPC over stdio, both MCP protocol eras
+    tools.mjs             # tool definitions: schemas + collector calls
+    render.mjs            # response shape: rows, shortening, budget, cursors (pure)
   cli/
     run.mjs               # launcher
-    status.mjs            # diagnostyka dla człowieka
-    tail.mjs              # podgląd ruchu na żywo w terminalu
+    status.mjs            # diagnostics for people
+    tail.mjs              # live traffic view in the terminal
 test/
-  unit/                   # moduły czyste, na nagranych zdarzeniach
-  e2e/                    # scenariusze z procesami (obecny test + nowe)
-  compat/                 # sondy zgodności z Node (macierz wersji + nightly)
-  golden/                 # zrzuty wyników narzędzi (kontrakt dla agenta)
-  fixtures/               # fake-app, services, nagrania *.ndjson, mapy źródeł
+  unit/                   # pure modules, on recorded events
+  e2e/                    # scenarios with processes (current test + new ones)
+  compat/                 # Node compatibility probes (version matrix + nightly)
+  golden/                 # tool result snapshots (the agent contract)
+  fixtures/               # fake-app, services, *.ndjson recordings, source maps
 ```
 
-Katalog powstaje tylko tam, gdzie pliki mają wspólną rolę i inne środowisko uruchomienia: `hook/` działa w cudzym procesie, `mcp/` to protokół, `cli/` to polecenia, `analyze/` to czyste analizatory. Dopóki plik ma mniej niż około 150 linii, nie dzielimy go dalej.
+A directory exists only where files share a role and a different runtime environment: `hook/` runs in someone else's process, `mcp/` is the protocol, `cli/` are commands, `analyze/` are pure analyzers. While a file has fewer than about 150 lines, we do not split it further.
 
-### Reguła zależności
+### Dependency rule
 
 ```mermaid
 flowchart LR
-  IN["Wejścia<br/>bin · cli/* · mcp/server · mcp/tools"]
-  ROOT["collector.mjs<br/>(korzeń kompozycji)"]
-  IO["Adaptery I/O<br/>discovery · session · cdp-client<br/>sourcemap · registry"]
-  CORE["Czysty rdzeń<br/>store · ingest · ignore · redact · correlate<br/>frames · analyze/* · mcp/render"]
-  HOOK["hook/*<br/>(w procesie aplikacji)"]
+  IN["Entries<br/>bin · cli/* · mcp/server · mcp/tools"]
+  ROOT["collector.mjs<br/>(composition root)"]
+  IO["I/O adapters<br/>discovery · session · cdp-client<br/>sourcemap · registry"]
+  CORE["Pure core<br/>store · ingest · ignore · redact · correlate<br/>frames · analyze/* · mcp/render"]
+  HOOK["hook/*<br/>(in the app process)"]
   IN --> ROOT
   ROOT --> IO
   ROOT --> CORE
   IN --> CORE
-  IN -->|"launcher: tylko registry"| IO
+  IN -->|"launcher: registry only"| IO
   IO --> CORE
-  HOOK -->|"tylko node:* i registry.mjs"| IO
-  IO -.->|"tekst funkcji installHook<br/>(wstrzyknięcie opt-in)"| HOOK
+  HOOK -->|"only node:* and registry.mjs"| IO
+  IO -.->|"installHook function text<br/>(opt-in injection)"| HOOK
 ```
 
-- Strzałka oznacza „importuje”. Rdzeń nie importuje niczego spoza rdzenia, nie czyta `process.env`, nie używa `Date.now()` ani `setTimeout` (czas przychodzi jako argument).
-- Adaptery I/O nie znają się nawzajem poza parą `session` → `cdp-client`; składa je `collector.mjs`.
-- `hook/*` importuje wyłącznie moduły `node:` i `registry.mjs`. `installHook` jest samowystarczalną funkcją, żeby dało się ją wysłać jako tekst przez `Runtime.evaluate`.
-- Import dowolnego modułu nie ma efektów ubocznych. Zegary, gniazda i `process.stdin` uruchamia dopiero `collector.start()` albo polecenie CLI.
+- An arrow means "imports". The core imports nothing outside the core, does not read `process.env`, does not use `Date.now()` or `setTimeout` (time comes in as an argument).
+- I/O adapters do not know each other except the `session` → `cdp-client` pair; `collector.mjs` composes them.
+- `hook/*` imports only `node:` modules and `registry.mjs`. `installHook` is a self-contained function, so it can be sent as text through `Runtime.evaluate`.
+- Importing any module has no side effects. Clocks, sockets and `process.stdin` are started only by `collector.start()` or a CLI command.
 
-### Moduły
+### Modules
 
-| Moduł | Odpowiedzialność | I/O | Jak testowany |
+| Module | Responsibility | I/O | How tested |
 |---|---|---|---|
-| `config` | Jedno miejsce czytające środowisko, plik konfiguracyjny i flagi. Kolejność: flagi > env > plik > domyślne. | env, plik | jednostkowo |
-| `registry` | Wpisy `apps/<pid>.json`, zapis atomowy z prawami 0600, sprzątanie martwych wpisów, rezerwacje `claims/<port>`. Wspólny dla launchera, haka i kolektora. | pliki | jednostkowo na katalogu tymczasowym |
-| `discovery` | Obserwuje rejestr i, jak dziś, skanuje porty (`/json/list`). Zgłasza cele i ich znikanie. | pliki, HTTP | e2e |
-| `cdp-client` | `send()` z limitem czasu i odrzuceniem przy błędzie, subskrypcja zdarzeń, zamknięcie. | WebSocket | jednostkowo z fałszywym serwerem WS |
-| `session` | Podłączenie do celu: tożsamość, wykrycie możliwości, `Network.enable` z limitami bufora, podpięcie haka, sprzątanie. | CDP | e2e |
-| `ingest` | Reduktor: zdarzenie CDP albo komunikat haka plus magazyn dają zmiany i listę efektów (pobierz treść, rozwiąż ramki). | brak | jednostkowo na nagraniach z Node 22, 24, 26 |
-| `redact` | Redakcja przy przyjęciu danych. | brak | jednostkowo |
-| `store` | Procesy, żądania stron, zapytania wychodzące; indeksy; retencja; `select()`. | brak | jednostkowo |
-| `correlate` | Złączenie dokładne po `requestId`, awaryjne po metodzie, URL i czasie. | brak | jednostkowo |
-| `frames`, `sourcemap` | Ramka wygenerowana → plik źródłowy i linia; wybór pierwszej ramki kodu aplikacji. | odczyt plików (wstrzykiwany) | jednostkowo na mapach z `fixtures/` |
-| `analyze/*` | Dzisiejszy algorytm rozbity na funkcje, plus nowe ustalenia: duplikaty, wolne, w toku. | brak | jednostkowo na nagraniach, zrzuty golden |
-| `mcp/server` | Ramkowanie linii, JSON-RPC, uzgadnianie wersji w obu erach protokołu. Funkcja `handle(msg)` jest czysta. | stdio | jednostkowo, opcjonalnie test zgodności z oficjalnym klientem |
-| `mcp/tools`, `mcp/render` | Schematy narzędzi i kształtowanie odpowiedzi w budżecie znaków. | brak (`render`) | jednostkowo, golden |
-| `hook/hook`, `hook/preload` | Patrz [6.2](#62-hak-dostarczanie-protokół-złączenie) i [6.3](#63-kod-źródłowy-stos-wywołań-i-mapy-źródeł). | proces aplikacji | w procesie potomnym: zgodność zachowania, narzut |
-| `cli/run` | Patrz [6.1](#61-wykrywanie-aplikacji-i-porty). | procesy, pliki | e2e |
-| `collector` | Składa wszystko: discovery → sesje → ingest → store; wykonuje efekty; udostępnia fasadę dla MCP i CLI. | wszystko powyżej | e2e |
+| `config` | The one place reading the environment, the config file and flags. Order: flags > env > file > defaults. | env, file | unit |
+| `registry` | `apps/<pid>.json` entries, atomic writes with mode 0600, cleanup of dead entries, `claims/<port>` reservations. Shared by the launcher, hook and collector. | files | unit on a temp directory |
+| `discovery` | Watches the registry and, as today, scans ports (`/json/list`). Reports targets and their disappearance. | files, HTTP | e2e |
+| `cdp-client` | `send()` with a timeout and rejection on error, event subscription, close. | WebSocket | unit with a fake WS server |
+| `session` | Attaching to a target: identity, capability detection, `Network.enable` with buffer limits, hook attachment, cleanup. | CDP | e2e |
+| `ingest` | A reducer: a CDP event or hook message plus the store give changes and a list of effects (fetch the body, resolve frames). | none | unit on recordings from Node 22, 24, 26 |
+| `redact` | Redaction at ingestion. | none | unit |
+| `store` | Processes, page requests, outbound requests; indexes; retention; `select()`. | none | unit |
+| `correlate` | Exact join by `requestId`, fallback by method, URL and time. | none | unit |
+| `frames`, `sourcemap` | Generated frame → source file and line; choosing the first app-code frame. | file reads (injected) | unit on maps from `fixtures/` |
+| `analyze/*` | Today's algorithm split into functions, plus new findings: duplicates, slow, in flight. | none | unit on recordings, golden snapshots |
+| `mcp/server` | Line framing, JSON-RPC, version negotiation in both protocol eras. `handle(msg)` is pure. | stdio | unit, optionally a compatibility test with the official client |
+| `mcp/tools`, `mcp/render` | Tool schemas and shaping responses within the character budget. | none (`render`) | unit, golden |
+| `hook/hook`, `hook/preload` | See [6.2](#62-hook-delivery-protocol-join) and [6.3](#63-source-code-call-stack-and-source-maps). | app process | in a child process: behavior compatibility, overhead |
+| `cli/run` | See [6.1](#61-app-discovery-and-ports). | processes, files | e2e |
+| `collector` | Composes everything: discovery → sessions → ingest → store; runs effects; exposes a facade for MCP and CLI. | all of the above | e2e |
 
-### Interfejsy (szkic)
+### Interfaces (sketch)
 
-Zapis w notacji TypeScript dla czytelności. Kod to `.mjs` z typami w JSDoc.
+Written in TypeScript notation for readability. The code is `.mjs` with JSDoc types.
 
 ```ts
 // config.mjs
 loadConfig({ env, argv, cwd }): Config
 
-// registry.mjs: wspólne dla launchera, haka i kolektora (tylko node:fs, node:path, node:os)
-registryDir(env): string                                   // OUTBOUND_HOME albo ~/.outbound-inspector
-writeEntry(dir, entry: RegistryEntry): void                // tmp + rename, prawa 0600
-readEntries(dir): RegistryEntry[]                          // pomija uszkodzone pliki
-pruneDead(dir): number                                     // usuwa wpisy martwych pid
-claimPort(dir, appName, range): { port, release() }        // O_EXCL + sonda wolnego portu
+// registry.mjs: shared by the launcher, hook and collector (node:fs, node:path, node:os only)
+registryDir(env): string                                   // OUTBOUND_HOME or ~/.outbound-inspector
+writeEntry(dir, entry: RegistryEntry): void                // tmp + rename, mode 0600
+readEntries(dir): RegistryEntry[]                          // skips broken files
+pruneDead(dir): number                                     // removes entries of dead pids
+claimPort(dir, appName, range): { port, release() }        // O_EXCL + free-port probe
 
 // discovery.mjs
 createDiscovery(config, { onTarget(t: Target), onGone(key) }): { start(), stop() }
@@ -268,7 +268,7 @@ connectCdp(wsUrl, { timeoutMs }): Promise<Cdp>
 attachSession(target, { connect, config, onNetwork, onHook }): Promise<Session>
 // Session = { id, app, pid, cwd, node, capabilities, warnings, fetchBody(requestId), close() }
 
-// ingest.mjs: czyste reduktory, efekty wykonuje collector.mjs
+// ingest.mjs: pure reducers, collector.mjs runs the effects
 applyNetworkEvent(store, session, method, params, nowMs): Effect[]
 applyHookMessage(store, session, message, nowMs): Effect[]
 // Effect = { type: 'fetch-body', id } | { type: 'resolve-frames', id }
@@ -290,9 +290,9 @@ toSpans(requests, nowTs): Span[]
 bursts(spans, { idleGapMs }): Span[][]
 concurrency(spans): number
 chains(spans, { seqGapMs }): Chain[]
-dependencyGraph(requests): { edges: { from, to, evidence }[], check(members) }   // zależności danych
-criticalPathMs(requests, edges): number                     // czas po zrównolegleniu z zachowaniem zależności
-analyze(view: { requests, pages }, opts): Report           // zachowuje dzisiejszy kształt wyniku
+dependencyGraph(requests): { edges: { from, to, evidence }[], check(members) }   // data dependencies
+criticalPathMs(requests, edges): number                     // time after parallelizing while keeping dependencies
+analyze(view: { requests, pages }, opts): Report           // keeps today's result shape
 
 // mcp/*
 createMcpServer({ info, instructions, tools }): { handle(msg): Promise<object | null> }
@@ -300,8 +300,8 @@ serveStdio(server, { stdin, stdout }): void
 createTools(collector, config): Record<string, { description, inputSchema, run(args) }>
 render(value, { maxChars }): string
 
-// hook/hook.mjs: działa w procesie aplikacji
-installHook(installedBy: 'preload' | 'evaluate', options?): number   // zwraca wersję protokołu haka
+// hook/hook.mjs: runs in the app process
+installHook(installedBy: 'preload' | 'evaluate', options?): number   // returns the hook protocol version
 
 // collector.mjs
 createCollector(config): { start(), stop(), status(), store, settle(idleMs, timeoutMs), body(id) }
@@ -309,116 +309,116 @@ createCollector(config): { start(), stop(), status(), store, settle(idleMs, time
 
 ---
 
-## 5. Przepływ danych
+## 5. Data flow
 
-### 5.1. Start aplikacji
+### 5.1. App start
 
-1. Skrypt aplikacji: `"dev:inspect": "outbound run -- next dev --port 3101"`.
-2. Launcher ustala nazwę aplikacji (`npm_package_name`, potem `package.json` w katalogu, potem nazwa katalogu), rezerwuje port inspektora z zakresu 9230–9249 i uruchamia:
+1. App script: `"dev:inspect": "outbound run -- next dev --port 3101"`.
+2. The launcher determines the app name (`npm_package_name`, then `package.json` in the directory, then the directory name), reserves an inspector port from 9230–9249 and runs:
    `node --experimental-network-inspection --import <preload> <next/dist/bin/next> dev --port 3101 --inspect=127.0.0.1:<port>`.
-3. Hak w procesie, który ma aktywny inspektor, zapisuje wpis w rejestrze: `pid`, `wsUrl` z `inspector.url()`, nazwa, katalog, wersja Node.
-4. Launcher czeka na wpis ze swoim identyfikatorem uruchomienia. Jest wpis: wypisuje jedną linię z portem. Nie ma wpisu po 15 s: wypisuje ostrzeżenie, że ruch tej aplikacji nie będzie widoczny, razem z prawdopodobną przyczyną.
-5. Po zakończeniu procesu launcher usuwa wpisy i rezerwację.
+3. The hook in the process that has an active inspector writes a registry entry: `pid`, `wsUrl` from `inspector.url()`, name, directory, Node version.
+4. The launcher waits for an entry with its launch id. Entry present: it prints one line with the port. No entry after 15 s: it prints a warning that this app's traffic will not be visible, with the likely cause.
+5. When the process ends, the launcher removes the entries and the reservation.
 
-### 5.2. Podłączenie kolektora
+### 5.2. Collector attach
 
-1. `discovery` czyta rejestr i skanuje porty, odrzuca wpisy martwych procesów i procesy spoza bieżącego repozytorium.
-2. `session` łączy się z `wsUrl`. Możliwości ustala z wpisu rejestru albo jednym `Runtime.evaluate` (tylko odczyt): czy flaga sieciowa jest w `process.execArgv`, wersja Node, czy inspektor słucha wyłącznie na pętli zwrotnej.
-3. `Network.enable` z limitami bufora treści.
-4. `Runtime.addBinding` z nazwą unikalną dla tej sesji i zgłoszenie jej hakowi (`addSink`). Jeśli haka nie ma, kolektor wstrzykuje go tylko wtedy, gdy konfiguracja na to pozwala.
+1. `discovery` reads the registry and scans ports, rejects entries of dead processes and processes outside the current repository.
+2. `session` connects to `wsUrl`. It determines capabilities from the registry entry or with one `Runtime.evaluate` (read-only): whether the network flag is in `process.execArgv`, the Node version, whether the inspector listens on loopback only.
+3. `Network.enable` with body buffer limits.
+4. `Runtime.addBinding` with a name unique to this session, registered with the hook (`addSink`). If there is no hook, the collector injects it only when the configuration allows.
 
-### 5.3. Jedno żądanie strony
+### 5.3. One page request
 
 ```mermaid
 sequenceDiagram
   autonumber
-  participant B as Przeglądarka
-  participant N as Proces aplikacji (hak + inspektor)
-  participant X as Wewnętrzny serwis
-  participant K as Kolektor
+  participant B as Browser
+  participant N as App process (hook + inspector)
+  participant X as Internal service
+  participant K as Collector
   participant A as Agent
-  B->>N: GET /checkout (żądanie strony)
-  Note over N: hak: http.server.request.start → kontekst strony (AsyncLocalStorage)
-  N->>N: kod strony woła fetch() → hak łapie stos (miejsce wywołania)
+  B->>N: GET /checkout (page request)
+  Note over N: hook: http.server.request.start → page context (AsyncLocalStorage)
+  N->>N: page code calls fetch() → hook captures the stack (call site)
   N->>X: GET /orders
   N-->>K: CDP Network.requestWillBeSent (requestId)
-  N-->>K: komunikat haka „link” (requestId, strona, stos)
-  X-->>N: 200 + treść
+  N-->>K: hook message "link" (requestId, page, stack)
+  X-->>N: 200 + body
   N-->>K: CDP Network.responseReceived, loadingFinished
-  K->>N: Network.getResponseBody (jeśli polityka treści pozwala)
-  Note over K: złączenie po requestId · redakcja · mapy źródeł
+  K->>N: Network.getResponseBody (if the body policy allows)
+  Note over K: join by requestId · redaction · source maps
   N-->>B: HTML / RSC
-  N-->>K: komunikat haka „page-end” (status)
+  N-->>K: hook message "page-end" (status)
   A->>K: analyze_server_timeline(settle_ms)
-  K-->>A: podsumowanie: strona, werdykt, oszczędność, miejsce w kodzie
+  K-->>A: summary: page, verdict, saving, place in code
 ```
 
-### 5.4. Pytanie agenta
+### 5.4. The agent's question
 
-Narzędzie MCP czyta magazyn przez `select()`, uruchamia analizatory, a `render()` przycina wynik do budżetu znaków i dopisuje, jak zawęzić zapytanie. Treść odpowiedzi serwisu, której nie pobrano od razu, jest dociągana przy `get_server_request`.
+An MCP tool reads the store through `select()`, runs the analyzers, and `render()` trims the result to the character budget and adds how to narrow the query. A service response body not fetched right away is fetched on `get_server_request`.
 
 ---
 
-## 6. Decyzje
+## 6. Decisions
 
-Każda decyzja ma krótki ADR z alternatywami. Poniżej podsumowanie; podrozdziały 6.1–6.8 rozwijają każdy obszar i pokazują, na jakich pomiarach decyzja stoi.
+Every decision has a short ADR with alternatives. Below is a summary; subsections 6.1–6.8 expand each area and show what measurements the decision rests on.
 
-| # | Decyzja | ADR |
+| # | Decision | ADR |
 |---|---|---|
-| 1 | Źródłem danych o ruchu zostaje wbudowana inspekcja sieci Node przez CDP. Własny kod w procesie tylko wzbogaca dane. | [0001](adr/0001-inspekcja-sieci-node-przez-cdp.md) |
-| 2 | Kolektor działa w procesie serwera MCP, w pamięci, bez demona i bez zapisu na dysk. | [0002](adr/0002-kolektor-w-procesie-serwera-mcp-bez-demona.md) |
-| 3 | Aplikacje zgłaszają się same do rejestru; launcher `outbound run` dokłada flagi i rezerwuje port. Skanowanie portów przestaje być podstawowym mechanizmem. | [0003](adr/0003-rejestr-samorejestracja-i-launcher.md) |
-| 4 | Hak jest ładowany przez `--import` (jawna zgoda), wypycha komunikaty przez `Runtime.addBinding`, a złączenie idzie po `requestId` inspektora. | [0004](adr/0004-hak-preload-wypychanie-i-zlaczenie-po-requestid.md) |
-| 5 | Miejsce wywołania łapie zewnętrzna warstwa `fetch` (Proxy za akcesorem) w chwili wywołania przez kod aplikacji. | [0005](adr/0005-miejsce-wywolania-zewnetrzna-warstwa-fetch.md) |
-| 6 | Mapy źródeł rozwiązuje kolektor, wbudowanym `node:module` `SourceMap`. | [0006](adr/0006-mapy-zrodel-poza-procesem-aplikacji.md) |
-| 7 | Warstwa MCP bez SDK: tylko narzędzia, serwer obsługujący obie ery protokołu, jasne kryteria przejścia na SDK. | [0007](adr/0007-mcp-bez-sdk-tylko-narzedzia-dwie-ery.md) |
-| 8 | Kontrakt dla agenta: pięć narzędzi, domyślnie podsumowanie, twardy budżet znaków, kursory. | [0008](adr/0008-kontrakt-dla-agenta-budzet-odpowiedzi.md) |
-| 9 | Bezpieczeństwo: tylko pętla zwrotna, instrumentacja za zgodą, redakcja przy przyjęciu danych. | [0009](adr/0009-bezpieczenstwo-loopback-zgoda-redakcja.md) |
-| 10 | Korelacja z przeglądarką przez znacznik ustawiany przez agenta; własnej propagacji trace nie robimy. | [0010](adr/0010-korelacja-z-przegladarka-znacznik.md) |
-| 11 | Zgodność z eksperymentalną flagą: wykrywanie możliwości i sondy zgodności w CI. | [0011](adr/0011-zgodnosc-z-eksperymentalna-flaga-node.md) |
-| 12 | Kod: ESM `.mjs` bez budowania i bez zależności; dystrybucja jako devDependency monorepo. | [0012](adr/0012-kod-esm-bez-budowania-i-dystrybucja.md) |
+| 1 | The traffic data source stays Node's built-in network inspection over CDP. Our own in-process code only enriches the data. | [0001](adr/0001-node-network-inspection-over-cdp.md) |
+| 2 | The collector runs in the MCP server process, in memory, without a daemon and without writing to disk. | [0002](adr/0002-collector-in-mcp-server-process-no-daemon.md) |
+| 3 | Apps register themselves; the `outbound run` launcher adds the flags and reserves the port. Port scanning stops being the primary mechanism. | [0003](adr/0003-registry-self-registration-and-launcher.md) |
+| 4 | The hook is loaded with `--import` (explicit consent), pushes messages through `Runtime.addBinding`, and the join uses the inspector's `requestId`. | [0004](adr/0004-preload-hook-push-and-requestid-join.md) |
+| 5 | The call site is captured by an outer `fetch` layer (a Proxy behind an accessor) at the moment app code calls it. | [0005](adr/0005-call-site-outer-fetch-layer.md) |
+| 6 | The collector resolves source maps with the built-in `node:module` `SourceMap`. | [0006](adr/0006-source-maps-outside-app-process.md) |
+| 7 | MCP layer without an SDK: tools only, a server supporting both protocol eras, clear criteria for moving to the SDK. | [0007](adr/0007-mcp-without-sdk-tools-only-two-eras.md) |
+| 8 | Agent contract: five tools, a summary by default, a hard character budget, cursors. | [0008](adr/0008-agent-contract-response-budget.md) |
+| 9 | Security: loopback only, instrumentation with consent, redaction at ingestion. | [0009](adr/0009-security-loopback-consent-redaction.md) |
+| 10 | Browser correlation through a marker set by the agent; no trace propagation of our own. | [0010](adr/0010-browser-correlation-marker.md) |
+| 11 | Compatibility with the experimental flag: capability detection and compatibility probes in CI. | [0011](adr/0011-compatibility-with-experimental-node-flag.md) |
+| 12 | Code: ESM `.mjs` without a build step or dependencies; distributed as a monorepo devDependency. | [0012](adr/0012-esm-without-build-and-distribution.md) |
 
-### 6.1. Wykrywanie aplikacji i porty
+### 6.1. App discovery and ports
 
-**Fakty, które zawężają pole wyboru:**
+**Facts that narrow the choice:**
 
-- Flagi `--experimental-network-inspection` nie da się podać ani przez `NODE_OPTIONS` (kod wyjścia 9), ani przez plik konfiguracyjny Node 24 (`node.config.json`). Musi stać w linii poleceń procesu **[Z, E2]**. Stąd potrzeba launchera albo ręcznie pisanych skryptów.
-- `child_process.fork` domyślnie dziedziczy `execArgv`, więc flaga podana procesowi CLI przechodzi na proces potomny **[Z, E18]**. To prawdopodobnie dlatego konfiguracja z README działa w Next 16.4 **[U]**; sam mechanizm w Next jest założeniem **[A, M3]**.
-- Stały port odziedziczony przez proces potomny daje `address already in use`, a `inspector.url()` zwraca wtedy `undefined`. Port 0 daje każdemu procesowi własny port **[Z, E18]**.
-- `inspector.url()` podaje faktyczny adres także wtedy, gdy inspektor otwarto programowo po starcie **[Z, E19]**.
-- `next dev --inspect` (od 16.1) przekazuje wartość do właściwego procesu Node i podpina inspektor tylko tam, gdzie działa kod aplikacji **[D]**.
+- `--experimental-network-inspection` cannot be passed through `NODE_OPTIONS` (exit code 9) or the Node 24 config file (`node.config.json`). It must be on the process command line **[Z, E2]**. Hence the need for a launcher or hand-written scripts.
+- `child_process.fork` inherits `execArgv` by default, so a flag given to the CLI process reaches the child process **[Z, E18]**. That is probably why the README configuration works in Next 16.4 **[U]**; the mechanism in Next itself is an assumption **[A, M3]**.
+- A fixed port inherited by a child process gives `address already in use`, and `inspector.url()` then returns `undefined`. Port 0 gives each process its own port **[Z, E18]**.
+- `inspector.url()` gives the actual address also when the inspector was opened programmatically after start **[Z, E19]**.
+- `next dev --inspect` (since 16.1) passes the value to the right Node process and attaches the inspector only where the app code runs **[D]**.
 
-**Rozważane sposoby:**
+**Options considered:**
 
-| Sposób | Ocena |
+| Option | Assessment |
 |---|---|
-| Skanowanie zakresu portów (dziś) | Wymaga planowania portów, 21 prób HTTP co 1,5 s, nie widzi przyczyn braku aplikacji. Zostaje bez zmian do 1.0 jako tryb zgodności dla procesów uruchomionych ręcznie; ten sam proces znaleziony dwiema drogami jest rozpoznawany po `wsUrl`. |
-| `--inspect=0` i czytanie portu ze stderr | Wymaga przechwycenia stderr, czyli utraty TTY i kolorów. Odrzucone. |
-| Launcher sam wybiera port i sam zapisuje rejestr | Proste, ale launcher nie wie, który proces w drzewie ma inspektor, i nie odróżni własnej aplikacji od obcego procesu na tym samym porcie. Niewystarczające. |
-| **Samorejestracja procesu + launcher jako cienka nakładka** | Wybrane. Proces z inspektorem zna swój `inspector.url()` i sam się zgłasza; launcher tylko składa polecenie, rezerwuje port i pilnuje, czy zgłoszenie przyszło. Prototyp przeszedł dla trzech sposobów startu serwera i trzech aplikacji naraz **[Z, E20]**. |
-| Lista procesów systemu (`ps`, `lsof`) | Zależne od systemu, wolne, kruche. Odrzucone. |
-| Podmiana `node` w `PATH` na nakładkę z flagami | Działa dla dowolnego polecenia, ale instrumentuje każde narzędzie Node w drzewie. Zbyt magiczne. Odrzucone. |
-| Integracja z turbo | Turbo nie ma punktu zaczepienia do opakowania poleceń. Integracją jest skrypt `dev:inspect` w każdej aplikacji i zadanie `dev:inspect` w `turbo.json` (`cache: false`, `persistent: true`). |
+| Scanning a port range (today) | Needs port planning, 21 HTTP probes every 1.5 s, does not see why an app is missing. Stays unchanged until 1.0 as a compatibility mode for processes started by hand; the same process found two ways is recognized by `wsUrl`. |
+| `--inspect=0` and reading the port from stderr | Needs stderr captured, which loses the TTY and colors. Rejected. |
+| The launcher picks the port and writes the registry itself | Simple, but the launcher does not know which process in the tree has the inspector and cannot tell its own app from a foreign process on the same port. Insufficient. |
+| **Process self-registration + the launcher as a thin wrapper** | Chosen. The process with the inspector knows its `inspector.url()` and registers itself; the launcher only builds the command, reserves the port and checks that the registration arrived. The prototype passed for three ways of starting the server and three apps at once **[Z, E20]**. |
+| The system process list (`ps`, `lsof`) | OS-dependent, slow, fragile. Rejected. |
+| Replacing `node` on `PATH` with a wrapper adding the flags | Works for any command, but instruments every Node tool in the tree. Too magical. Rejected. |
+| Turbo integration | Turbo has no hook for wrapping commands. The integration is a `dev:inspect` script in every app and a `dev:inspect` task in `turbo.json` (`cache: false`, `persistent: true`). |
 
-**Rejestr.** Katalog `~/.outbound-inspector/` (zmienna `OUTBOUND_HOME` go nadpisuje), prawa 0700:
+**Registry.** The `~/.outbound-inspector/` directory (`OUTBOUND_HOME` overrides it), mode 0700:
 
 ```jsonc
-// apps/<pid>.json: pisze hak w procesie aplikacji
+// apps/<pid>.json: written by the hook in the app process
 { "v": 1, "pid": 1093, "ppid": 1088, "launchId": "1080-1795091123", "name": "@acme/web",
   "cwd": "/repo/apps/web", "wsUrl": "ws://127.0.0.1:9231/52f4…", "node": "v24.22.3",
   "flags": { "network": true }, "hook": 1, "startedAt": "2026-11-19T12:00:00.000Z" }
-// claims/<port>: pisze launcher (O_EXCL), zawiera pid launchera
+// claims/<port>: written by the launcher (O_EXCL), contains the launcher pid
 ```
 
-Katalog domowy, a nie tymczasowy, bo `os.homedir()` działa także przy okrojonym środowisku (tryb ścisły turbo filtruje zmienne), a `TMPDIR` może się różnić między terminalem a klientem MCP uruchomionym z GUI **[A]**. Kolektor domyślnie pokazuje tylko procesy z katalogiem wewnątrz bieżącego repozytorium (najbliższy przodek z `.git`), więc dwa repozytoria albo dwa worktree tej samej aplikacji nie mieszają się ze sobą. Procesy pominięte z tego powodu `inspector_status` wymienia jedną linią, razem ze sposobem na ich pokazanie (`OUTBOUND_ROOT`).
+The home directory, not a temp one, because `os.homedir()` works even with a trimmed environment (turbo's strict mode filters variables), and `TMPDIR` may differ between a terminal and an MCP client started from a GUI **[A]**. By default the collector shows only processes with a directory inside the current repository (the nearest ancestor with `.git`), so two repositories or two worktrees of the same app do not mix. `inspector_status` lists processes skipped for this reason in one line, with how to show them (`OUTBOUND_ROOT`).
 
-**Porty.** Launcher wybiera port z zakresu 9230–9249: najpierw port wynikający ze skrótu nazwy aplikacji, potem kolejne wolne. Stabilny port per aplikacja pozwala raz skonfigurować `chrome://inspect`, a `outbound status` wypisuje dla każdej aplikacji gotowy adres DevTools (`devtoolsFrontendUrl` z `/json/list`). Rezerwacja plikiem zakładanym atomowo wyklucza kolizję dwóch launcherów startujących w tej samej chwili (typowe dla `turbo dev`) **[Z, E20]**. Port 9229 zostaje wolny dla ręcznego `--inspect`.
+**Ports.** The launcher picks a port from 9230–9249: first the port derived from a hash of the app name, then the next free ones. A stable port per app lets `chrome://inspect` be configured once, and `outbound status` prints a ready DevTools address for every app (`devtoolsFrontendUrl` from `/json/list`). A reservation with an atomically created file rules out a collision of two launchers starting at the same moment (typical for `turbo dev`) **[Z, E20]**. Port 9229 stays free for a manual `--inspect`.
 
-**Koniec cichego konfliktu.** Trzy zabezpieczenia:
+**End of the silent conflict.** Three safeguards:
 
-1. launcher rezerwuje port i sprawdza, czy jest wolny, zanim uruchomi aplikację;
-2. launcher ostrzega, gdy żaden proces nie zgłosił się do rejestru;
-3. `inspector_status` pokazuje dla każdego procesu stan i powód. Dzisiejsze pola zostają, dochodzą nowe:
+1. the launcher reserves the port and checks that it is free before starting the app;
+2. the launcher warns when no process registered;
+3. `inspector_status` shows the state and the reason for every process. Today's fields stay, new ones are added:
 
 ```jsonc
 { "apps": [
@@ -427,110 +427,112 @@ Katalog domowy, a nie tymczasowy, bo `os.homedir()` działa także przy okrojony
       "buffered_requests": 42 },
     { "app": "@acme/admin", "pid": 1101, "port": 9241, "node": "v22.23.5", "source": "port",
       "network_inspection": false, "page_correlation": false, "hook": "none",
-      "warnings": ["Brak --experimental-network-inspection w linii poleceń procesu. Uruchom przez `outbound run`.",
-                   "Node < 24: treść odpowiedzi fetch nie będzie dostępna."] }],
-  "skipped": "1 proces spoza repozytorium (OUTBOUND_ROOT=* pokaże wszystkie)",
+      "warnings": ["No --experimental-network-inspection on the process command line. Start it with `outbound run`.",
+                   "Node < 24: the fetch response body will not be available."] }],
+  "skipped": "1 process outside the repository (OUTBOUND_ROOT=* shows all)",
   "buffered_requests_total": 42, "last_id": 42 }
 ```
 
-**Szczegóły launchera:**
+**Launcher details:**
 
-- Rozpoznaje polecenie: `node …` (flagi dokłada po `node`), plik binarny pakietu z `node_modules/.bin` z nagłówkiem `#!/usr/bin/env node` (uruchamia jego plik przez `process.execPath`), w szczególności `next dev` (port inspektora podaje jako argument Next: `--inspect=127.0.0.1:<port>` **[A, M3]**). Innych poleceń nie zgaduje, tylko kończy się komunikatem z ręcznym wariantem.
-- Flagę sieciową i `--import` podaje w `execArgv`, nie w `NODE_OPTIONS`. Obie idą wtedy tą samą drogą dziedziczenia i nie trafiają do niepowiązanych narzędzi.
-- `stdio: 'inherit'`, żeby zachować TTY. Kod wyjścia i sygnał procesu potomnego są odtwarzane. `SIGINT` z terminala trafia do całej grupy procesów, więc launcher go nie dubluje; `SIGTERM` i `SIGHUP` przekazuje.
-- Proces zabity sygnałem nie emituje zdarzenia `exit`, więc wpis sprząta launcher, a kolektor dodatkowo odrzuca wpisy martwych pid **[Z, E20]**.
-- `bun run dev:inspect` uruchamia launcher pod Node, bo Bun respektuje nagłówek `#!/usr/bin/env node`; `bun --bun` wymusza Bun **[Z, E21]**. Launcher wykrywa `process.versions.bun` i kończy się czytelnym błędem.
-- Hak jest dostępny także bez launchera: `node --experimental-network-inspection --inspect=127.0.0.1:0 --import node-outbound-inspector/register app.mjs`.
+- Recognizes the command: `node …` (adds flags after `node`), a package binary from `node_modules/.bin` with a `#!/usr/bin/env node` header (runs its file via `process.execPath`), in particular `next dev` (passes the inspector port as a Next argument: `--inspect=127.0.0.1:<port>` **[A, M3]**). It does not guess other commands; it ends with a message showing the manual variant.
+- The network flag and `--import` go in `execArgv`, not `NODE_OPTIONS`. Both then travel the same inheritance path and do not reach unrelated tools.
+- `stdio: 'inherit'` to keep the TTY. The child's exit code and signal are reproduced. `SIGINT` from the terminal reaches the whole process group, so the launcher does not duplicate it; it forwards `SIGTERM` and `SIGHUP`.
+- A process killed by a signal does not emit the `exit` event, so the launcher cleans up the entry, and the collector also rejects entries of dead pids **[Z, E20]**.
+- `bun run dev:inspect` runs the launcher under Node, because Bun respects the `#!/usr/bin/env node` header; `bun --bun` forces Bun **[Z, E21]**. The launcher detects `process.versions.bun` and exits with a readable error.
+- The hook is available without the launcher too: `node --experimental-network-inspection --inspect=127.0.0.1:0 --import node-outbound-inspector/register app.mjs`.
 
-### 6.2. Hak: dostarczanie, protokół, złączenie
+### 6.2. Hook: delivery, protocol, join
 
-**Dostarczanie.** Domyślnie przez `--import` (launcher albo ręcznie). To jawna zgoda dewelopera i jedyny sposób, żeby hak działał od startu procesu. Wstrzyknięcie przez `Runtime.evaluate` (jak w prototypie) zostaje dla procesów znalezionych skanowaniem portów, ale wymaga włączenia w konfiguracji (`OUTBOUND_INJECT=1`). Oba tryby instalują tę samą funkcję `installHook`; oba przeszły ten sam test **[Z, E17]**.
+**Delivery.** By default through `--import` (the launcher or by hand). That is the developer's explicit consent and the only way for the hook to run from process start. Injection with `Runtime.evaluate` (as in the prototype) stays for processes found by port scanning, but must be enabled in the configuration (`OUTBOUND_INJECT=1`). Both modes install the same `installHook` function; both passed the same test **[Z, E17]**.
 
-**Co robi hak:**
+**What the hook does:**
 
-1. `http.server.request.start`: `enterWith` kontekstu żądania strony (jak dziś).
-2. `http.server.response.finish`: komunikat `page-end` ze statusem (kanał istnieje na Node 22 i 24 **[Z, E24]**).
-3. `undici:request:create`, `http.client.request.created` i `http.client.request.start`: komunikat `link`.
-4. Zewnętrzna warstwa `fetch`: miejsce wywołania, patrz [6.3](#63-kod-źródłowy-stos-wywołań-i-mapy-źródeł).
+1. `http.server.request.start`: `enterWith` of the page request context (as today).
+2. `http.server.response.finish`: a `page-end` message with the status (the channel exists on Node 22 and 24 **[Z, E24]**).
+3. `undici:request:create`, `http.client.request.created` and `http.client.request.start`: a `link` message.
+4. An outer `fetch` layer: the call site, see [6.3](#63-source-code-call-stack-and-source-maps).
 
-Hak nie buforuje. Gdy nie ma podłączonego kolektora, nic nie robi poza utrzymaniem kontekstu.
+The hook does not buffer. With no collector attached it does nothing except keep the context.
 
-**Protokół haka, wersja 1.** Jeden komunikat JSON na wywołanie wiązania:
+**Hook protocol, version 1.** One JSON message per binding call:
 
 ```jsonc
 { "t": "link",
-  "rid": "node-network-event-12",          // requestId inspektora; null → złączenie awaryjne
+  "rid": "node-network-event-12",          // inspector requestId; null → fallback join
   "k": "fetch",                            // fetch | http
   "m": "GET", "u": "http://orders.internal/v1/orders?id=7", "at": 1795091124044,
   "page": { "id": "1093-7", "m": "GET", "u": "/checkout", "at": 1795091123990,
             "kind": "document", "tag": "run-42", "action": null, "trace": null },
   "stack": [["WebSequential", "/repo/apps/web/.next/dev/server/chunks/ssr/_abc._.js", 123, 45, 0]] }
-                                           // [funkcja, plik, linia, kolumna, czy ramka async]
+                                           // [function, file, line, column, is async frame]
 { "t": "page-end", "id": "1093-7", "status": 200, "at": 1795091124473 }
 ```
 
-W procesie: `globalThis.__outboundInspector = { v: 1, installedBy, addSink(name), removeSink(name), stats() }`.
+In the process: `globalThis.__outboundInspector = { v: 1, installedBy, addSink(name), removeSink(name), stats() }`.
 
-**Dlaczego wypychanie przez `Runtime.addBinding`, a nie odpytywanie.** Wiązanie działa w inspektorze Node bez `Runtime.enable`, zdarzenie dostaje tylko sesja, która wiązanie założyła, a po jej rozłączeniu funkcja zostaje jako nieszkodliwa atrapa **[Z, E14]**. Każdy kolektor ma własne wiązanie, więc znika wada 1 z rozdziału 2, sekundowe opóźnienie i odpytywanie bezczynnych aplikacji.
+**Why push through `Runtime.addBinding` rather than polling.** The binding works in the Node inspector without `Runtime.enable`, only the session that created the binding gets the event, and after it disconnects the function stays as a harmless stub **[Z, E14]**. Every collector has its own binding, so defect 1 from section 2, the one-second delay and polling idle apps all go away.
 
-**Dlaczego złączenie po `requestId`.** Inspektor Node zapisuje identyfikator na obiekcie żądania pod `Symbol(kInspectorRequestId)`. Subskrybent haka widzi go w mikrozadaniu po zdarzeniu `create` (dla `node:http` już w zdarzeniu `start`) i jest on równy `requestId` ze zdarzeń CDP **[Z, E13]**. To szczegół wewnętrzny Node, więc: jest sonda zgodności, a `correlate.matchLink` zachowuje dzisiejsze dopasowanie po metodzie, URL i czasie jako drugą ścieżkę.
+**Why join by `requestId`.** The Node inspector stores the id on the request object under `Symbol(kInspectorRequestId)`. The hook's subscriber sees it in a microtask after the `create` event (for `node:http` already in the `start` event), and it equals the `requestId` in CDP events **[Z, E13]**. It is a Node internal, so: there is a compatibility probe, and `correlate.matchLink` keeps today's matching by method, URL and time as a second path.
 
-### 6.3. Kod źródłowy: stos wywołań i mapy źródeł
+### 6.3. Source code: call stack and source maps
 
-**Ustalenia z eksperymentów:**
+**Findings from experiments:**
 
-- Zdarzenie `undici:request:create` jest publikowane synchronicznie wewnątrz wywołania natywnego `fetch`, pod 27–33 ramkami undici. Przy domyślnym `Error.stackTraceLimit = 10` ramki kodu aplikacji nie widać nigdy, nawet bez żadnego opakowania **[Z, E9]**.
-- Stos inicjatora w zdarzeniu CDP zawiera tylko ramki synchroniczne. `Debugger.enable` i `Debugger.setAsyncCallStackDepth(32)` nie dodają pola `parent` **[Z, E8]**, zgodnie z wcześniejszą obserwacją **[U]**.
-- Po opakowaniu `fetch` funkcją asynchroniczną (jak robi Next) wynik zależy od liczby mikrozadań między wywołaniem przez użytkownika a wywołaniem natywnego `fetch`: 0 daje ramkę synchroniczną, **dokładnie 1 nie daje żadnej ramki użytkownika**, 2 i więcej dają ramki `at async …`. Ramka async wskazuje wyrażenie `await`, a w `Promise.all` wszystkie zapytania dostają tę samą pozycję **[Z, E10]**. Ile mikrozadań robi Next 16.4, nie wiadomo **[A, M5]**.
+- The `undici:request:create` event is published synchronously inside the native `fetch` call, under 27–33 undici frames. With the default `Error.stackTraceLimit = 10` the app-code frame is never visible, even without any wrapper **[Z, E9]**.
+- The initiator stack in the CDP event contains synchronous frames only. `Debugger.enable` and `Debugger.setAsyncCallStackDepth(32)` do not add a `parent` field **[Z, E8]**, matching an earlier observation **[U]**.
+- After wrapping `fetch` in an async function (as Next does), the result depends on the number of microtasks between the user call and the native `fetch` call: 0 gives a synchronous frame, **exactly 1 gives no user frame at all**, 2 or more give `at async …` frames. The async frame points at the `await` expression, and in `Promise.all` all requests get the same position **[Z, E10]**. How many microtasks Next 16.4 makes is unknown **[A, M5]**.
 
-**Ocena opcji:**
+**Options assessed:**
 
-| Opcja | Wynik eksperymentu | Wykonalność w Next | Ryzyka | Decyzja |
+| Option | Experiment result | Feasibility in Next | Risks | Decision |
 |---|---|---|---|---|
-| A. Stos inicjatora z CDP | Tylko ramki synchroniczne **[Z, E8]** | Nie | brak | Zostaje jako dodatkowa informacja dla zwykłego Node |
-| B. `new Error().stack` w subskrybencie `undici:request:create`, bez patchowania | Działa po podniesieniu limitu ramek; po opakowaniu zależy od liczby mikrozadań **[Z, E9, E10]** | Niepewna **[A]** | Kruche (wyścig mikrozadań), mniej dokładne | Rezerwa: używana, gdy brak kontekstu z opcji D |
-| C. Podmiana `globalThis.fetch` przed Nextem (warstwa najgłębsza) | Ten sam moment wywołania co B, więc te same wyniki | Jak B | Jak B, plus patch globalu | Odrzucona |
-| **D. Zewnętrzna warstwa `fetch`: Proxy za akcesorem + `AsyncLocalStorage`** | Dokładna linia i kolumna także w najgorszym przypadku; rozróżnia wywołania w `Promise.all`; helper z `await` przed `fetch` daje ramki async wyżej; 10–14 µs na wywołanie; 13 kontroli zgodności bez zastrzeżeń **[Z, E11, E12, E17]** | Wysoka, ale niesprawdzona na prawdziwym Next **[A, M5]** | Zmienia deskryptor `globalThis.fetch`; zakłada, że Next rozpoznaje własny patch po właściwości `__nextPatched` **[A]**; nie obejmuje `node:http` | **Wybrana** |
-| E. `Error.captureStackTrace` w chwili wywołania `fetch` | To mechanizm opcji D; sam w sobie wymaga bycia wywołanym synchronicznie przez kod użytkownika | — | — | Część D |
-| F. Domena Debugger | Nie rozszerza stosów **[Z, E8]**; proces może stanąć na instrukcji `debugger` | Nie | Wysokie | Odrzucona; kolektor nigdy nie włącza domeny Debugger |
-| G. Własny wrapper w kodzie aplikacji (`apiFetch`) | Nie testowano | Pewna | Wymaga zmian i dyscypliny w aplikacji | Poza narzędziem |
+| A. The CDP initiator stack | Synchronous frames only **[Z, E8]** | No | none | Stays as extra information for plain Node |
+| B. `new Error().stack` in the `undici:request:create` subscriber, no patching | Works after raising the frame limit; after wrapping it depends on the number of microtasks **[Z, E9, E10]** | Uncertain **[A]** | Fragile (microtask race), less precise | Fallback: used when there is no context from option D |
+| C. Replacing `globalThis.fetch` before Next (innermost layer) | The same call moment as B, so the same results | As B | As B, plus a global patch | Rejected |
+| **D. An outer `fetch` layer: a Proxy behind an accessor + `AsyncLocalStorage`** | Exact line and column even in the worst case; tells apart calls in `Promise.all`; a helper with `await` before `fetch` gives async frames higher up; 10–14 µs per call; 13 compatibility checks without caveats **[Z, E11, E12, E17]** | High, but unchecked on real Next **[A, M5]** | Changes the `globalThis.fetch` descriptor; assumes Next recognizes its own patch by the `__nextPatched` property **[A]**; does not cover `node:http` | **Chosen** |
+| E. `Error.captureStackTrace` at the moment of the `fetch` call | This is option D's mechanism; on its own it must be called synchronously by user code | — | — | Part of D |
+| F. The Debugger domain | Does not extend stacks **[Z, E8]**; the process can stop on a `debugger` statement | No | High | Rejected; the collector never enables the Debugger domain |
+| G. Our own wrapper in app code (`apiFetch`) | Not tested | Certain | Needs changes and discipline in the app | Outside the tool |
 
-**Jak działa opcja D.** Hak zamienia `globalThis.fetch` na akcesor. Odczyt zwraca Proxy bieżącej funkcji, zapis (np. `globalThis.fetch = patched` w Next) tylko podmienia funkcję pod spodem. Kod aplikacji zawsze trafia więc najpierw w naszą pułapkę `apply`, która synchronicznie łapie stos i uruchamia właściwe wywołanie w `callAls.run({ sites })`. Subskrybent `undici:request:create` odczytuje stos z kontekstu, niezależnie od tego, ile `await` zrobił Next po drodze. Wywołania zagnieżdżone (Next wołający oryginalny `fetch`) widzą istniejący kontekst i przechodzą bez przechwytywania. Proxy przepuszcza odczyt właściwości, więc sprawdzenie `fetch.__nextPatched` nadal działa i patch nie jest zakładany drugi raz: tak jest w symulacji **[Z, E11]**, a w prawdziwym Next to założenie **[A, M5]**.
+**How option D works.** The hook turns `globalThis.fetch` into an accessor. A read returns a Proxy of the current function, a write (e.g. `globalThis.fetch = patched` in Next) only replaces the function underneath. App code therefore always hits our `apply` trap first, which captures the stack synchronously and runs the real call in `callAls.run({ sites })`. The `undici:request:create` subscriber reads the stack from the context, regardless of how many `await`s Next made on the way. Nested calls (Next calling the original `fetch`) see the existing context and pass through without capturing. The Proxy passes property reads through, so the `fetch.__nextPatched` check still works and the patch is not applied twice: that is the case in simulation **[Z, E11]**, and in real Next it is an assumption **[A, M5]**.
 
-Stos jest pobierany jako surowe obiekty `CallSite` (chwilowa podmiana `Error.prepareStackTrace`), więc nie zależy od tego, co z formatowaniem stosów zrobił Next ani od `--enable-source-maps`. `util.getCallSites` się nie nadaje, bo nie zwraca ramek async **[Z, E24]**.
+The stack is taken as raw `CallSite` objects (a temporary replacement of `Error.prepareStackTrace`), so it does not depend on what Next did to stack formatting or on `--enable-source-maps`. `util.getCallSites` does not fit, because it does not return async frames **[Z, E24]**.
 
-**`node:http` (axios, got).** Zewnętrznej warstwy nie ma. Hak łapie stos synchroniczny w `http.client.request.created`; daje to linię aplikacji tylko wtedy, gdy biblioteka woła `http.request` synchronicznie z kodu użytkownika (`http.get` wprost: tak **[Z, E17]**; axios: prawdopodobnie nie **[A]**). W pozostałych przypadkach zostaje przypisanie do żądania strony.
+**`node:http` (axios, got).** There is no outer layer. The hook captures the synchronous stack in `http.client.request.created`; this gives the app line only when a library calls `http.request` synchronously from user code (`http.get` directly: yes **[Z, E17]**; axios: probably not **[A]**). Otherwise the page request assignment remains.
 
-**Kolejność degradacji:** miejsce z opcji D → ramki z opcji B → stos inicjatora CDP → samo żądanie strony i URL (stan dzisiejszy). Wynik narzędzia mówi, którą drogą powstało `origin`.
+**Degradation order:** the place from option D → frames from option B → the CDP initiator stack → only the page request and URL (today's state). The tool result says which path produced `origin`.
 
-**Mapy źródeł:**
+**Source maps:**
 
-- **Gdzie:** w kolektorze, nie w procesie aplikacji. Hak wysyła pozycje wygenerowane; kolektor czyta `//# sourceMappingURL=` z końca pliku chunku i mapę z dysku.
-- **Czym:** wbudowaną klasą `SourceMap` z `node:module`. Obsługuje mapy zwykłe i indeksowe (`sections`) na Node 22 i 24 **[Z, E22]**, więc nie potrzeba biblioteki.
-- **Ścieżki źródeł:** względne wobec pliku mapy (Turbopack od Next 16.1 dla kodu serwera **[D]**), `file://`, `turbopack:///[project]/…`, `webpack://…`. Wynik jest podawany względem katalogu repozytorium, np. `apps/web/app/seq/page.js:5`. Dokładny format map Turbopacka z Next 16.4 trzeba potwierdzić na prawdziwej aplikacji **[A, M5]**.
-- **Świeżość:** rozwiązanie następuje zaraz po przyjęciu komunikatu, a wynik jest zapisywany w rekordzie. Pamięć podręczna map ma klucz ścieżka + czas modyfikacji. Jeśli chunk jest nowszy niż zapytanie (HMR zdążył go przebudować), wynik dostaje `stale: true`.
-- **Fragment kodu:** z `sourcesContent` mapy albo z pliku źródłowego brana jest linia wywołania i trafia do `get_server_request` jako `snippet`.
-- **webpack:** w trybie dev moduły są w `eval` z mapą w adresie `data:`, a ramka ma adres `webpack-internal:///(rsc)/./app/seq/page.js`. Plik źródłowy wynika z samego adresu, linia jest przybliżona. Pełne mapowanie webpacka jest poza zakresem, dopóki ktoś go nie potrzebuje.
+- **Where:** in the collector, not in the app process. The hook sends generated positions; the collector reads `//# sourceMappingURL=` from the end of the chunk file and the map from disk.
+- **With what:** the built-in `SourceMap` class from `node:module`. It handles regular and index maps (`sections`) on Node 22 and 24 **[Z, E22]**, so no library is needed.
+- **Source paths:** relative to the map file (Turbopack since Next 16.1 for server code **[D]**), `file://`, `turbopack:///[project]/…`, `webpack://…`. The result is given relative to the repository directory, e.g. `apps/web/app/seq/page.js:5`. The exact Turbopack map format of Next 16.4 must be confirmed on a real app **[A, M5]**.
+- **Freshness:** resolution happens right after the message arrives, and the result is stored in the record. The map cache is keyed by path + modification time. If the chunk is newer than the request (HMR managed to rebuild it), the result gets `stale: true`.
+- **Code snippet:** the call line is taken from the map's `sourcesContent` or from the source file and goes into `get_server_request` as `snippet`.
+- **webpack:** in dev mode modules are in `eval` with the map in a `data:` URL, and the frame has the address `webpack-internal:///(rsc)/./app/seq/page.js`. The source file follows from the address itself, the line is approximate. Full webpack mapping is out of scope until someone needs it.
 
-### 6.4. Korelacja z przeglądarką
+### 6.4. Correlation with the browser
 
-Co jest realne w trybie dev, w kolejności rosnącej inwazyjności:
+What is realistic in dev mode, in increasing order of invasiveness:
 
-| Mechanizm | Jak działa | Deterministyczny | Koszt i ryzyko | Decyzja |
+| Mechanism | How it works | Deterministic | Cost and risk | Decision |
 |---|---|---|---|---|
-| Czas i URL | Filtry `page_contains`, `last_ms` (są dziś) | Nie, ale przy jednym deweloperze wystarcza | Zero | Domyślnie |
-| **Znacznik od agenta** | Agent ustawia w Chrome DevTools MCP `emulate` z `extraHttpHeaders: {"x-outbound-tag": "<id>"}` **[D]**. Hak zapisuje nagłówek przy żądaniu strony, narzędzia przyjmują filtr `tag`. | Tak, dla całej karty | Nagłówek trafia też do zapytań przeglądarki do innych domen (możliwy preflight CORS) | M7, zalecane dla agentów |
-| Nagłówek odpowiedzi z identyfikatorem żądania strony | Hak dopisuje `x-outbound-page-request: <id>`; agent czyta go przez `get_network_request` **[D]** | Tak, dla pojedynczego żądania | Zmienia odpowiedzi aplikacji w dev | M7, tylko po włączeniu |
-| `traceparent`, `x-request-id` | Tylko odczyt, jeśli aplikacja już je ma (np. `@vercel/otel`): pole `trace` w rekordzie | Tak, gdy aplikacja ma OTel | Zero | M7, tylko odczyt |
-| Własna propagacja `traceparent` do serwisów | Dopisywanie nagłówka do zapytań wychodzących | Tak | Zmienia ruch do integracji | Odrzucone |
-| `Server-Timing` z wynikami | Nagłówki wychodzą przed końcem zapytań (streaming) | — | — | Odrzucone |
-| Identyfikatory wewnętrzne Next | Nieudokumentowane | Nieznane **[A]** | Zależność od wnętrza Next | Nie polegamy |
+| Time and URL | The `page_contains`, `last_ms` filters (exist today) | No, but enough with one developer | None | Default |
+| **A marker from the agent** | The agent sets in Chrome DevTools MCP `emulate` with `extraHttpHeaders: {"x-outbound-tag": "<id>"}` **[D]**. The hook stores the header with the page request, the tools accept a `tag` filter. | Yes, for the whole tab | The header also goes to the browser's requests to other domains (possible CORS preflight) | M7, recommended for agents |
+| A response header with the page request id | The hook adds `x-outbound-page-request: <id>`; the agent reads it through `get_network_request` **[D]** | Yes, for a single request | Changes the app's responses in dev | M7, opt-in only |
+| `traceparent`, `x-request-id` | Read-only, if the app already has them (e.g. `@vercel/otel`): a `trace` field in the record | Yes, when the app has OTel | None | M7, read-only |
+| Our own `traceparent` propagation to services | Adding the header to outbound requests | Yes | Changes traffic to integrations | Rejected |
+| `Server-Timing` with results | Headers leave before the requests end (streaming) | — | — | Rejected |
+| Next's internal ids | Undocumented | Unknown **[A]** | Depends on Next internals | We do not rely on them |
 
-Rodzaj żądania strony (`document`, `rsc`, `action`, `route`) hak ustala z nagłówków żądania (`rsc`, `next-action`, `next-router-prefetch`) **[A, M7]**. Dla Server Action rekord zawiera identyfikator akcji, który agent może zamienić na plik narzędziem `get_server_action_by_id` z Next DevTools MCP **[D]**.
+The hook determines the page request kind (`document`, `rsc`, `action`, `route`) from the request headers (`rsc`, `next-action`, `next-router-prefetch`) **[A, M7]**. For a Server Action the record contains the action id, which the agent can map to a file with the `get_server_action_by_id` tool from Next DevTools MCP **[D]**.
 
-**Podział ról między serwerami MCP.** Chrome DevTools MCP: przeglądarka. Next DevTools MCP (`/_next/mcp`): trasy, błędy, akcje, kompilacja. `outbound`: ruch wychodzący serwera z nagłówkami, treścią i analizą, dla dowolnej aplikacji Node. Dokumentacja Next 16.4 wymienia też narzędzie `get_request_insights` („osie czasu żądań App Routera, zapytania serwera i zachowanie cache”), wymagające `experimental.requestInsights` **[D]**. Częściowo pokrywa się z tym narzędziem, a w odróżnieniu od niego widzi zachowanie cache. Nie było go jak sprawdzić w tym środowisku; warto je porównać na prawdziwej aplikacji, zanim powstanie M6 (patrz [otwarte pytania](#9-otwarte-pytania)).
+**Division of roles between MCP servers.** Chrome DevTools MCP: the browser. Next DevTools MCP (`/_next/mcp`): routes, errors, actions, compilation. `outbound`: the server's outbound traffic with headers, bodies and analysis, for any Node app. The Next 16.4 docs also list a `get_request_insights` tool ("App Router request timelines, server requests and cache behavior"), which needs `experimental.requestInsights` **[D]**. It partly overlaps with this tool and, unlike it, sees cache behavior. It could not be checked in this environment; worth comparing on a real app before M6 (see [open questions](#9-open-questions)).
 
-### 6.5. Model danych, retencja, odpowiedzi narzędzi
+> **Update (2026-11-20):** compared in [nextjs-mcp-comparison.md](nextjs-mcp-comparison.md): `get_request_insights` sees only `fetch` in a request context, without headers or bodies; the tools complement each other.
+
+### 6.5. Data model, retention, tool responses
 
 **Model:**
 
@@ -542,7 +544,7 @@ PageRequest     { id /* '<pid>-<n>' */, processId, method, url,
                   kind: 'document' | 'rsc' | 'action' | 'route' | 'other', actionId?, tag?, trace?,
                   startedAtMs, endedAtMs?, status?, requestIds: number[] }
 
-OutboundRequest { id /* globalny, rosnący */, processId, cdpRequestId, pageRequestId?,
+OutboundRequest { id /* global, increasing */, processId, cdpRequestId, pageRequestId?,
                   via: 'fetch' | 'http', method, url, requestHeaders,
                   status?, statusText?, mimeType?, responseHeaders?,
                   startedAtMs, tsStart, tsResponse?, tsEnd?,
@@ -553,41 +555,41 @@ OutboundRequest { id /* globalny, rosnący */, processId, cdpRequestId, pageRequ
                   stack?: Frame[] }
 ```
 
-Zmiany względem prototypu:
+Changes against the prototype:
 
-- klucz rekordu to `processId:cdpRequestId`, a `processId` nadaje kolektor przy każdym podłączeniu (naprawia wadę 3);
-- `startedAtMs` jest normalizowane: Node podaje `wallTime` w milisekundach, a `timestamp` w sekundach **[Z, E4]**, co odpowiada przykładowi w dokumentacji Node **[D]**, ale nie specyfikacji CDP; wartość poniżej 10¹¹ jest traktowana jako sekundy;
-- `tsResponse` daje czas do pierwszego bajtu; zapytania `pending` wchodzą do analizy jako otwarte spany i osobne ustalenie;
-- treść ma jawny stan zamiast pustego łańcucha (naprawia wadę 4), a treść binarna nie jest dekodowana jako UTF-8.
+- the record key is `processId:cdpRequestId`, and the collector assigns `processId` on every attach (fixes defect 3);
+- `startedAtMs` is normalized: Node gives `wallTime` in milliseconds and `timestamp` in seconds **[Z, E4]**, which matches the example in Node's docs **[D]** but not the CDP spec; a value below 10¹¹ is treated as seconds;
+- `tsResponse` gives the time to first byte; `pending` requests enter the analysis as open spans and a separate finding;
+- the body has an explicit state instead of an empty string (fixes defect 4), and a binary body is not decoded as UTF-8.
 
-**Treści odpowiedzi.** Fakty:
+**Response bodies.** Facts:
 
-- Node 24 buforuje treści w procesie aplikacji **osobno dla każdej sesji CDP**, domyślnie do około 100 MB. `Network.enable({ maxTotalBufferSize, maxResourceBufferSize })` jest honorowane, a limit jednej sesji nie wpływa na drugą (np. DevTools). Przekroczenie limitu zasobu obcina treść bez sygnału **[Z, E7]**.
-- Treść żądania jest dostępna tylko dla `fetch` na Node 24 i tylko gdy `content-type` zawiera `charset`; w pozostałych przypadkach `getRequestPostData` zwraca błąd albo pusty łańcuch **[Z, E6]**.
+- Node 24 buffers bodies in the app process **separately for every CDP session**, about 100 MB by default. `Network.enable({ maxTotalBufferSize, maxResourceBufferSize })` is honored, and one session's limit does not affect another (e.g. DevTools). Exceeding the resource limit truncates the body without a signal **[Z, E7]**.
+- The request body is available only for `fetch` on Node 24 and only when `content-type` contains `charset`; otherwise `getRequestPostData` returns an error or an empty string **[Z, E6]**.
 
-Polityka:
+Policy:
 
-- kolektor zawsze podaje własne limity (domyślnie 32 MB łącznie, 2 MB na zasób), żeby kilka sesji agentów nie zajęło setek megabajtów w procesie aplikacji;
-- tryb `eager` (domyślny): po `loadingFinished` pobiera treść, przechowuje do 256 KB na odpowiedź i 32 MB łącznie (najstarsze treści wypadają pierwsze, metadane zostają); odpowiedzi z błędem mają pierwszeństwo;
-- tryb `lazy`: pobiera dopiero przy `get_server_request`; Node mógł już treść usunąć, wtedy stan `evicted`;
-- tryb `off`: nigdy;
-- obcięcie wykrywane przez porównanie z `content-length`, czyli z rozmiarem na łączu (przed dekompresją);
-- treść z `content-encoding` (gzip, br, deflate zlib i surowy, zstd; kilka kodowań naraz) przy tekstowym `content-type` jest dekompresowana, z limitem wyniku równym limitowi na odpowiedź (ochrona przed bombą dekompresyjną: zostaje początek treści, stan `truncated`); nieobsługiwane albo uszkodzone kodowanie daje stan `skipped` z surowymi bajtami w base64 i powodem;
-- treść żądania: pobierana, gdy dostępna, w przeciwnym razie stan `unavailable` z powodem.
+- the collector always passes its own limits (32 MB total, 2 MB per resource by default), so a few agent sessions do not take hundreds of megabytes in the app process;
+- `eager` mode (default): after `loadingFinished` it fetches the body, keeps up to 256 KB per response and 32 MB total (the oldest bodies go first, metadata stays); error responses have priority;
+- `lazy` mode: fetches only on `get_server_request`; Node may have removed the body already, then the state is `evicted`;
+- `off` mode: never;
+- truncation is detected by comparing with `content-length`, i.e. the size on the wire (before decompression);
+- a body with `content-encoding` (gzip, br, zlib and raw deflate, zstd; several encodings at once) and a textual `content-type` is decompressed, with an output limit equal to the per-response limit (decompression bomb protection: the start of the body stays, state `truncated`); an unsupported or broken encoding gives state `skipped` with raw bytes in base64 and a reason;
+- request body: fetched when available, otherwise state `unavailable` with a reason.
 
-**Retencja.** Bufor pierścieniowy 5000 zapytań (jak dziś), osobny budżet bajtów na treści, żądania stron znikają razem z ostatnim swoim zapytaniem. Rekordy rozłączonych procesów zostają do wyparcia. Bez zapisu na dysk.
+**Retention.** A ring buffer of 5000 requests (as today), a separate byte budget for bodies, page requests disappear with their last request. Records of disconnected processes stay until evicted. No writing to disk.
 
-**Narzędzia MCP.** Liczba i nazwy zostają. Każde narzędzie kosztuje kontekst agenta (dzisiejsze definicje to 2659 znaków **[Z, E23]**), więc nowe potrzeby obsługują parametry, nie nowe narzędzia:
+**MCP tools.** The number and names stay. Every tool costs agent context (today's definitions are 2659 characters **[Z, E23]**), so new needs are served by parameters, not new tools:
 
-| Narzędzie | Co się zmienia |
+| Tool | What changes |
 |---|---|
-| `inspector_status` | Dochodzą możliwości i ostrzeżenia per proces: flaga, hak, treści, adres nasłuchu, wersja haka. |
-| `list_server_requests` | Wiersze zwarte; nowe filtry `page_request_id`, `tag`, `status`; wynik z `next_since_id`. |
-| `get_server_request` | Nagłówki po redakcji; treść stronicowana (`max_body_chars`, `body_offset`); miejsce wywołania z fragmentem kodu; `ttfb_ms`. |
-| `analyze_server_timeline` | Domyślnie **podsumowanie**: dzisiejsze pola bez `timeline`, dla 20 najnowszych żądań stron. Pełna oś czasu po podaniu `page_request_id` albo `detail: "full"`. Parametr `settle_ms`: zaczekaj, aż ruch ucichnie. Nowe pola: `verdict_code`, `in_flight`, ustalenia (duplikaty, wolne, w toku). |
-| `clear_server_requests` | Bez zmian. |
+| `inspector_status` | Per-process capabilities and warnings are added: flag, hook, bodies, listen address, hook version. |
+| `list_server_requests` | Compact rows; new filters `page_request_id`, `tag`, `status`; the result has `next_since_id`. |
+| `get_server_request` | Redacted headers; paged body (`max_body_chars`, `body_offset`); call site with a code snippet; `ttfb_ms`. |
+| `analyze_server_timeline` | A **summary** by default: today's fields without `timeline`, for the 20 newest page requests. The full timeline with `page_request_id` or `detail: "full"`. The `settle_ms` parameter: wait until traffic is quiet. New fields: `verdict_code`, `in_flight`, findings (duplicates, slow, in flight). |
+| `clear_server_requests` | No change. |
 
-Przykład podsumowania (wartości poglądowe). Nazwy pól, na których polega dzisiejszy test e2e, zostają:
+Summary example (illustrative values). The field names today's e2e test relies on stay:
 
 ```jsonc
 { "@acme/web": {
@@ -600,62 +602,62 @@ Przykład podsumowania (wartości poglądowe). Nazwy pól, na których polega dz
         "sequential_chains": [{ "length": 3, "wall_ms": 469, "if_parallel_ms": 156, "potential_saving_ms": 313,
                                 "steps": ["GET …/user (153 ms)", "GET …/orders (152 ms)", "GET …/offers (151 ms)"],
                                 "origins": ["apps/web/app/seq/page.js:5", "…:6", "…:7"] }] }] },
-  "hint": "Pełna oś czasu: analyze_server_timeline({ page_request_id })." }
+  "hint": "Full timeline: analyze_server_timeline({ page_request_id })." }
 ```
 
-**Zależności danych w łańcuchach.** Zapytanie, które używa danych z odpowiedzi poprzedniego (np. `orderId` z `POST /orders` w `GET /orders/status?orderId=…`), nie może iść w `Promise.all`. Heurystyka (`analyze/dependencies.mjs`): wartość identyfikatorowa z treści odpowiedzi A (liść albo klucz JSON-a, token tekstu; ≥ 8 znaków z cyfrą, UUID, liczba ≥ 6 cyfr; bez dat, adresów IP, wersji i wypełnień) występuje w ścieżce, parametrze (po dekodowaniu) albo nagłówku B i nie była wysłana przed końcem A ani zawarta w adresie strony. Pola dodane addytywnie:
+**Data dependencies in chains.** A request that uses data from the previous one's response (e.g. `orderId` from `POST /orders` in `GET /orders/status?orderId=…`) cannot go into `Promise.all`. The heuristic (`analyze/dependencies.mjs`): an id-like value from A's response body (a JSON leaf or key, a text token; ≥ 8 characters with a digit, a UUID, a number of ≥ 6 digits; no dates, IP addresses, versions or padding) appears in B's path, parameter (after decoding) or header, and was not sent before A ended or contained in the page URL. Fields added additively:
 
-- w łańcuchu: `dependencies: [{ from_step, to_step, from_id, to_id, evidence: { value, from_path?, found_in } }]` i `dependency_check: { status: 'complete' | 'partial' | 'unavailable', reason? }`;
-- w serii i żądaniu strony: `dependencies` (tylko gdy niepuste) i `dependency_check` (gdy są pary „A skończone przed startem B”).
+- in a chain: `dependencies: [{ from_step, to_step, from_id, to_id, evidence: { value, from_path?, found_in } }]` and `dependency_check: { status: 'complete' | 'partial' | 'unavailable', reason? }`;
+- in a burst and a page request: `dependencies` (only when non-empty) and `dependency_check` (when there are "A finished before B started" pairs).
 
-`if_parallel_ms`, `potential_saving_ms` i `potential_saving_ms_if_fully_parallel` to ścieżka krytyczna z zachowaniem znalezionych zależności; bez nich wartości są takie jak wcześniej. Brak treści (fetch na Node 22, tryb `lazy`/`off`, wyparcie, przycięcie, limit kosztu) albo treść żądania B (POST/PUT/PATCH, której model nie ma) daje stan `partial`/`unavailable`, a nie „niezależne”. Wtedy oszczędność zostaje optymistyczna, jak dawniej, z warunkową wskazówką. `verdict_code` opisuje oś czasu i się nie zmienia. Nagłówki i parametry z sekretami są zredagowane przed analizą, więc nie dają dopasowania (np. token z logowania w `Authorization`).
+`if_parallel_ms`, `potential_saving_ms` and `potential_saving_ms_if_fully_parallel` are the critical path respecting the dependencies found; without them the values are as before. A missing body (fetch on Node 22, `lazy`/`off` mode, eviction, truncation, a cost limit) or B's request body (POST/PUT/PATCH, which the model does not have) gives state `partial`/`unavailable`, not "independent". Then the saving stays optimistic, as before, with a conditional hint. `verdict_code` describes the timeline and does not change. Headers and parameters with secrets are redacted before analysis, so they give no match (e.g. a login token in `Authorization`).
 
-**Budżet odpowiedzi:**
+**Response budget:**
 
-- cel: do 6000 znaków w typowym wyniku; twardy limit 20 000 znaków (poniżej progu ostrzeżenia Claude Code **[D]**);
-- JSON bez wcięć (wcięcia to dziś 36% rozmiaru **[Z, E23]**), bez pól pustych;
-- w listach parametry URL skracane do 80 znaków, pełny URL w szczegółach;
-- wynik przycięty zawsze zawiera `truncated: true` i wskazówkę, jak zawęzić zapytanie;
-- stronicowanie kursorem po rosnącym `id` (`since_id`, `limit`).
+- goal: up to 6000 characters in a typical result; hard limit 20,000 characters (below Claude Code's warning threshold **[D]**);
+- JSON without indentation (indentation is 36% of the size today **[Z, E23]**), no empty fields;
+- in lists, URL parameters shortened to 80 characters, the full URL in details;
+- a truncated result always contains `truncated: true` and a hint on how to narrow the query;
+- paging with a cursor over the increasing `id` (`since_id`, `limit`).
 
-**Narzędzia, zasoby czy prompty.**
+**Tools, resources or prompts.**
 
-- **Narzędzia:** tak, wyłącznie. Dane są dynamiczne i zależne od filtrów, a narzędzia obsługuje każdy klient MCP.
-- **Zasoby:** nie. Obsługa po stronie klientów jest nierówna, a duże treści rozwiązuje stronicowanie w `get_server_request`.
-- **Prompty:** nie w 1.0. Zalecany przebieg pracy trafia do pola `instructions` serwera, które specyfikacja przewiduje jako wskazówki dla modelu **[D]**.
+- **Tools:** yes, exclusively. The data is dynamic and filter-dependent, and every MCP client supports tools.
+- **Resources:** no. Client support is uneven, and large bodies are handled by paging in `get_server_request`.
+- **Prompts:** not in 1.0. The recommended workflow goes into the server's `instructions` field, which the spec provides as hints for the model **[D]**.
 
-**SDK czy zero zależności.** Bieżąca rewizja protokołu MCP (2026-07-28) jest bezstanowa: znosi `initialize`, wymaga metody `server/discover` i metadanych w każdym żądaniu. Klient obsługujący obie ery sonduje serwer stdio metodą `server/discover` i przy dowolnym niewspółczesnym błędzie wraca do `initialize` **[D]**. Prototyp odpowiada wtedy `-32601`, więc dalej działa z takimi klientami, ale nie zadziała z klientem wyłącznie nowej ery. Decyzja: zostajemy bez SDK, a `mcp/server.mjs` obsługuje obie ery (szacunkowo 60–80 linii więcej). Kryteria przejścia na oficjalny SDK są w [ADR 0007](adr/0007-mcp-bez-sdk-tylko-narzedzia-dwie-ery.md).
+**SDK or zero dependencies.** The current MCP protocol revision (2026-07-28) is stateless: it drops `initialize`, requires a `server/discover` method and metadata in every request. A client supporting both eras probes a stdio server with `server/discover` and falls back to `initialize` on any non-modern error **[D]**. The prototype answers `-32601` then, so it still works with such clients, but will not work with a new-era-only client. Decision: we stay without an SDK, and `mcp/server.mjs` supports both eras (about 60–80 more lines). Criteria for moving to the official SDK are in [ADR 0007](adr/0007-mcp-without-sdk-tools-only-two-eras.md).
 
-### 6.6. Bezpieczeństwo
+### 6.6. Security
 
-> **Stan wdrożenia (2026-11-20):** zob. [ADR 0009, sekcja „Wdrożenie”](adr/0009-bezpieczenstwo-loopback-zgoda-redakcja.md) i README, „Security model”. Punkty niżej to pierwotny projekt; zgoda działa przez `OUTBOUND_INSPECT=1` / flagę sieciową, a nie `OUTBOUND_INJECT`.
+> **Implementation status (2026-11-20):** see [ADR 0009, "Implementation" section](adr/0009-security-loopback-consent-redaction.md) and README, "Security model". The points below are the original design; consent works through `OUTBOUND_INSPECT=1` / the network flag, not `OUTBOUND_INJECT`.
 
-- **Tylko pętla zwrotna.** Kolektor łączy się wyłącznie z `127.0.0.1`. Launcher zawsze podaje `--inspect=127.0.0.1:<port>`. Jeśli proces słucha na innym adresie (np. `0.0.0.0`), `inspector_status` to zgłasza.
-- **Instrumentacja za zgodą.** Hak działa w procesie tylko wtedy, gdy deweloper sam go załadował (`outbound run` albo `--import`). Procesy znalezione skanowaniem portów są domyślnie tylko obserwowane; wstrzyknięcie wymaga `OUTBOUND_INJECT=1`. Wyłącznik awaryjny: `OUTBOUND_HOOK=0`.
-- **Minimalny ślad w CDP.** Kolektor używa `Network.*`, `Runtime.evaluate` (wyrażenia tylko do odczytu) i `Runtime.addBinding`. Nigdy nie włącza domen `Debugger` ani `Runtime` (zdarzenia konsoli).
-- **Redakcja przy przyjęciu.** Wartości nagłówków `authorization`, `proxy-authorization`, `cookie`, `set-cookie`, `x-api-key` oraz pasujących do wzorca nazw (`token`, `secret`, `password`, `session`, `key`) są zastępowane opisem `[redacted: Bearer · 142 chars · #a1b2c3]` zanim trafią do magazynu. Skrót pozwala agentowi stwierdzić, czy dwa zapytania niosły ten sam sekret. To samo dla parametrów URL i pól JSON w treściach. Wyłączenie tylko jawnie (`OUTBOUND_REDACT=0`) i z ostrzeżeniem w `inspector_status`.
-- **Treści to dane, nie polecenia.** Odpowiedzi serwisów trafiają do modelu, więc mogą nieść wstrzyknięte instrukcje. Treść jest przycinana, wyraźnie oznaczona polem `body`, a `instructions` serwera mówi modelowi, żeby traktował ją jako dane. Zespół decyduje trybem treści (`eager`, `lazy`, `off`), ile danych integracji może wyjść poza maszynę.
-- **Rejestr.** Katalog 0700, pliki 0600. `wsUrl` zawiera identyfikator dający pełną kontrolę nad procesem.
-- **Konfiguracja bez kodu.** Plik konfiguracyjny to JSON; kolektor nie wykonuje kodu z repozytorium.
-- **Konfiguracja klienta MCP przez ścieżkę, nie `npx outbound`.** Krótka nazwa mogłaby zostać rozwiązana do obcego pakietu z publicznego rejestru.
+- **Loopback only.** The collector connects only to `127.0.0.1`. The launcher always passes `--inspect=127.0.0.1:<port>`. If a process listens on another address (e.g. `0.0.0.0`), `inspector_status` reports it.
+- **Instrumentation with consent.** The hook runs in a process only when the developer loaded it (`outbound run` or `--import`). Processes found by port scanning are only observed by default; injection needs `OUTBOUND_INJECT=1`. Emergency switch: `OUTBOUND_HOOK=0`.
+- **Minimal CDP footprint.** The collector uses `Network.*`, `Runtime.evaluate` (read-only expressions) and `Runtime.addBinding`. It never enables the `Debugger` or `Runtime` domains (console events).
+- **Redaction at ingestion.** Values of the `authorization`, `proxy-authorization`, `cookie`, `set-cookie`, `x-api-key` headers and of names matching the pattern (`token`, `secret`, `password`, `session`, `key`) are replaced with a description `[redacted: Bearer · 142 chars · #a1b2c3]` before they reach the store. The digest lets the agent tell whether two requests carried the same secret. The same for URL parameters and JSON fields in bodies. Off only explicitly (`OUTBOUND_REDACT=0`) and with a warning in `inspector_status`.
+- **Bodies are data, not instructions.** Service responses reach the model, so they may carry injected instructions. The body is truncated, clearly marked with the `body` field, and the server's `instructions` tell the model to treat it as data. The team decides with the body mode (`eager`, `lazy`, `off`) how much integration data may leave the machine.
+- **Registry.** Directory 0700, files 0600. `wsUrl` contains an id that gives full control over the process.
+- **Configuration without code.** The config file is JSON; the collector does not run code from the repository.
+- **MCP client configuration by path, not `npx outbound`.** A short name could resolve to a foreign package from the public registry.
 
-### 6.7. Testowalność
+### 6.7. Testability
 
-| Poziom | Co sprawdza | Jak |
+| Level | What it checks | How |
 |---|---|---|
-| Jednostkowe | `analyze/*`, `ingest`, `correlate`, `redact`, `store`, `frames`, `sourcemap`, `mcp/render`, `mcp/server` | `node --test` na nagraniach `test/fixtures/recordings/*.ndjson` (surowe zdarzenia CDP i komunikaty haka z Node 22, 24, 26 oraz z prawdziwego Next) i na mapach źródeł z `fixtures/` |
-| Golden | Kontrakt dla agenta: `tools/list` i wyniki narzędzi dla stałego nagrania | Zrzuty w `test/golden/`; zmiana zrzutu wymaga wpisu w changelogu |
-| Hak | Brak wpływu na aplikację (lista z E12), narzut, zachowanie przy błędzie wewnątrz haka | Proces potomny bez kolektora |
-| E2E | Obecny scenariusz i nowe: dwa kolektory, restart aplikacji, proces bez flagi, launcher z trzema aplikacjami, opakowanie `fetch` jak w Next | Procesy z `test/fixtures`, bez Next i bez sieci |
-| Sondy zgodności | Założenia o Node, na których stoi narzędzie (lista w [6.8](#68-dystrybucja-konfiguracja-wersjonowanie-zgodność)) | `test/compat/`, macierz wersji i cotygodniowy bieg na nightly |
-| Next (opcjonalne) | Przypisanie do strony i miejsce wywołania w prawdziwym Next (Turbopack) | Osobne zadanie CI z `npm install` w `examples/nextjs-monorepo` |
-| Protokół MCP | Obie ery, błędy, nieznane metody | Jednostkowo; opcjonalnie oficjalny klient jako zależność deweloperska |
+| Unit | `analyze/*`, `ingest`, `correlate`, `redact`, `store`, `frames`, `sourcemap`, `mcp/render`, `mcp/server` | `node --test` on recordings `test/fixtures/recordings/*.ndjson` (raw CDP events and hook messages from Node 22, 24, 26 and from real Next) and on source maps from `fixtures/` |
+| Golden | The agent contract: `tools/list` and tool results for a fixed recording | Snapshots in `test/golden/`; a snapshot change needs a changelog entry |
+| Hook | No effect on the app (the E12 list), overhead, behavior on an error inside the hook | A child process without a collector |
+| E2E | The current scenario and new ones: two collectors, app restart, a process without the flag, a launcher with three apps, a Next-like `fetch` wrapper | Processes from `test/fixtures`, without Next and without network |
+| Compatibility probes | The Node assumptions the tool rests on (list in [6.8](#68-distribution-configuration-versioning-compatibility)) | `test/compat/`, version matrix and a weekly nightly run |
+| Next (optional) | Page assignment and call site in real Next (Turbopack) | A separate CI job with `npm install` in `examples/nextjs-monorepo` |
+| MCP protocol | Both eras, errors, unknown methods | Unit; optionally the official client as a development dependency |
 
-Nagrania powstają skryptem `scripts/record-fixture.mjs`, który zapisuje surowy ruch CDP z działającej aplikacji. Ten sam skrypt posłuży do zebrania nagrań z prawdziwego monorepo (po redakcji).
+Recordings are made with `scripts/record-fixture.mjs`, which writes raw CDP traffic from a running app. The same script will collect recordings from the real monorepo (after redaction).
 
-### 6.8. Dystrybucja, konfiguracja, wersjonowanie, zgodność
+### 6.8. Distribution, configuration, versioning, compatibility
 
-**Dystrybucja.** Pakiet jako devDependency w katalogu głównym monorepo, przypięty do tagu (`github:<właściciel>/node-outbound-inspector#v0.4.0` albo rejestr wewnętrzny). Bez kroku budowania i bez zależności instalacja z gita jest trywialna, a launcher, hak i kolektor są zawsze w tej samej wersji.
+**Distribution.** The package as a devDependency in the monorepo root, pinned to a tag (`github:<owner>/node-outbound-inspector#v0.4.0` or an internal registry). Without a build step or dependencies, installing from git is trivial, and the launcher, hook and collector are always the same version.
 
 ```jsonc
 // apps/web/package.json
@@ -664,291 +666,291 @@ Nagrania powstają skryptem `scripts/record-fixture.mjs`, który zapisuje surowy
 // turbo.json
 "dev:inspect": { "cache": false, "persistent": true }
 
-// .mcp.json w katalogu głównym repozytorium (zakres projektu, współdzielony przez git [D])
+// .mcp.json in the repository root (project scope, shared through git [D])
 { "mcpServers": { "outbound": { "command": "node",
     "args": ["node_modules/node-outbound-inspector/bin/outbound.mjs", "mcp"] } } }
 ```
 
-`package.json` narzędzia: `bin: { outbound, outbound-mcp, outbound-next }`, `exports: { "./register": "./src/hook/preload.mjs" }`, `engines.node >= 22`.
+The tool's `package.json`: `bin: { outbound, outbound-mcp, outbound-next }`, `exports: { "./register": "./src/hook/preload.mjs" }`, `engines.node >= 22`.
 
-**Konfiguracja.** Opcjonalny `outbound.config.json` w katalogu głównym repozytorium; wszystko ma wartości domyślne. Dzisiejsze zmienne (`INSPECTOR_PORTS`, `APP_NAMES`, `IGNORE_HOSTS`, `PAGE_CORRELATION`, `MAX_REQUESTS`) są honorowane do 1.0. Zmienia się jedna wartość domyślna: od M4 hak nie jest wstrzykiwany do procesów bez launchera, dopóki nie włączy tego `OUTBOUND_INJECT=1` (albo jawne `PAGE_CORRELATION=1`).
+**Configuration.** An optional `outbound.config.json` in the repository root; everything has defaults. Today's variables (`INSPECTOR_PORTS`, `APP_NAMES`, `IGNORE_HOSTS`, `PAGE_CORRELATION`, `MAX_REQUESTS`) are honored until 1.0. One default changes: from M4 the hook is not injected into processes without the launcher unless `OUTBOUND_INJECT=1` (or an explicit `PAGE_CORRELATION=1`) enables it.
 
-**Wersjonowanie.** SemVer; 0.x do ustabilizowania kontraktu. Publiczne API: polecenia i flagi CLI, nazwy i parametry narzędzi, pola wyników, format rejestru (`v`), protokół haka (`v`). Kolektor odrzuca hak z nieznaną wersją protokołu i zgłasza to w statusie.
+**Versioning.** SemVer; 0.x until the contract stabilizes. Public API: CLI commands and flags, tool names and parameters, result fields, the registry format (`v`), the hook protocol (`v`). The collector rejects a hook with an unknown protocol version and reports it in the status.
 
-**Zgodność:**
+**Compatibility:**
 
-| Element | Minimum | Zalecane | Uwagi |
+| Element | Minimum | Recommended | Notes |
 |---|---|---|---|
-| Kolektor i launcher | Node 24 | Node 24+ | na starszym odmawiają startu |
-| Proces aplikacji | Node 24 | Node 24+ | starszy proces nie jest podsłuchiwany (powód w `inspector_status`); na 24 kolektor instaluje obejście nodejs/node#66551 |
+| Collector and launcher | Node 24 | Node 24+ | refuse to start on older |
+| App process | Node 24 | Node 24+ | an older process is not inspected (reason in `inspector_status`); on 24 the collector installs the nodejs/node#66551 workaround |
 | Next.js | 16.1 (`next dev --inspect`) **[D]** | 16.4 **[U]** | |
-| Bun | tylko menedżer pakietów i skrypty **[Z, E21]** | | runtime nieobsługiwany **[U]** |
+| Bun | package manager and scripts only **[Z, E21]** | | runtime not supported **[U]** |
 
-**Możliwości zamiast wersji.** Każdą różnicę między wersjami Node kolektor rozpoznaje po zachowaniu i pokazuje w `inspector_status`:
+**Capabilities instead of versions.** The collector recognizes every difference between Node versions by behavior and shows it in `inspector_status`:
 
-| Możliwość | Jak wykrywana | Gdy brak |
+| Capability | How detected | When missing |
 |---|---|---|
-| Inspekcja sieci | flaga w `process.execArgv` (nie wynik `Network.enable`) **[Z, E3]** | status z powodem i poleceniem naprawy |
-| Treść odpowiedzi `fetch` | pierwsza odpowiedź z `content-length > 0` i pustą treścią | `body.state: unavailable`, wskazówka o Node 24 |
-| Treść żądania | wynik `getRequestPostData` | `unavailable` z powodem |
-| Złączenie dokładne | obecność `rid` w komunikacie haka | złączenie po URL i czasie, ostrzeżenie w statusie |
-| Wypychanie | wynik `Runtime.addBinding` | brak przypisania do stron, powód w statusie (bez ścieżki zastępczej: odpytywanie z prototypu znika w M4) |
+| Network inspection | the flag in `process.execArgv` (not the `Network.enable` result) **[Z, E3]** | status with the reason and a fix command |
+| `fetch` response body | the first response with `content-length > 0` and an empty body | `body.state: unavailable`, a hint about Node 24 |
+| Request body | the `getRequestPostData` result | `unavailable` with a reason |
+| Exact join | `rid` present in the hook message | join by URL and time, a warning in the status |
+| Push | the `Runtime.addBinding` result | no page assignment, reason in the status (no fallback: the prototype's polling goes away in M4) |
 
-**Sondy zgodności** (`test/compat/`). Każda to jeden z eksperymentów z załącznika A zamieniony w test. Czerwona sonda na nightly to wczesne ostrzeżenie, nie blokada wydania:
+**Compatibility probes** (`test/compat/`). Each is one of the experiments from appendix A turned into a test. A red probe on nightly is an early warning, not a release blocker:
 
-1. flaga sieciowa nadal odrzucana w `NODE_OPTIONS` (gdyby przestała być, launcher można uprościć);
-2. kształt zdarzeń `Network.*`, jednostki `timestamp` i `wallTime`, format `requestId`;
-3. `Symbol(kInspectorRequestId)` na żądaniach undici i `node:http`;
-4. `Runtime.addBinding` bez `Runtime.enable`;
-5. treści odpowiedzi i limity bufora;
-6. kanały `diagnostics_channel` używane przez hak;
-7. `SourceMap` z mapą indeksową;
-8. głębokość stosu undici (czy 60 ramek nadal wystarcza).
+1. the network flag still rejected in `NODE_OPTIONS` (if it stops being rejected, the launcher can be simplified);
+2. the shape of `Network.*` events, the units of `timestamp` and `wallTime`, the `requestId` format;
+3. `Symbol(kInspectorRequestId)` on undici and `node:http` requests;
+4. `Runtime.addBinding` without `Runtime.enable`;
+5. response bodies and buffer limits;
+6. the `diagnostics_channel` channels used by the hook;
+7. `SourceMap` with an index map;
+8. undici stack depth (whether 60 frames are still enough).
 
-Warstwa `ingest` jest jedynym miejscem znającym kształt zdarzeń CDP. Gdyby flaga zniknęła, hak może przejąć zbieranie metadanych z `diagnostics_channel` (bez treści) bez zmian w magazynie, analizatorach i warstwie MCP.
+The `ingest` layer is the only place that knows the shape of CDP events. If the flag disappeared, the hook could take over collecting metadata from `diagnostics_channel` (without bodies) with no changes to the store, analyzers and MCP layer.
 
 ---
 
-## 7. Ryzyka
+## 7. Risks
 
-| # | Ryzyko | Prawd. | Skutek | Ograniczenie |
+| # | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|---|
-| 1 | Node zmienia albo usuwa eksperymentalną inspekcję sieci (sekcja dokumentacji ma status „1.1 Active development” **[D]**) | średnie | wysoki | sondy zgodności, jedna warstwa adaptera, ścieżka awaryjna przez hak |
-| 2 | Zewnętrzna warstwa `fetch` nie działa w prawdziwym Next (inny sposób patchowania, odwołanie do `fetch` z pominięciem globalu) | średnie | średni | sonda z załącznika B przed M5; degradacja do ramek async, potem do żądania strony; ADR 0005 do aktualizacji po wyniku |
-| 3 | Hak zmienia zachowanie aplikacji (akcesor na `fetch`, `enterWith`) | niskie | wysoki | zgoda dewelopera, `try/catch` wokół całego kodu haka, wyłącznik `OUTBOUND_HOOK=0`, testy zgodności zachowania |
-| 4 | Znika `Symbol(kInspectorRequestId)` | niskie | niski | złączenie awaryjne po URL i czasie, sonda |
-| 5 | Pamięć procesu aplikacji rośnie przez bufory treści (per sesja CDP) | średnie | średni | jawne limity w `Network.enable`, tryb `lazy` |
-| 6 | Sekrety albo dane osobowe z integracji trafiają do dostawcy modelu | średnie | wysoki | redakcja domyślnie włączona, tryby treści, decyzja zespołu (pytanie 3) |
-| 7 | Wstrzyknięcie instrukcji przez treść odpowiedzi serwisu | niskie | średni | przycinanie, oznaczenie danych, `instructions` |
-| 8 | Zmiany w specyfikacji MCP (duża rewizja w lipcu 2026) | wysokie | niski | serwer obu er, testy protokołu, kryteria przejścia na SDK |
-| 9 | Next sam dostarczy to samo (`experimental.requestInsights`) | niskie (2026-11-20) | średni | sprawdzone w kodzie Next 16.4.6 i canary 16.5: `get_request_insights` widzi tylko `fetch` w kontekście żądania, bez nagłówków, treści, `node:http`, błędów sieci i analizy; uzupełnia nas statusem cache i trasą. Sprawdzać przy każdej wersji minor |
-| 10 | Martwe wpisy i rezerwacje po twardym zabiciu procesów | wysokie | niski | sprawdzanie pid przy odczycie, sprzątanie przez launcher |
-| 11 | Format map źródeł Turbopacka inny niż założony albo zmienny | średnie | niski | resolver obsługuje mapy zwykłe i indeksowe oraz cztery schematy ścieżek; przy błędzie zostaje ścieżka chunku |
-| 12 | Kilka kolektorów naraz obciąża aplikację (każdy pobiera treści) | niskie | niski | limity, tryb `lazy`; demon dopiero, gdy stanie się to realnym problemem (ADR 0002) |
+| 1 | Node changes or removes experimental network inspection (the docs section has status "1.1 Active development" **[D]**) | medium | high | compatibility probes, one adapter layer, a fallback path through the hook |
+| 2 | The outer `fetch` layer does not work in real Next (a different patching method, a reference to `fetch` bypassing the global) | medium | medium | the appendix B probe before M5; degradation to async frames, then to the page request; ADR 0005 to update after the result |
+| 3 | The hook changes app behavior (an accessor on `fetch`, `enterWith`) | low | high | developer consent, `try/catch` around all hook code, the `OUTBOUND_HOOK=0` switch, behavior compatibility tests |
+| 4 | `Symbol(kInspectorRequestId)` disappears | low | low | fallback join by URL and time, a probe |
+| 5 | App process memory grows through body buffers (per CDP session) | medium | medium | explicit limits in `Network.enable`, `lazy` mode |
+| 6 | Secrets or personal data from integrations reach the model provider | medium | high | redaction on by default, body modes, a team decision (question 3) |
+| 7 | Instruction injection through a service response body | low | medium | truncation, data marking, `instructions` |
+| 8 | MCP spec changes (a large revision in July 2026) | high | low | a server for both eras, protocol tests, criteria for moving to the SDK |
+| 9 | Next provides the same itself (`experimental.requestInsights`) | low (2026-11-20) | medium | checked in the code of Next 16.4.6 and canary 16.5: `get_request_insights` sees only `fetch` in a request context, without headers, bodies, `node:http`, network errors and analysis; it complements us with cache status and route. Re-check with every minor version |
+| 10 | Stale entries and reservations after processes are hard-killed | high | low | pid check on read, cleanup by the launcher |
+| 11 | The Turbopack source map format differs from the assumed one or changes | medium | low | the resolver handles regular and index maps and four path schemes; on error the chunk path stays |
+| 12 | Several collectors at once load the app (each fetches bodies) | low | low | limits, `lazy` mode; a daemon only when this becomes a real problem (ADR 0002) |
 
 ---
 
-## 8. Plan wdrożenia
+## 8. Rollout plan
 
-Zależności: **M1 → M2 → M3 → M4 → M5**; **M6** może ruszyć po M2, niezależnie od M3–M5; **M7** po M4 i M6. Rozmiary są zgrubne: S to do jednego dnia, M to 2–3 dni, L to około tygodnia.
+Dependencies: **M1 → M2 → M3 → M4 → M5**; **M6** can start after M2, independently of M3–M5; **M7** after M4 and M6. Sizes are rough: S is up to one day, M is 2–3 days, L is about a week.
 
-Zasada wspólna: po każdym kroku `npm test` jest zielone na Node 22 i 24, a każda zmiana wyniku narzędzia ma wpis w `CHANGELOG.md`.
+Common rule: after every step `npm test` is green on Node 22 and 24, and every change to a tool result has an entry in `CHANGELOG.md`.
 
-### Sprawdzenia na prawdziwym monorepo
+### Checks on the real monorepo
 
-Tych rzeczy nie dało się sprawdzić bez Next.js. Każda zajmuje kilka minut na macOS i odblokowuje wskazany kamień:
+These could not be checked without Next.js. Each takes a few minutes on macOS and unblocks the listed milestone:
 
-| # | Pytanie | Jak | Blokuje |
+| # | Question | How | Blocks |
 |---|---|---|---|
-| S1 | Czy `--import` z `execArgv` dociera do procesu serwera Next i kiedy `inspector.url()` staje się dostępne? | sonda z [załącznika B](#załącznik-b-sonda-dla-prawdziwego-nextjs), linia `execArgv` | M3 |
-| S2 | Czy `next dev --inspect=127.0.0.1:<port>` przyjmuje adres z hostem? | uruchomić ręcznie | M3 |
-| S3 | Czy zewnętrzna warstwa `fetch` daje ramkę strony (wariant B w sondzie) i czy sam subskrybent też ją widzi (wariant A)? | sonda, linie A i B | M5 |
-| S4 | Format map Turbopacka: czy chunk ma `sourceMappingURL`, czy mapa ma `sections`, jakie są `sources`? | `tail -c 200` chunku, `head -c 400` mapy | M5 |
-| S5 | ~~Co zwraca `get_request_insights` z `experimental.requestInsights`?~~ **Rozstrzygnięte 2026-11-20** (kod Next 16.4.6, canary 16.5): `fetch` z URL, metodą, statusem, czasem do nagłówków, statusem cache i `requestId`/`htmlRequestId`/`route`; bez nagłówków, treści i `node:http`. Złączenie z naszymi wynikami: `next_request_id`, `next_html_request_id` | Next DevTools MCP | M6 |
-| S6 | Node 26: jednostki `wallTime`, treść żądań, limity bufora | `npm test` i sondy zgodności na Node 26 | M2 |
+| S1 | Does `--import` from `execArgv` reach the Next server process, and when does `inspector.url()` become available? | the probe from [appendix B](#appendix-b-a-probe-for-real-nextjs), the `execArgv` line | M3 |
+| S2 | Does `next dev --inspect=127.0.0.1:<port>` accept an address with a host? | run it by hand | M3 |
+| S3 | Does the outer `fetch` layer give the page frame (variant B in the probe), and does the subscriber alone see it too (variant A)? | probe, lines A and B | M5 |
+| S4 | Turbopack map format: does the chunk have `sourceMappingURL`, does the map have `sections`, what are the `sources`? | `tail -c 200` of the chunk, `head -c 400` of the map | M5 |
+| S5 | ~~What does `get_request_insights` with `experimental.requestInsights` return?~~ **Resolved 2026-11-20** (code of Next 16.4.6, canary 16.5): `fetch` with URL, method, status, time to headers, cache status and `requestId`/`htmlRequestId`/`route`; no headers, bodies or `node:http`. Join with our results: `next_request_id`, `next_html_request_id` | Next DevTools MCP | M6 |
+| S6 | Node 26: `wallTime` units, request bodies, buffer limits | `npm test` and compatibility probes on Node 26 | M2 |
 
-### M1. Refaktor bez zmiany zachowania (M)
+### M1. Refactor without behavior change (M)
 
-**Cel:** ten sam program w modułach z rozdziału 4. Żadnej nowej funkcji, żadnej poprawki.
+**Goal:** the same program in the modules of section 4. No new feature, no fix.
 
-**Kroki** (każdy osobno, każdy zielony):
+**Steps** (each separate, each green):
 
-1. Charakteryzacja: `test/golden/` ze zrzutami `tools/list` i wyników pięciu narzędzi dla scenariusza e2e, wygenerowanymi z obecnego prototypu (pola zmienne znormalizowane: id, pid, porty, czasy).
-2. `scripts/record-fixture.mjs` i pierwsze nagrania zdarzeń z `test/fixtures/fake-app.mjs` na Node 22 i 24.
-3. Wydzielenie części czystych: `analyze/*` (algorytm bez zmian), `store` (`select`), `mcp/render` (`row`). Testy jednostkowe analizatorów na nagraniach.
-4. Wydzielenie krawędzi: `config`, `cdp-client`, `session`, `ingest`, `mcp/server`, `mcp/tools`.
-5. `collector.mjs` jako fabryka; `src/outbound-mcp.mjs` zostaje trzyliniowym punktem wejścia.
-6. Testy znanych wad z rozdziału 2 dopisane jako `todo`, żeby były widoczne w raporcie.
+1. Characterization: `test/golden/` with snapshots of `tools/list` and the five tools' results for the e2e scenario, generated from the current prototype (volatile fields normalized: id, pid, ports, times).
+2. `scripts/record-fixture.mjs` and the first event recordings from `test/fixtures/fake-app.mjs` on Node 22 and 24.
+3. Extracting the pure parts: `analyze/*` (algorithm unchanged), `store` (`select`), `mcp/render` (`row`). Analyzer unit tests on recordings.
+4. Extracting the edges: `config`, `cdp-client`, `session`, `ingest`, `mcp/server`, `mcp/tools`.
+5. `collector.mjs` as a factory; `src/outbound-mcp.mjs` stays a three-line entry point.
+6. Tests for the known defects from section 2 added as `todo`, so they show in the report.
 
-**Kryteria akceptacji:**
+**Acceptance criteria:**
 
-- `test/e2e.test.mjs` i `test/helpers/mcp-client.mjs` są nietknięte i przechodzą 5/5 na Node 22 i 24;
-- zrzuty golden są identyczne przed refaktorem i po nim;
-- zmienne środowiskowe, nazwy narzędzi, `serverInfo` i ścieżka `src/outbound-mcp.mjs` bez zmian (README pozostaje prawdziwe);
-- żaden moduł nie przekracza około 250 linii; import wszystkich modułów w jednym procesie nie zostawia otwartych uchwytów (test);
-- CI: macierz Node 24 i bieżący (pierwotnie także 22; wsparcie dla 22 wycofane 2026-11-19).
+- `test/e2e.test.mjs` and `test/helpers/mcp-client.mjs` are untouched and pass 5/5 on Node 22 and 24;
+- golden snapshots are identical before and after the refactor;
+- environment variables, tool names, `serverInfo` and the `src/outbound-mcp.mjs` path unchanged (the README stays true);
+- no module exceeds about 250 lines; importing all modules in one process leaves no open handles (a test);
+- CI: matrix of Node 24 and current (originally also 22; Node 22 support withdrawn on 2026-11-19).
 
-### M2. Poprawność i bezpieczeństwo rdzenia (M)
+### M2. Core correctness and security (M)
 
-**Cel:** naprawa wad 2, 3, 4 i 6 oraz przygotowanie modelu pod kolejne kamienie.
+**Goal:** fix defects 2, 3, 4 and 6 and prepare the model for the next milestones.
 
-**Kroki:**
+**Steps:**
 
-1. Klucz rekordu per sesja (wada 3).
-2. Wykrywanie flagi po `process.execArgv`; `inspector_status` z powodami (wada 2).
-3. Stan treści, treści binarne, limity w `Network.enable`, tryby `eager`/`lazy`/`off` (wada 4).
-4. Normalizacja czasu, `ttfb_ms`, zapytania w toku w analizie.
-5. Redakcja przy przyjęciu: nagłówki i parametry URL (wada 6).
-6. Higiena MCP: wersja z `package.json`, lista wspieranych wersji protokołu zamiast echa, pole `instructions`.
+1. A per-session record key (defect 3).
+2. Detecting the flag through `process.execArgv`; `inspector_status` with reasons (defect 2).
+3. Body state, binary bodies, limits in `Network.enable`, `eager`/`lazy`/`off` modes (defect 4).
+4. Time normalization, `ttfb_ms`, in-flight requests in the analysis.
+5. Redaction at ingestion: headers and URL parameters (defect 6).
+6. MCP hygiene: version from `package.json`, a list of supported protocol versions instead of an echo, the `instructions` field.
 
-**Kryteria akceptacji:**
+**Acceptance criteria:**
 
-- testy `todo` z M1 dla wad 2, 3, 4 i 6 są zielone;
-- e2e „restart”: po restarcie aplikacji na tym samym porcie widać 6 rekordów, nie 3;
-- e2e „bez flagi”: `network_inspection: false` i powód w statusie;
-- e2e „sekret”: wartość `Bearer SECRET` z aplikacji testowej nie występuje w żadnym wyniku żadnego narzędzia;
-- jednostkowe: `redact` (nagłówki, URL, skrót), `ingest` na nagraniach z Node 22 i 24 (w tym pusta treść `fetch` na 22 daje `unavailable`);
-- limity bufora: przy limicie z konfiguracji najstarsza z 40 odpowiedzi po 2 MB nie jest już dostępna w Node (dowód, że limit dotarł), a jej rekord ma treść pobraną wcześniej albo stan `evicted`;
-- zrzuty golden zmienione tylko addytywnie, z wpisem w changelogu.
+- the M1 `todo` tests for defects 2, 3, 4 and 6 are green;
+- e2e "restart": after an app restart on the same port, 6 records are visible, not 3;
+- e2e "no flag": `network_inspection: false` and a reason in the status;
+- e2e "secret": the value `Bearer SECRET` from the test app appears in no result of any tool;
+- unit: `redact` (headers, URL, digest), `ingest` on recordings from Node 22 and 24 (including the empty `fetch` body on 22 giving `unavailable`);
+- buffer limits: with the configured limit, the oldest of 40 responses of 2 MB is no longer available in Node (proof that the limit arrived), and its record has the body fetched earlier or state `evicted`;
+- golden snapshots changed only additively, with a changelog entry.
 
-### M3. Launcher, rejestr, samorejestracja (L)
+### M3. Launcher, registry, self-registration (L)
 
-**Cel:** aplikacje w monorepo startują bez podawania portów; brak inspektora nigdy nie jest cichy.
+**Goal:** apps in a monorepo start without specifying ports; a missing inspector is never silent.
 
-**Kroki:**
+**Steps:**
 
-1. `registry.mjs` i `hook/preload.mjs` w wersji samej rejestracji (bez haka).
-2. `discovery` czyta rejestr; skanowanie portów zostaje bez zmian (domyślny zakres, `INSPECTOR_PORTS`), a proces znaleziony dwiema drogami jest jednym celem.
-3. `cli/run.mjs`: polecenie `node`, pliki binarne pakietów, adapter Next, rezerwacja portu, oczekiwanie na zgłoszenie, ostrzeżenie, sygnały, kod wyjścia, wykrycie Bun. Punkt wyjścia: `src/cli/launch.mjs` z issue #5 (`outbound-next`: rozwiązanie `next` z cwd, `spawn` z `process.execPath` bez powłoki, sygnały, kod wyjścia, wykrycie Bun). `outbound-next` zostaje aliasem `outbound run -- next`.
+1. `registry.mjs` and `hook/preload.mjs` in a registration-only version (no hook).
+2. `discovery` reads the registry; port scanning stays unchanged (default range, `INSPECTOR_PORTS`), and a process found two ways is one target.
+3. `cli/run.mjs`: the `node` command, package binaries, the Next adapter, port reservation, waiting for registration, warning, signals, exit code, Bun detection. Starting point: `src/cli/launch.mjs` from issue #5 (`outbound-next`: resolving `next` from cwd, `spawn` with `process.execPath` without a shell, signals, exit code, Bun detection). `outbound-next` stays an alias of `outbound run -- next`.
 4. `cli/status.mjs`; `bin/outbound.mjs`; `exports["./register"]`.
-5. Aktualizacja `examples/nextjs-monorepo` i README.
+5. Updating `examples/nextjs-monorepo` and the README.
 
-**Kryteria akceptacji:**
+**Acceptance criteria:**
 
-- e2e: trzy aplikacje testowe uruchomione jednocześnie przez `outbound run` bez portów są widoczne w `inspector_status` pod właściwymi nazwami i na różnych portach;
-- e2e: trzy sposoby startu serwera (fork z `execArgv`, fork z `NODE_OPTIONS`, `inspector.open()` po starcie) rejestrują się poprawnie;
-- e2e: preferowany port zajęty przez obcy proces → launcher bierze następny; brak zgłoszenia w czasie → ostrzeżenie na stderr i wpis o problemie w `outbound status`;
-- e2e: po `SIGINT` rejestr i rezerwacje są puste; martwe wpisy po `SIGKILL` są pomijane przez kolektor;
-- e2e: dwie kopie tej samej aplikacji w różnych katalogach (worktree) dostają różne porty, a kolektor uruchomiony w jednym katalogu widzi tylko swoją;
-- ręcznie na macOS (S1, S2): `turbo run dev:inspect` z co najmniej dwiema aplikacjami Next; obie w statusie; zakładka Network w Chrome DevTools działa na wypisanych portach; `bun run dev:inspect` działa, `bun --bun` daje czytelny błąd.
+- e2e: three test apps started at once through `outbound run` without ports are visible in `inspector_status` under the right names and on different ports;
+- e2e: three ways of starting the server (fork with `execArgv`, fork with `NODE_OPTIONS`, `inspector.open()` after start) register correctly;
+- e2e: the preferred port taken by a foreign process → the launcher takes the next one; no registration in time → a warning on stderr and a problem entry in `outbound status`;
+- e2e: after `SIGINT` the registry and reservations are empty; stale entries after `SIGKILL` are skipped by the collector;
+- e2e: two copies of the same app in different directories (worktrees) get different ports, and a collector started in one directory sees only its own;
+- by hand on macOS (S1, S2): `turbo run dev:inspect` with at least two Next apps; both in the status; the Chrome DevTools Network tab works on the printed ports; `bun run dev:inspect` works, `bun --bun` gives a readable error.
 
-### M4. Hak w wersji 1 (M)
+### M4. Hook version 1 (M)
 
-**Cel:** naprawa wady 1, dokładne złączenie, zdarzenie końca żądania strony.
+**Goal:** fix defect 1, exact join, a page-request-end event.
 
-**Kroki:**
+**Steps:**
 
-1. `hook/hook.mjs`: kontekst strony, `link`, `page-end`, wypychanie do ujść; preload instaluje hak.
-2. `session`: `Runtime.addBinding`, `addSink`, wersja protokołu; wstrzyknięcie tylko po włączeniu.
-3. `correlate`: złączenie po `rid`, ścieżka awaryjna z prototypu.
-4. Usunięcie odpytywania co sekundę i `pollAll()` przed każdym narzędziem.
-5. Test e2e: obecny scenariusz dostaje jawne `OUTBOUND_INJECT=1` (świadoma zmiana wartości domyślnej, wpis w changelogu); dochodzi wariant z aplikacjami uruchomionymi z `--import`.
+1. `hook/hook.mjs`: page context, `link`, `page-end`, pushing to sinks; the preload installs the hook.
+2. `session`: `Runtime.addBinding`, `addSink`, protocol version; injection only when enabled.
+3. `correlate`: join by `rid`, the prototype's fallback path.
+4. Removing the per-second polling and `pollAll()` before every tool.
+5. E2E test: the current scenario gets an explicit `OUTBOUND_INJECT=1` (a deliberate change of the default, with a changelog entry); a variant with apps started with `--import` is added.
 
-**Kryteria akceptacji:**
+**Acceptance criteria:**
 
-- e2e „dwa kolektory”: oba widzą 100% przypisań do stron (dziś 18/18 i 0/18);
-- e2e: ten sam URL wołany jednocześnie przez dwie strony jest złączony po `requestId` (asercja na `cdpRequestId`, nie na URL);
-- jednostkowe: `correlate` na nagraniu z `rid: null` daje te same przypisania co prototyp;
-- hak w procesie potomnym: lista kontroli z E12 przechodzi; wyjątek rzucony wewnątrz haka (wstrzyknięty w teście) nie zmienia wyniku `fetch`;
-- e2e bez haka i bez zgody na wstrzyknięcie: status mówi `hook: none`, zapytania są widoczne bez strony;
-- narzut: pomiar mediany czasu `fetch` do lokalnego serwisu z hakiem i bez (raportowany, nieblokujący).
+- e2e "two collectors": both see 100% of page assignments (today 18/18 and 0/18);
+- e2e: the same URL called at once by two pages is joined by `requestId` (an assertion on `cdpRequestId`, not on the URL);
+- unit: `correlate` on a recording with `rid: null` gives the same assignments as the prototype;
+- hook in a child process: the E12 checklist passes; an exception thrown inside the hook (injected in the test) does not change the `fetch` result;
+- e2e without the hook and without injection consent: the status says `hook: none`, requests are visible without a page;
+- overhead: the median `fetch` time to a local service with and without the hook is measured (reported, non-blocking).
 
-### M5. Miejsce w kodzie (L)
+### M5. Place in code (L)
 
-**Cel:** `origin` wskazuje plik źródłowy i linię także w Next.js.
+**Goal:** `origin` points at the source file and line in Next.js too.
 
-**Kroki:**
+**Steps:**
 
-1. Hak: zewnętrzna warstwa `fetch`, stos jako `CallSite`, rezerwa z ramek async, stos synchroniczny dla `node:http`.
-2. `frames.mjs`: klasyfikacja (kod aplikacji, biblioteki, wnętrze frameworka), wybór miejsca wywołania.
-3. `sourcemap.mjs`: odczyt `sourceMappingURL`, `SourceMap`, cztery schematy ścieżek, pamięć podręczna po czasie modyfikacji, `stale`.
-4. `get_server_request`: `origin`, `call_stack`, `snippet`; `list_server_requests`: `origin` w wierszu.
+1. Hook: an outer `fetch` layer, the stack as `CallSite`, a fallback from async frames, a synchronous stack for `node:http`.
+2. `frames.mjs`: classification (app code, libraries, framework internals), call site choice.
+3. `sourcemap.mjs`: reading `sourceMappingURL`, `SourceMap`, four path schemes, a cache by modification time, `stale`.
+4. `get_server_request`: `origin`, `call_stack`, `snippet`; `list_server_requests`: `origin` in the row.
 
-**Kryteria akceptacji:**
+**Acceptance criteria:**
 
-- jednostkowe: mapa zwykła i indeksowa z `fixtures/` (wygenerowane `tsc` i sklejone w chunk) dają oczekiwane pliki i linie; ścieżki względne, `file://`, `turbopack:///[project]/`, `webpack://`;
-- e2e z opakowaniem jak w Next (jeden `await` przed właściwym `fetch`): trzy kolejne `fetch` dają trzy różne linie strony, dwa `fetch` w `Promise.all` dają dwie różne linie;
-- zadanie CI z prawdziwym Next (Turbopack) na `examples/nextjs-monorepo`: `origin` dla `/seq` kończy się na `app/seq/page.js:5`, `:6`, `:7`;
-- gdy mapa nie istnieje albo jest uszkodzona, wynik zawiera ścieżkę chunku i `mapped: false`, bez błędu;
-- **punkt decyzyjny (S3):** jeśli zewnętrzna warstwa nie działa w prawdziwym Next, wdrażana jest sama rezerwa (ramki async), a ADR 0005 dostaje aktualizację z wynikiem.
+- unit: a regular and an index map from `fixtures/` (generated with `tsc` and joined into a chunk) give the expected files and lines; relative paths, `file://`, `turbopack:///[project]/`, `webpack://`;
+- e2e with a Next-like wrapper (one `await` before the real `fetch`): three consecutive `fetch` calls give three different page lines, two `fetch` calls in `Promise.all` give two different lines;
+- a CI job with real Next (Turbopack) on `examples/nextjs-monorepo`: `origin` for `/seq` ends with `app/seq/page.js:5`, `:6`, `:7`;
+- when the map does not exist or is broken, the result contains the chunk path and `mapped: false`, without an error;
+- **decision point (S3):** if the outer layer does not work in real Next, only the fallback (async frames) ships, and ADR 0005 gets an update with the result.
 
-### M6. Ergonomia dla agenta (M)
-**Status (2026-11-19): zrobione.** Wszystkie kryteria akceptacji mają testy (`test/unit/budget.test.mjs`, `test/unit/mcp-server.test.mjs`, `test/e2e/settle.test.mjs`, `test/e2e/protocol.test.mjs`, wada 5 w `test/e2e/known-defects.test.mjs`). Odstępstwa: `list_server_requests` zwraca obiekt zamiast tablicy (kursor i znacznik przycięcia wymagają miejsca), filtr `tag` przeniesiony do M7 (wymaga haka), redakcja pól JSON w treściach dodana w tym kamieniu.
+### M6. Agent ergonomics (M)
+**Status (2026-11-19): done.** All acceptance criteria have tests (`test/unit/budget.test.mjs`, `test/unit/mcp-server.test.mjs`, `test/e2e/settle.test.mjs`, `test/e2e/protocol.test.mjs`, defect 5 in `test/e2e/known-defects.test.mjs`). Deviations: `list_server_requests` returns an object instead of an array (the cursor and truncation marker need room), the `tag` filter moved to M7 (needs the hook), JSON field redaction in bodies added in this milestone.
 
-**Cel:** odpowiedzi mieszczą się w budżecie, a protokół jest gotowy na klientów nowej ery.
+**Goal:** responses fit the budget, and the protocol is ready for new-era clients.
 
-**Kroki:**
+**Steps:**
 
-1. `mcp/render`: zwarty JSON, budżet, `truncated`, wskazówka.
-2. `analyze_server_timeline`: podsumowanie domyślnie, `page_request_id`, `detail`, `settle_ms`; ustalenia: duplikaty, wolne, w toku; `verdict_code` obok dzisiejszego opisu.
-3. `list_server_requests`: nowe filtry, `next_since_id`. `get_server_request`: `body_offset`.
-4. `mcp/server`: `server/discover`, metadane per żądanie, `resultType`, błąd nieobsługiwanej wersji; `initialize` zostaje.
+1. `mcp/render`: compact JSON, budget, `truncated`, a hint.
+2. `analyze_server_timeline`: a summary by default, `page_request_id`, `detail`, `settle_ms`; findings: duplicates, slow, in flight; `verdict_code` next to today's description.
+3. `list_server_requests`: new filters, `next_since_id`. `get_server_request`: `body_offset`.
+4. `mcp/server`: `server/discover`, per-request metadata, `resultType`, the unsupported-version error; `initialize` stays.
 
-**Kryteria akceptacji:**
+**Acceptance criteria:**
 
-- test własności: dla dowolnej zawartości magazynu (losowe nagrania do 5000 zapytań) każdy wynik jest poprawnym JSON-em nie dłuższym niż limit;
-- nagranie 132 zapytań: podsumowanie `analyze_server_timeline` ma najwyżej 6000 znaków (dziś 88 072);
-- stronicowanie: przejście kursorem zwraca każdy rekord dokładnie raz;
-- `settle_ms`: analiza wywołana w trakcie strony z trzema zapytaniami po 150 ms zwraca komplet trzech;
-- protokół: testy obu er (sonda `server/discover`, żądanie z metadanymi, nieobsługiwana wersja, `initialize`); opcjonalnie oficjalny klient;
-- zrzuty golden zaktualizowane; changelog opisuje nowe wartości domyślne.
+- property test: for any store content (random recordings of up to 5000 requests), every result is valid JSON no longer than the limit;
+- a recording of 132 requests: the `analyze_server_timeline` summary is at most 6000 characters (88,072 today);
+- paging: walking with the cursor returns every record exactly once;
+- `settle_ms`: analysis called during a page with three requests of 150 ms each returns all three;
+- protocol: tests of both eras (`server/discover` probe, a request with metadata, an unsupported version, `initialize`); optionally the official client;
+- golden snapshots updated; the changelog describes the new defaults.
 
-### M7. Przeglądarka i wydanie 1.0 (M)
+### M7. Browser and the 1.0 release (M)
 
-**Kroki:**
+**Steps:**
 
-1. Hak: nagłówek znacznika, rodzaj żądania strony, identyfikator akcji, odczyt `traceparent`; opcjonalny nagłówek odpowiedzi.
-2. Narzędzia: filtr `tag`; pola `kind`, `action_id`, `trace`.
+1. Hook: the marker header, page request kind, action id, reading `traceparent`; an optional response header.
+2. Tools: a `tag` filter; `kind`, `action_id`, `trace` fields.
 3. `cli/tail.mjs`.
-4. Dokumentacja: przebieg pracy z Chrome DevTools MCP i Next DevTools MCP; instalacja w monorepo; polityka danych.
-5. Sondy zgodności w harmonogramie tygodniowym na nightly; usunięcie aliasów oznaczonych w changelogu.
+4. Documentation: the workflow with Chrome DevTools MCP and Next DevTools MCP; installation in a monorepo; data policy.
+5. Compatibility probes on a weekly nightly schedule; removing the aliases marked in the changelog.
 
-**Kryteria akceptacji:**
+**Acceptance criteria:**
 
-- e2e: dwa równoległe żądania tej samej strony z różnymi znacznikami są rozdzielane filtrem `tag`;
-- ręcznie: agent z Chrome DevTools MCP ustawia znacznik, otwiera stronę i dostaje z `analyze_server_timeline` wyłącznie ruch tej karty;
-- wszystkie wady z rozdziału 2 zamknięte; wszystkie założenia **[A]** z tego dokumentu potwierdzone albo zastąpione;
-- README opisuje instalację w pięciu krokach i tabelę „objaw → przyczyna → naprawa” opartą na `inspector_status`.
-
----
-
-## 9. Otwarte pytania
-
-1. **Dystrybucja.** Repozytorium prywatne i zależność z gita, rejestr wewnętrzny, czy publiczny npm? Od tego zależy też nazwa pliku wykonywalnego (`outbound` jest krótkie, ale nie jest zastrzeżone).
-2. **Sposób uruchamiania w pracy.** Czy skrypty aplikacji mogą dostać `outbound run -- next dev` i czy `.mcp.json` może trafić do repozytorium? Czy dev rusza przez `turbo`, `bun run`, czy własny skrypt równoległy?
-3. **Polityka danych.** Czy treści odpowiedzi i nagłówki wewnętrznych integracji mogą trafiać do dostawcy modelu? Jaki ma być domyślny tryb treści i jakie nagłówki firmowe dopisać do redakcji?
-4. **SDK MCP.** Czy akceptujemy własną implementację obu er protokołu (mniej zależności, więcej pilnowania specyfikacji), czy zespół woli oficjalny SDK od razu?
-5. **`experimental.requestInsights` w Next 16.4.** Czy ocenić je jako uzupełnienie (trafienia w cache) przed M6?
-6. **Język wyników.** Werdykty są dziś po polsku. Zostają, czy przechodzimy na angielski z kodami maszynowymi (`verdict_code`)?
-7. **Zakres.** Czy ktoś używa `next dev --webpack` albo klientów na `node:http` (axios, got) na tyle, żeby miejsce wywołania było tam potrzebne?
-8. **Wersja Node.** ~~Czy wszyscy mają Node ≥ 24?~~ **Rozstrzygnięte (2026-11-19):** docelowo Node ≥ 24. `engines >= 24`, CI na 24 i najnowszej; Wsparcie Node 22 usunięte: kolektor i `outbound-next` nie startują na Node < 24, a proces aplikacji na Node < 24 nie jest podsłuchiwany. Przy weryfikacji na 24.22.3 znaleziony błąd nodejs/node#66551 (`res.setEncoding()` przy włączonej inspekcji sieci niszczy połączenie); kolektor instaluje obejście w procesie aplikacji (`src/hook/node-fixes.mjs`).
-9. **Podgląd dla ludzi.** Czy `outbound tail` w terminalu jest potrzebne, czy wystarcza Chrome DevTools?
+- e2e: two parallel requests to the same page with different markers are separated by the `tag` filter;
+- by hand: an agent with Chrome DevTools MCP sets a marker, opens the page and gets only that tab's traffic from `analyze_server_timeline`;
+- all defects from section 2 closed; all **[A]** assumptions in this document confirmed or replaced;
+- the README describes installation in five steps and a "symptom → cause → fix" table based on `inspector_status`.
 
 ---
 
-## Załącznik A: eksperymenty
+## 9. Open questions
 
-Środowisko: kontener Linux, Node 22.23.5 i 24.22.3, Bun 1.4.4. Bez Next.js i bez dostępu do rejestru npm, więc wszystko, co dotyczy Next, jest symulacją albo założeniem. Symulacja opakowania `fetch` (E10, E11, E17) odtwarza kształt znany z kodu Next (asynchroniczny patch, deduplikacja, tracer), ale nie była porównana z kodem wersji 16.4. Skrypty były jednorazowe i nie są częścią repozytorium; każdy z nich powinien stać się sondą zgodności albo testem w kamieniu podanym w rozdziale 8.
+1. **Distribution.** A private repository and a git dependency, an internal registry, or public npm? The executable name also depends on it (`outbound` is short, but not reserved).
+2. **How apps start at work.** Can app scripts get `outbound run -- next dev`, and can `.mcp.json` go into the repository? Does dev start through `turbo`, `bun run` or a custom parallel script?
+3. **Data policy.** May response bodies and headers of internal integrations reach the model provider? What should the default body mode be, and which company headers should be added to redaction?
+4. **MCP SDK.** Do we accept our own implementation of both protocol eras (fewer dependencies, more spec tracking), or does the team prefer the official SDK right away?
+5. **`experimental.requestInsights` in Next 16.4.** Should it be assessed as a complement (cache hits) before M6? **Resolved 2026-11-20:** see [nextjs-mcp-comparison.md](nextjs-mcp-comparison.md).
+6. **Result language.** ~~Verdicts are in Polish today.~~ **Resolved (0.4.0):** tool output is English, with machine codes (`verdict_code`).
+7. **Scope.** Does anyone use `next dev --webpack` or `node:http` clients (axios, got) enough that a call site is needed there?
+8. **Node version.** ~~Does everyone have Node ≥ 24?~~ **Resolved (2026-11-19):** Node ≥ 24 is the target. `engines >= 24`, CI on 24 and the latest; Node 22 support removed: the collector and `outbound-next` do not start on Node < 24, and an app process on Node < 24 is not inspected. Verification on 24.22.3 found Node bug nodejs/node#66551 (`res.setEncoding()` with network inspection enabled destroys the connection); the collector installs a workaround in the app process (`src/hook/node-fixes.mjs`).
+9. **A view for people.** Is `outbound tail` in the terminal needed, or is Chrome DevTools enough?
 
-| # | Pytanie | Wynik (taki sam na 22 i 24, chyba że zaznaczono) | Wniosek |
+---
+
+## Appendix A: experiments
+
+Environment: Linux container, Node 22.23.5 and 24.22.3, Bun 1.4.4. Without Next.js and without access to the npm registry, so everything about Next is a simulation or an assumption. The `fetch` wrapper simulation (E10, E11, E17) reproduces the shape known from Next's code (async patch, deduplication, tracer), but was not compared with the 16.4 code. The scripts were one-off and are not part of the repository; each should become a compatibility probe or a test in the milestone named in section 8.
+
+| # | Question | Result (the same on 22 and 24 unless noted) | Conclusion |
 |---|---|---|---|
-| E1 | Czy test e2e przechodzi na obu wersjach? | 5/5 na 22.23.5 i 24.22.3. | Jest siatka bezpieczeństwa dla M1. |
-| E2 | Czy flagę sieciową da się podać poza linią poleceń? | `NODE_OPTIONS`: odrzucona, kod 9. `node.config.json` (Node 24): „not allowed option”. `--experimental-default-config-file` w `NODE_OPTIONS`: odrzucona. `--inspect=127.0.0.1:0` i `--import` w `NODE_OPTIONS`: dozwolone. | Launcher albo ręczne skrypty są konieczne. |
-| E3 | Co zwraca `Network.enable` bez flagi? | `{}` (sukces), zero zdarzeń. Prototyp raportuje `network_inspection: true`. | Możliwość wykrywać po `process.execArgv`. |
-| E4 | Kształt zdarzeń | `timestamp` w sekundach (monotoniczny), `wallTime` w milisekundach, `requestId` = `node-network-event-N` od 1 w każdym procesie, `loadingFinished` bez rozmiaru, nagłówki żądania zawierają `authorization` wprost. | Normalizacja czasu, klucz per sesja, redakcja. |
-| E5 | Treść odpowiedzi | Node 22, `fetch`: `{"body":""}` bez błędu. Node 24, `fetch`: pełna, także gdy aplikacja jej nie odczytała. `node:http`: pełna na obu. Kanały `undici:request:bodyChunkSent/Received` są tylko na 24. | Jawny stan treści; Node 24 jako zalecany. |
-| E6 | Treść żądania | `getRequestPostData` działa tylko dla `fetch` na Node 24 i tylko z `charset` w `content-type`. Bez `charset`: „Unable to serialize binary request body”. `node:http`: błąd albo pusty łańcuch. Node 22: niedostępna. | Treść żądania jako dane opcjonalne. |
-| E7 | Bufor treści w procesie aplikacji (Node 24) | Bez parametrów: zatrzymane 50 ze 150 odpowiedzi po 2 MB, czyli około 100 MB; RSS 61 → 266 MB. Z `maxTotalBufferSize`/`maxResourceBufferSize`: limity honorowane, najstarsze treści usuwane („Request not found”), treść 2 MB obcięta do limitu 1 MB bez sygnału. Limity są per sesja: sesja z domyślnymi limitami nadal dostaje pełne treści. | Kolektor zawsze podaje limity i wykrywa obcięcie. |
-| E8 | Stos inicjatora CDP | Tylko ramki synchroniczne. Po `await` w opakowaniu zostaje sama ramka opakowania. `Debugger.enable` + `setAsyncCallStackDepth(32)`: brak `parent`. | Stos inicjatora nie rozwiąże problemu Next. |
-| E9 | Stos w subskrybencie `undici:request:create`, `fetch` wołany wprost | Ramka użytkownika jest w stosie synchronicznym, pod 27–33 ramkami undici. Przy domyślnym limicie 10 ramek: zero ramek użytkownika. | Zawsze podnosić limit na czas przechwycenia. |
-| E10 | To samo po opakowaniu jak w Next (async `fetch` → tracer z `then/catch/finally` → `await` → `doOriginalFetch` → `dedupeFetch`) | 0 mikrozadań: ramka synchroniczna. 1 mikrozadanie: brak ramek użytkownika. 2 i więcej: ramki `at async`, pozycja = `await`; w `Promise.all` wspólna dla wszystkich zapytań. | Sam subskrybent jest kruchy; potrzebna zewnętrzna warstwa. |
-| E11 | Zewnętrzna warstwa `fetch` (Proxy za akcesorem + ALS) | Przy 1 mikrozadaniu: dokładne pozycje, różne dla dwóch `fetch` w `Promise.all`; helper z `await` przed `fetch`: `getUser ← async pageHelper`. Symulowany patch Next wykonany raz (`__nextPatched` widoczne przez Proxy). Koszt przechwycenia stosu 30 ramek: 9,8 µs (22), 13,9 µs (24). | Opcja D jest wykonalna i tania. |
-| E12 | Czy akcesor i Proxy psują typowe użycia? | 13 kontroli bez zastrzeżeń: `typeof`, `instanceof Function`, `name`/`length`, stabilna tożsamość, `bind`, destrukturyzacja, `fetch(Request)`, podmiana przez bibliotekę po nas, błąd sieci, `AbortSignal`. Widoczna różnica: deskryptor właściwości jest akcesorem. | Ryzyko niskie, ale realne dla kodu badającego deskryptor. |
-| E13 | Czy hak widzi `requestId` inspektora? | Tak: `Symbol(kInspectorRequestId)` na obiekcie żądania undici i `ClientRequest`. W chwili `create` jeszcze go nie ma (nasz subskrybent jest wcześniej), w mikrozadaniu już jest; dla `http.client.request.start` od razu. Przed `Network.enable` symbolu nie ma. | Złączenie dokładne z odczytem w mikrozadaniu. |
-| E14 | `Runtime.addBinding` w inspektorze Node | Działa bez `Runtime.enable`; zdarzenie dostaje tylko sesja, która założyła wiązanie; wywołanie z kodu aplikacji (timer) dociera; po rozłączeniu funkcja zostaje i nic nie robi. | Wypychanie zamiast odpytywania. |
-| E15 | Dwa serwery MCP prototypu na jednej aplikacji | Serwer A: 18/18 zapytań ze stroną. Serwer B: 0/18. | Wada 1. |
-| E16 | Restart aplikacji na tym samym porcie (prototyp) | Przed: 3 rekordy. Po restarcie i 3 nowych zapytaniach: 3 rekordy zamiast 6. | Wada 3. |
-| E17 | Hak w wersji 1 od końca do końca | Dwa kolektory naraz: każdy 5/5 komunikatów, 5/5 z `rid` równym `requestId` z CDP, miejsca wywołania dla `fetch` (także w `Promise.all`) i `http.get`, komplet `page-end`. Tak samo przy instalacji przez `--import` i przez `Runtime.evaluate`. | Projekt haka z 6.2 działa. |
-| E18 | Dziedziczenie flag i porty przy `fork` | `execArgv` dziedziczone domyślnie (flaga sieciowa przechodzi). Stały port u rodzica i dziecka: „address already in use”, `inspector.url()` = `undefined`. Port 0: każdy proces własny port. `execArgv` zastąpione: flaga ginie. | Wyjaśnia konfigurację z README; podstawa samorejestracji. |
-| E19 | `inspector.open()` po starcie | Z flagą w linii poleceń: zdarzenia sieciowe działają. `inspector.url()` podaje faktyczny port. | Hak musi sprawdzać `inspector.url()` także z opóźnieniem. |
-| E20 | Launcher i samorejestracja (prototyp) | Trzy aplikacje uruchomione jednocześnie, trzy sposoby startu serwera: trzy wpisy, trzy różne stabilne porty, każdy odpowiada po CDP i ma flagę. Po `SIGINT` wpisy zostają (proces zabity sygnałem nie emituje `exit`), dopóki nie sprzątnie ich launcher. | Projekt z 6.1 działa; sprzątanie po stronie launchera i kolektora. |
-| E21 | Bun 1.4.4 jako uruchamiacz skryptów | `bun run` i `bunx` uruchamiają plik z `#!/usr/bin/env node` pod Node i ustawiają `npm_package_name`. `bun --bun run` uruchamia go pod Bun. | Launcher działa z Bun jako menedżerem; wykrywać `--bun`. |
-| E22 | `SourceMap` z `node:module` | Mapa z `tsc` i mapa indeksowa (`sections`, ścieżki `turbopack:///[project]/…`) dają poprawne pliki i linie; `findEntry` (od zera) i `findOrigin` (od jedynki) dostępne. | Zero zależności dla map źródeł. |
-| E23 | Rozmiar odpowiedzi prototypu | `tools/list`: 2659 znaków. 11 zapytań: `analyze` 7549, `list` 3058. 132 zapytania: `analyze` 88 072 (bez wcięć 56 398), `list` z limitem 50: 13 966. | Wada 5; budżet i podsumowanie. |
-| E24 | Kanały i API pomocnicze | `http.server.request.start`, `http.server.response.finish`, `http.client.request.created`, `http.client.request.start`, `undici:request:create` publikują na obu wersjach. `util.getCallSites` nie zwraca ramek async. | Lista kanałów haka; stos przez `Error.captureStackTrace`. |
+| E1 | Does the e2e test pass on both versions? | 5/5 on 22.23.5 and 24.22.3. | There is a safety net for M1. |
+| E2 | Can the network flag be given outside the command line? | `NODE_OPTIONS`: rejected, code 9. `node.config.json` (Node 24): "not allowed option". `--experimental-default-config-file` in `NODE_OPTIONS`: rejected. `--inspect=127.0.0.1:0` and `--import` in `NODE_OPTIONS`: allowed. | A launcher or hand-written scripts are necessary. |
+| E3 | What does `Network.enable` return without the flag? | `{}` (success), zero events. The prototype reports `network_inspection: true`. | Detect the capability through `process.execArgv`. |
+| E4 | Event shape | `timestamp` in seconds (monotonic), `wallTime` in milliseconds, `requestId` = `node-network-event-N` from 1 in every process, `loadingFinished` without a size, request headers contain `authorization` verbatim. | Time normalization, a per-session key, redaction. |
+| E5 | Response body | Node 22, `fetch`: `{"body":""}` without an error. Node 24, `fetch`: complete, even when the app did not read it. `node:http`: complete on both. The `undici:request:bodyChunkSent/Received` channels exist only on 24. | An explicit body state; Node 24 recommended. |
+| E6 | Request body | `getRequestPostData` works only for `fetch` on Node 24 and only with `charset` in `content-type`. Without `charset`: "Unable to serialize binary request body". `node:http`: an error or an empty string. Node 22: unavailable. | Request body as optional data. |
+| E7 | Body buffer in the app process (Node 24) | Without parameters: 50 of 150 responses of 2 MB kept, i.e. about 100 MB; RSS 61 → 266 MB. With `maxTotalBufferSize`/`maxResourceBufferSize`: limits honored, the oldest bodies removed ("Request not found"), a 2 MB body cut to the 1 MB limit without a signal. Limits are per session: a session with default limits still gets full bodies. | The collector always passes limits and detects truncation. |
+| E8 | CDP initiator stack | Synchronous frames only. After an `await` in the wrapper, only the wrapper frame remains. `Debugger.enable` + `setAsyncCallStackDepth(32)`: no `parent`. | The initiator stack will not solve the Next problem. |
+| E9 | Stack in the `undici:request:create` subscriber, `fetch` called directly | The user frame is in the synchronous stack, under 27–33 undici frames. With the default limit of 10 frames: zero user frames. | Always raise the limit during capture. |
+| E10 | The same after a Next-like wrapper (async `fetch` → tracer with `then/catch/finally` → `await` → `doOriginalFetch` → `dedupeFetch`) | 0 microtasks: a synchronous frame. 1 microtask: no user frames. 2 or more: `at async` frames, position = the `await`; in `Promise.all` shared by all requests. | The subscriber alone is fragile; an outer layer is needed. |
+| E11 | An outer `fetch` layer (a Proxy behind an accessor + ALS) | With 1 microtask: exact positions, different for two `fetch` calls in `Promise.all`; a helper with `await` before `fetch`: `getUser ← async pageHelper`. The simulated Next patch applied once (`__nextPatched` visible through the Proxy). Cost of capturing a 30-frame stack: 9.8 µs (22), 13.9 µs (24). | Option D is feasible and cheap. |
+| E12 | Do the accessor and Proxy break typical uses? | 13 checks without caveats: `typeof`, `instanceof Function`, `name`/`length`, stable identity, `bind`, destructuring, `fetch(Request)`, replacement by a library after us, a network error, `AbortSignal`. A visible difference: the property descriptor is an accessor. | Low risk, but real for code inspecting the descriptor. |
+| E13 | Does the hook see the inspector's `requestId`? | Yes: `Symbol(kInspectorRequestId)` on the undici request object and on `ClientRequest`. At `create` it is not there yet (our subscriber runs earlier), in a microtask it is; for `http.client.request.start` immediately. Before `Network.enable` the symbol is absent. | An exact join with a read in a microtask. |
+| E14 | `Runtime.addBinding` in the Node inspector | Works without `Runtime.enable`; only the session that created the binding gets the event; a call from app code (a timer) arrives; after disconnecting the function stays and does nothing. | Push instead of polling. |
+| E15 | Two prototype MCP servers on one app | Server A: 18/18 requests with a page. Server B: 0/18. | Defect 1. |
+| E16 | App restart on the same port (prototype) | Before: 3 records. After the restart and 3 new requests: 3 records instead of 6. | Defect 3. |
+| E17 | Hook version 1 end to end | Two collectors at once: each 5/5 messages, 5/5 with `rid` equal to the CDP `requestId`, call sites for `fetch` (also in `Promise.all`) and `http.get`, all `page-end`s. The same with installation via `--import` and via `Runtime.evaluate`. | The hook design from 6.2 works. |
+| E18 | Flag inheritance and ports with `fork` | `execArgv` inherited by default (the network flag passes). A fixed port in parent and child: "address already in use", `inspector.url()` = `undefined`. Port 0: each process its own port. `execArgv` replaced: the flag is lost. | Explains the README configuration; the basis of self-registration. |
+| E19 | `inspector.open()` after start | With the flag on the command line: network events work. `inspector.url()` gives the actual port. | The hook must check `inspector.url()` with a delay too. |
+| E20 | Launcher and self-registration (prototype) | Three apps started at once, three ways of starting the server: three entries, three different stable ports, each answers over CDP and has the flag. After `SIGINT` the entries stay (a process killed by a signal does not emit `exit`) until the launcher cleans them. | The design from 6.1 works; cleanup on the launcher and collector side. |
+| E21 | Bun 1.4.4 as the script runner | `bun run` and `bunx` run a file with `#!/usr/bin/env node` under Node and set `npm_package_name`. `bun --bun run` runs it under Bun. | The launcher works with Bun as the package manager; detect `--bun`. |
+| E22 | `SourceMap` from `node:module` | A `tsc` map and an index map (`sections`, `turbopack:///[project]/…` paths) give correct files and lines; `findEntry` (zero-based) and `findOrigin` (one-based) available. | Zero dependencies for source maps. |
+| E23 | Prototype response size | `tools/list`: 2659 characters. 11 requests: `analyze` 7549, `list` 3058. 132 requests: `analyze` 88,072 (56,398 without indentation), `list` with limit 50: 13,966. | Defect 5; budget and summary. |
+| E24 | Channels and helper APIs | `http.server.request.start`, `http.server.response.finish`, `http.client.request.created`, `http.client.request.start`, `undici:request:create` publish on both versions. `util.getCallSites` does not return async frames. | The hook's channel list; the stack through `Error.captureStackTrace`. |
 
 ---
 
-## Załącznik B: sonda dla prawdziwego Next.js
+## Appendix B: a probe for real Next.js
 
-Zapisz jako `probe-next.mjs` w katalogu aplikacji i uruchom:
+Save as `probe-next.mjs` in the app directory and run:
 
 ```bash
 node --experimental-network-inspection --import ./probe-next.mjs \
   "$(node -p "require.resolve('next/dist/bin/next')")" dev --inspect=127.0.0.1:9231
 ```
 
-Po wejściu na stronę z `fetch` sonda wypisze dla każdego zapytania dwa stosy. Odpowiada na pytania S1 i S3 z rozdziału 8, a przy okazji na S2: jeśli Next odrzuci adres z hostem, wystarczy `--inspect=9231`.
+After visiting a page with `fetch`, the probe prints two stacks for every request. It answers questions S1 and S3 from section 8, and incidentally S2: if Next rejects an address with a host, `--inspect=9231` is enough.
 
 ```js
 import dc from 'node:diagnostics_channel';
@@ -958,7 +960,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 const self = import.meta.url;
 const tag = `[probe pid=${process.pid}]`;
 console.error(tag, 'execArgv:', process.execArgv.join(' '), '| inspector.url():', inspector.url() ?? null);
-setTimeout(() => console.error(tag, 'po 5 s inspector.url():', inspector.url() ?? null), 5000).unref();
+setTimeout(() => console.error(tag, 'after 5 s inspector.url():', inspector.url() ?? null), 5000).unref();
 
 const als = new AsyncLocalStorage();
 const sites = () => {
@@ -993,37 +995,37 @@ let current = globalThis.fetch;
 Object.defineProperty(globalThis, 'fetch', {
   configurable: true, enumerable: true,
   get: () => wrap(current),
-  set: v => { current = v; console.error(tag, 'podmiana globalThis.fetch przez:', v?.name, '| __nextPatched =', v?.__nextPatched); },
+  set: v => { current = v; console.error(tag, 'globalThis.fetch replaced by:', v?.name, '| __nextPatched =', v?.__nextPatched); },
 });
 
 dc.subscribe('undici:request:create', ({ request }) => {
   console.error(tag, request.method, request.origin + request.path,
-    '\n   A) stos w subskrybencie (sync + async):', sites().slice(0, 4).join(' <- ') || '(brak ramek aplikacji)',
-    '\n   B) stos z zewnętrznej warstwy fetch   :', als.getStore()?.outer.slice(0, 4).join(' <- ') || '(brak: fetch nie przeszedł przez warstwę)');
+    '\n   A) stack in the subscriber (sync + async):', sites().slice(0, 4).join(' <- ') || '(no app frames)',
+    '\n   B) stack from the outer fetch layer      :', als.getStore()?.outer.slice(0, 4).join(' <- ') || '(none: fetch did not pass through the layer)');
 });
 ```
 
-Jak czytać wynik:
+How to read the result:
 
-- linia `execArgv` pojawia się raz na każdy proces Node w drzewie. Proces, w którym `inspector.url()` nie jest `null`, to proces serwera (S1);
-- wariant B z ramką pliku strony (chunk w `.next/dev/server/chunks/ssr/`): opcja D działa;
-- wariant A z ramką `async` strony: Next robi co najmniej dwa mikrozadania i rezerwa też działa;
-- brak wariantu B: kod aplikacji nie sięga po `fetch` przez global albo coś podmienia deskryptor. Wtedy decyzja z ADR 0005 wymaga rewizji.
+- the `execArgv` line appears once for every Node process in the tree. The process where `inspector.url()` is not `null` is the server process (S1);
+- variant B with a page file frame (a chunk in `.next/dev/server/chunks/ssr/`): option D works;
+- variant A with an `async` page frame: Next makes at least two microtasks, and the fallback works too;
+- no variant B: app code does not reach `fetch` through the global, or something replaces the descriptor. Then the ADR 0005 decision needs revision.
 
-Sonda pokazuje ścieżki chunków, nie plików źródłowych. To oczekiwane: mapowanie robi kolektor.
+The probe shows chunk paths, not source files. That is expected: the collector does the mapping.
 
 ---
 
-## Załącznik C: źródła
+## Appendix C: sources
 
-- Next.js 16.1, „Easier debugging with `next dev --inspect`” i „Relative source map paths”: <https://nextjs.org/blog/next-16-1>
-- Next.js, debugowanie kodu serwera (`--inspect`, wartość przekazywana do procesu Node): <https://nextjs.org/docs/app/guides/debugging>
-- Next.js, serwer MCP (`/_next/mcp`, `next-devtools-mcp`, lista narzędzi, w tym `get_request_insights`): <https://nextjs.org/docs/app/guides/mcp>; wersja dołączona do pakietu 16.4.0: <https://unpkg.com/next@16.4.0/dist/docs/01-app/02-guides/mcp.md>
-- Node.js 26, moduł `inspector` (metody `Network.*`, stabilność 1.1, `inspector.open()`, `inspector.url()`): <https://nodejs.org/download/release/v26.13.0/docs/api/inspector.html>
-- Chrome DevTools MCP, opis narzędzi (`list_network_requests`, `get_network_request`, `emulate` z `extraHttpHeaders`): <https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/tool-reference.md>
-- MCP, zmiany w rewizji 2026-07-28: <https://modelcontextprotocol.io/specification/2026-07-28/changelog>
-- MCP, wersjonowanie i zgodność między erami protokołu: <https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning.md>
-- MCP, transport stdio i sonda `server/discover`: <https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio.md>, <https://modelcontextprotocol.io/specification/2026-07-28/server/discover.md>
-- MCP, pakiety SDK TypeScript w wersji 2: <https://ts.sdk.modelcontextprotocol.io/v2/get-started/packages.html>
-- Claude Code, MCP (limity wyniku narzędzia, `.mcp.json` w zakresie projektu): <https://code.claude.com/docs/en/mcp>
-- Next.js, `logging.fetches` (logowanie `fetch` w trybie dev): <https://nextjs.org/docs/app/api-reference/config/next-config-js/logging>
+- Next.js 16.1, "Easier debugging with `next dev --inspect`" and "Relative source map paths": <https://nextjs.org/blog/next-16-1>
+- Next.js, debugging server code (`--inspect`, the value passed to the Node process): <https://nextjs.org/docs/app/guides/debugging>
+- Next.js, MCP server (`/_next/mcp`, `next-devtools-mcp`, tool list including `get_request_insights`): <https://nextjs.org/docs/app/guides/mcp>; the version shipped with the 16.4.0 package: <https://unpkg.com/next@16.4.0/dist/docs/01-app/02-guides/mcp.md>
+- Node.js 26, the `inspector` module (`Network.*` methods, stability 1.1, `inspector.open()`, `inspector.url()`): <https://nodejs.org/download/release/v26.13.0/docs/api/inspector.html>
+- Chrome DevTools MCP, tool reference (`list_network_requests`, `get_network_request`, `emulate` with `extraHttpHeaders`): <https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/tool-reference.md>
+- MCP, changes in the 2026-07-28 revision: <https://modelcontextprotocol.io/specification/2026-07-28/changelog>
+- MCP, versioning and compatibility between protocol eras: <https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning.md>
+- MCP, the stdio transport and the `server/discover` probe: <https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio.md>, <https://modelcontextprotocol.io/specification/2026-07-28/server/discover.md>
+- MCP, TypeScript SDK v2 packages: <https://ts.sdk.modelcontextprotocol.io/v2/get-started/packages.html>
+- Claude Code, MCP (tool result limits, `.mcp.json` in project scope): <https://code.claude.com/docs/en/mcp>
+- Next.js, `logging.fetches` (logging `fetch` in dev mode): <https://nextjs.org/docs/app/api-reference/config/next-config-js/logging>
