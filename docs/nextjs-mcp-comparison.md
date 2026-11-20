@@ -1,4 +1,9 @@
 <!-- Raport z 2026-11-20, przygotowany przy porównaniu z Next DevTools MCP. Stan wiedzy na ten dzień; sprawdzać przy nowych wersjach Next. -->
+
+> **Weryfikacja na prawdziwym Next 16.4.0 (macOS, Node 26.12, monorepo z dwiema aplikacjami, 2026-11-20).** Hipotezy z tego raportu:
+> - wykrywanie przez `next-devtools-mcp` przy `--inspect`: **brak kolizji**, `nextjs_index` bez portu znalazł obie aplikacje (3101 i 3102);
+> - nagłówki `x-nextjs-request-id` / `x-nextjs-html-request-id`: `get_request_insights({ requestId })` zwrócił to samo żądanie (`route: /seq`, `htmlRequestId` zgodny) co nasze `next_request_id`, więc złączenie działa;
+> - żądania `/_next/mcp` nie pojawiły się jako żądania stron.
 # node-outbound-inspector a MCP w Next.js: porównanie
 
 _Stan na 2026-11-20. Sprawdzone wersje: Next.js **v16.4.6** (najnowszy stabilny tag, 2026-11-09), gałąź `canary` (**v16.5.0-canary.57**, commit z 2026-11-19), `next-devtools-mcp` **0.4.1** (HEAD repozytorium z 2026-09-14). Nasze narzędzie: 0.5.0._

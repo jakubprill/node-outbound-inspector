@@ -150,7 +150,7 @@ Next.js 16 ma własny serwer MCP (`/_next/mcp`, używany przez `next-devtools-mc
 Pełne porównanie: [docs/nextjs-mcp-comparison.md](docs/nextjs-mcp-comparison.md).
 
 - Żądania stron mają `next_request_id` / `next_html_request_id`, gdy przeglądarka wysłała nagłówki Next `x-nextjs-request-id` / `x-nextjs-html-request-id` (nawigacje po stronie klienta, Server Actions w dev). Przekaż je do `get_request_insights` jako `requestId` / `htmlRequestId` albo użyj jako filtrów tutaj.
-- `inspector_status` podaje `http_ports` każdej aplikacji: przekaż port do `nextjs_index` / `nextjs_call`. `next-devtools-mcp` sam znajduje serwery na portach 3000–3010; z `--inspect` proces Next słucha na dwóch portach, więc podawaj port jawnie, gdy aplikacja jest poza tym zakresem.
+- `inspector_status` podaje `http_ports` każdej aplikacji, czyli port do `nextjs_call`. `next-devtools-mcp` sam znalazł obie aplikacje monorepo uruchomione przez `outbound-next … --inspect=…` (Next 16.4, macOS); jeśli którejś nie znajdzie, podaj port w `nextjs_index`.
 - Żądania do wewnętrznych endpointów dev Next (`/_next/mcp`, HMR, `/__nextjs_*`) nie są traktowane jak żądania stron.
 - Zapytanie, którego tu brakuje, a które `get_request_insights` pokazuje ze statusem cache `hit` albo `hmr`, zostało obsłużone z cache Next.
 

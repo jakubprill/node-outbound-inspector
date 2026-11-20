@@ -79,7 +79,7 @@ The server supports both MCP eras: the `initialize` handshake and the stateless 
 
 Next.js 16 ships its own MCP server (`/_next/mcp`, via `next-devtools-mcp`) for routes, errors, compilation, logs and Server Actions; with `experimental.requestInsights: true` its `get_request_insights` lists App Router `fetch` calls with Next cache status, but no headers, bodies, `node:http` traffic, background requests, network errors or waterfall analysis. Use both:
 
-1. `inspector_status` → app names and `http_ports`; `nextjs_index` (pass `port` from `http_ports` if the app is outside 3000–3010: with `--inspect` the Next process listens on two ports).
+1. `inspector_status` → app names and `http_ports`; `nextjs_index` (it found apps started with `--inspect` on its own in testing; pass `port` from `http_ports` if one is missing).
 2. `clear_server_requests` → open the page → `analyze_server_timeline` with `settle_ms` (waterfalls, errors, slow and duplicate requests).
 3. `nextjs_call(port, "get_request_insights", { requestId: next_request_id } or { htmlRequestId: next_html_request_id })` → route pattern, Next cache status per `fetch`, render spans. A `fetch` missing here with cache status `hit`/`hmr` there was served from Next's cache. The ids are present when the browser sent Next's request id headers (client navigations, Server Actions); filter this server's tools with `next_request_id` / `next_html_request_id`.
 4. `get_server_request` for failing calls (service response bodies); `nextjs_call(port, "get_errors")` for render errors.

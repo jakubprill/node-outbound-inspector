@@ -87,3 +87,13 @@ Ten sam URL (`/user`) wołany w tej samej chwili przez obie aplikacje i przez dw
 - **Redakcja treści:** `access_token` z odpowiedzi serwisu nie występuje w żadnym wyniku żadnego narzędzia; przy `OUTBOUND_REDACT=0` jest widoczny.
 - **Protokół:** klient bez `initialize` (tylko era 2026-07-28) dostaje `server/discover` i wynik `tools/call` przez stdio.
 
+## 8. outbound-hub i współpraca z Next DevTools MCP (2026-11-20)
+
+| Środowisko | Wynik |
+|---|---|
+| Linux, Chrome 153 (headless), Node 24.22.3 | `chrome://inspect` w domyślnej konfiguracji pokazuje przez hub obie aplikacje z nazwami pod `localhost:9229`; „inspect” otwiera DevTools połączone z właściwym procesem |
+| macOS, Next 16.4.0 (Turbopack), Node 26.12, monorepo z dwiema aplikacjami przez `outbound-next` | hub: obie aplikacje z nazwami; `http_ports` = [3101] i [3102] (bez portów inspektora); żądania RSC z nagłówkami Next mają `next_request_id` / `next_html_request_id`, filtr działa; `get_request_insights({ requestId })` zwraca to samo żądanie (złączenie działa); `/_next/mcp` nie jest żądaniem strony; `next-devtools-mcp` 0.4.0 znajduje obie aplikacje bez podawania portu |
+
+- Wymóg `chrome://inspect` znaleziony testem: odpowiedź z `Content-Length` (bez `chunked`) i `Browser: node.js/…` w `/json/version`; bez tego Chrome odpytuje hub, ale nie pokazuje celów.
+- Pełny zestaw: 182 testy, 181 zielonych, 1 `todo` (wada 1 → M4).
+
