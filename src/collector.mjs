@@ -3,7 +3,7 @@
 import { createStore } from './store.mjs';
 import { createDiscovery } from './discovery.mjs';
 import { openSession } from './session.mjs';
-import { applyNetworkEvent } from './ingest.mjs';
+import { applyNetworkEvent, clean } from './ingest.mjs';
 import { applyPageEntries } from './correlate.mjs';
 import { createRedactor } from './redact.mjs';
 import { classifyBody, enforceBodyBudget } from './bodies.mjs';
@@ -72,7 +72,7 @@ export function createCollector(config, { log = () => {}, now = Date.now } = {})
     const entries = await session.drainHookLog().catch(() => []);
     // adres żądania strony (np. /callback?code=…&token=…) redagowany jak URL zapytania; ten sam klucz HMAC,
     // więc dopasowanie wpisu do zredagowanego rekordu nadal działa (audyt B-02)
-    for (const e of entries) { e.url = redact.url(e.url); e.page.url = redact.url(e.page.url); }
+    for (const e of entries) { e.url = redact.url(e.url); e.page.url = clean(redact.url(e.page.url)).slice(0, 2048); e.page.method = clean(e.page.method).slice(0, 16); }
     const pool = store.values().filter(r => r.processId === session.processId && !r.page);
     applyPageEntries(pool, entries, session.pendingPages, now());
   }

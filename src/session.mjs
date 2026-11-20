@@ -46,9 +46,12 @@ export function processWarnings({ execArgv = [], node = '', networkEnabled }) {
   return { networkInspection: hasFlag && !!networkEnabled, warnings };
 }
 
+/** Nazwa bez znaków sterujących i spacji, do 64 znaków: trafia do agenta i logów (audyt B-07). */
+export const cleanName = v => typeof v === 'string' ? v.replace(/[^\w@./+:-]/g, '').slice(0, 64) : '';
+
 /** Nazwa aplikacji: APP_NAMES → npm_package_name → name z package.json w cwd → nazwa katalogu → port. */
-export function resolveAppName({ port, appNames, pkg, pkgName, cwd }) {
-  return appNames[port] || pkg || pkgName || (cwd ? path.basename(cwd) : `port-${port}`);
+export function resolveAppName({ port, appNames = {}, pkg, pkgName, cwd }) {
+  return cleanName(appNames[port]) || cleanName(pkg) || cleanName(pkgName) || (typeof cwd === 'string' ? cleanName(path.basename(cwd)) : '') || `port-${port}`;
 }
 
 /**
@@ -113,7 +116,7 @@ export function openSession(target, port, { config, log, onNetwork, onClose, pro
       session.pageCorrelation = ['installed', 'already'].includes(r?.result?.value);
     }
     session.ready = true; // identyfikacja, Network.enable i hak zakończone
-    log(`connected app="${session.app}" port=${port} pid=${session.pid} cwd=${session.cwd} page_correlation=${!!session.pageCorrelation}${session.warnings.length ? ' WARNING: ' + session.warnings.join(' ') : ''}`);
+    log(`connected app="${session.app}" port=${port} pid=${session.pid} cwd=${JSON.stringify(session.cwd)} page_correlation=${!!session.pageCorrelation}${session.warnings.length ? ' WARNING: ' + session.warnings.join(' ') : ''}`);
   }
 
   const cdp = connectCdp(url, {

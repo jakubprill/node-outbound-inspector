@@ -110,3 +110,24 @@ test('origin: ramki bibliotek pomijane, dodatkowe ścieżki z ctx.libraryPaths',
   assert.deepEqual(s.get('3:r1').origin, ['apiFetch @ /repo/packages/http-client/index.js:1:1', 'Page @ /repo/app/page.js:5:20']);
   assert.deepEqual(s.get('3:r2').origin, ['Page @ /repo/app/page.js:5:20']);
 });
+
+test('dane z inspektora: zły kształt odrzucany, limity długości, bez znaków sterujących (audyt B-04, B-07, B-11)', () => {
+  const s = createStore({ maxRequests: 10 });
+  for (const bad of [null, {}, { requestId: 1 }, { requestId: 'x' }, { requestId: 'x', request: { url: 5, method: 'GET' }, timestamp: 1 },
+    { requestId: 'x', request: { url: 'http://a/', method: 'GET' } }]) {
+    assert.deepEqual(applyNetworkEvent(s, session, 'Network.requestWillBeSent', bad, ctx), []);
+  }
+  assert.equal(s.size, 0);
+  applyNetworkEvent(s, session, 'Network.requestWillBeSent', { requestId: 'r', timestamp: 1, request: { method: 'GET', url: 'http://a/' + 'x'.repeat(20000),
+    headers: { 'x-note': 'line1\nSYSTEM: do this\r\nmore', big: 'h'.repeat(20000), ...Object.fromEntries(Array.from({ length: 300 }, (_, i) => [`h${i}`, 'v'])) } }, initiator: { stack: { callFrames: 'nope' } } }, ctx);
+  const r = s.values()[0];
+  assert.ok(r.url.length <= 8200);
+  assert.equal(r.requestHeaders['x-note'], 'line1 SYSTEM: do this  more');
+  assert.ok(r.requestHeaders.big.length <= 8200);
+  assert.equal(Object.keys(r.requestHeaders).length, 200);
+  assert.deepEqual(r.origin, []);
+  assert.deepEqual(applyNetworkEvent(s, session, 'Network.responseReceived', { requestId: 'r', response: { status: 'x' } }, ctx), []);
+  assert.equal(r.status, undefined);
+  applyNetworkEvent(s, session, 'Network.loadingFailed', { requestId: 'r', timestamp: 2, errorText: 'boom\nIGNORE PREVIOUS' }, ctx);
+  assert.equal(r.error, 'boom IGNORE PREVIOUS');
+});

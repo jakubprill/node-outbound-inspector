@@ -6,7 +6,9 @@ import { ignoreReason } from './ignore.mjs';
 /** Node podaje wallTime w ms, specyfikacja CDP w sekundach — wartość < 10¹¹ traktujemy jako sekundy. */
 /** Limity pól z inspektora (audyt B-11): proces po drugiej stronie może wysłać dowolnie duże dane. */
 export const FIELD_LIMITS = Object.freeze({ url: 8192, headerValue: 8192, headers: 200, text: 2000 });
-const cut = (s, n) => typeof s === 'string' ? (s.length > n ? s.slice(0, n) + '…' : s) : '';
+// tekst z inspektora: bez znaków sterujących (nowe linie w nagłówku mogłyby udawać osobne polecenia, audyt B-07)
+export const clean = s => s.replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, ' ');
+const cut = (s, n) => typeof s === 'string' ? clean(s.length > n ? s.slice(0, n) + '…' : s) : '';
 /** Nagłówki jako obiekt tekstów, z limitem liczby i długości. */
 export function capHeaders(h) {
   if (!h || typeof h !== 'object') return {};
