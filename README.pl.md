@@ -134,6 +134,21 @@ Minimalny klient CDP (to, co robi zakładka Network): [`examples/cdp-network-pro
 
 Next.js 16 ma własny serwer MCP (`/_next/mcp`, używany przez `next-devtools-mcp`): trasy, błędy, kompilacja, logi, Server Actions oraz, z `experimental.requestInsights: true`, `get_request_insights` (wywołania `fetch` w App Routerze ze statusem cache Next). Nie pokazuje nagłówków, treści, ruchu `node:http` (axios, SDK), zapytań poza żądaniem strony, błędów sieci ani analizy waterfall. Oba serwery się uzupełniają; skonfiguruj agentowi oba.
 
+**Czy dublujemy MCP z Next? Nie.** Sprawdzone w kodzie Next.js 16.4.6 i canary 16.5 oraz `next-devtools-mcp` 0.4.1 (2026-11-20):
+
+| | Next DevTools MCP | node-outbound-inspector |
+|---|---|---|
+| Lista `fetch` serwera z czasem i żądaniem strony | `get_request_insights` (flaga eksperymentalna) | ✓ |
+| Status cache Next (`hit`/`miss`/`hmr`), wzorzec trasy, spany renderu | ✓ | — |
+| Błędy, kompilacja, trasy, logi, Server Actions | ✓ | — |
+| Nagłówki żądania i odpowiedzi, treści odpowiedzi | — | ✓ (z redakcją) |
+| Ruch `node:http` (axios, SDK), zapytania poza żądaniem strony | — | ✓ |
+| Błędy sieci (odmowa, zerwanie), czas do końca treści | — | ✓ |
+| Wykrywanie waterfall, oszczędność z `Promise.all`, duplikaty, wolne zapytania | — | ✓ |
+| Dowolny proces Node, nie tylko Next | — | ✓ |
+
+Pełne porównanie: [docs/nextjs-mcp-comparison.md](docs/nextjs-mcp-comparison.md).
+
 - Żądania stron mają `next_request_id` / `next_html_request_id`, gdy przeglądarka wysłała nagłówki Next `x-nextjs-request-id` / `x-nextjs-html-request-id` (nawigacje po stronie klienta, Server Actions w dev). Przekaż je do `get_request_insights` jako `requestId` / `htmlRequestId` albo użyj jako filtrów tutaj.
 - `inspector_status` podaje `http_ports` każdej aplikacji: przekaż port do `nextjs_index` / `nextjs_call`. `next-devtools-mcp` sam znajduje serwery na portach 3000–3010; z `--inspect` proces Next słucha na dwóch portach, więc podawaj port jawnie, gdy aplikacja jest poza tym zakresem.
 - Żądania do wewnętrznych endpointów dev Next (`/_next/mcp`, HMR, `/__nextjs_*`) nie są traktowane jak żądania stron.

@@ -134,6 +134,21 @@ A minimal CDP client (what the Network tab does): [`examples/cdp-network-probe.m
 
 Next.js 16 has its own MCP server (`/_next/mcp`, used through `next-devtools-mcp`): routes, errors, compilation, logs, Server Actions and, with `experimental.requestInsights: true`, `get_request_insights` (App Router `fetch` calls with Next cache status). It does not show headers, bodies, `node:http` traffic (axios, SDKs), requests outside a page request, network errors or waterfall analysis. The two servers complement each other; configure both for the agent.
 
+**Does this duplicate Next's MCP? No.** Checked against the Next.js 16.4.6 and 16.5 canary source and `next-devtools-mcp` 0.4.1 (2026-11-20):
+
+| | Next DevTools MCP | node-outbound-inspector |
+|---|---|---|
+| Server `fetch` list with timing and page request | `get_request_insights` (experimental flag) | ✓ |
+| Next cache status (`hit`/`miss`/`hmr`), route pattern, render spans | ✓ | — |
+| Errors, compilation, routes, logs, Server Actions | ✓ | — |
+| Request and response headers, response bodies | — | ✓ (redacted) |
+| `node:http` traffic (axios, SDKs), requests outside a page request | — | ✓ |
+| Network errors (refused, reset), time to end of body | — | ✓ |
+| Waterfall detection, `Promise.all` saving, duplicates, slow requests | — | ✓ |
+| Any Node process, not only Next | — | ✓ |
+
+Full comparison (Polish): [docs/nextjs-mcp-comparison.md](docs/nextjs-mcp-comparison.md).
+
 - Page requests carry `next_request_id` / `next_html_request_id` when the browser sent Next's `x-nextjs-request-id` / `x-nextjs-html-request-id` headers (client navigations, Server Actions in dev). Pass them to `get_request_insights` as `requestId` / `htmlRequestId`, or use them as filters here.
 - `inspector_status` lists each app's `http_ports`: pass the port to `nextjs_index` / `nextjs_call`. `next-devtools-mcp` finds servers on ports 3000–3010 by itself; with `--inspect` the Next process listens on two ports, so pass the port explicitly when the app is not in that range.
 - Requests to Next's own dev endpoints (`/_next/mcp`, HMR, `/__nextjs_*`) are not treated as page requests.
