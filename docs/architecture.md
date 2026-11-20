@@ -628,6 +628,8 @@ Przykład podsumowania (wartości poglądowe). Nazwy pól, na których polega dz
 
 ### 6.6. Bezpieczeństwo
 
+> **Stan wdrożenia (2026-11-20):** zob. [ADR 0009, sekcja „Wdrożenie”](adr/0009-bezpieczenstwo-loopback-zgoda-redakcja.md) i README, „Security model”. Punkty niżej to pierwotny projekt; zgoda działa przez `OUTBOUND_INSPECT=1` / flagę sieciową, a nie `OUTBOUND_INJECT`.
+
 - **Tylko pętla zwrotna.** Kolektor łączy się wyłącznie z `127.0.0.1`. Launcher zawsze podaje `--inspect=127.0.0.1:<port>`. Jeśli proces słucha na innym adresie (np. `0.0.0.0`), `inspector_status` to zgłasza.
 - **Instrumentacja za zgodą.** Hak działa w procesie tylko wtedy, gdy deweloper sam go załadował (`outbound run` albo `--import`). Procesy znalezione skanowaniem portów są domyślnie tylko obserwowane; wstrzyknięcie wymaga `OUTBOUND_INJECT=1`. Wyłącznik awaryjny: `OUTBOUND_HOOK=0`.
 - **Minimalny ślad w CDP.** Kolektor używa `Network.*`, `Runtime.evaluate` (wyrażenia tylko do odczytu) i `Runtime.addBinding`. Nigdy nie włącza domen `Debugger` ani `Runtime` (zdarzenia konsoli).

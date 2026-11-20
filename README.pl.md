@@ -154,6 +154,17 @@ Pełne porównanie: [docs/nextjs-mcp-comparison.md](docs/nextjs-mcp-comparison.m
 - Żądania do wewnętrznych endpointów dev Next (`/_next/mcp`, HMR, `/__nextjs_*`) nie są traktowane jak żądania stron.
 - Zapytanie, którego tu brakuje, a które `get_request_insights` pokazuje ze statusem cache `hit` albo `hmr`, zostało obsłużone z cache Next.
 
+## Model bezpieczeństwa
+
+Inspektor Node daje pełną kontrolę nad procesem, a to, co zwracają narzędzia, trafia do dostawcy modelu AI. Narzędzie jest tylko do lokalnego developmentu i ma te zabezpieczenia (przegląd bezpieczeństwa: [docs/security-audit-2026-11-20.md](docs/security-audit-2026-11-20.md)):
+
+- **Zgoda.** Serwer MCP podłącza się do każdego inspektora na portach 9230–9249, ale kod wstrzykuje, łata i włącza inspekcję sieci tylko w procesach tego samego użytkownika, które się na to zgodziły: uruchomionych przez `outbound-next` (ustawia `OUTBOUND_INSPECT=1`), z `OUTBOUND_INSPECT=1` albo z `--experimental-network-inspection`. Pozostałe są widoczne w `inspector_status` z `skipped: "no_consent"` albo `"other_user"`. Port 9229 (zwykłe `node --inspect`) domyślnie nie jest skanowany.
+- **Tylko pętla zwrotna.** Cel jest przyjmowany tylko wtedy, gdy jego adres WebSocket wskazuje skanowany port na 127.0.0.1/localhost. `outbound-next` odmawia uruchomienia inspektora na innym adresie (`--inspect=0.0.0.0`, `--inspect-port`, `NODE_OPTIONS`), chyba że `OUTBOUND_ALLOW_REMOTE_INSPECT=1`. W Dockerze wystawiaj port jako `-p 127.0.0.1:<port>:<port>`. `outbound-hub` słucha na 127.0.0.1, sprawdza nagłówek `Host` (DNS rebinding) i przekazuje połączenia tylko do znalezionych aplikacji.
+- **Wrogie procesy lokalne.** Wszystko na skanowanym porcie może udawać inspektor. Zniekształcone dane są odrzucane, rozmiary ograniczone (cele, sesje, URL-e, nagłówki), a `package.json` jest czytany tylko jako zwykły plik.
+- **Redakcja przed zapisem** (najlepsze staranie): nagłówki po nazwie; URL-e w nagłówkach (`Location`, `Link`); parametry zapytania i fragmentu po nazwie, hasła w URL-ach; adres żądania strony; treści JSON jako drzewo (także obiekty i tablice pod kluczami-sekretami) i przycięty JSON; treści form-urlencoded; znane formaty tokenów w dowolnym miejscu (JWT, GitHub, Stripe, Slack, AWS, klucze Google API, tokeny botów Telegrama, webhooki Slack/Discord, klucze prywatne PEM). Redakcja działa przed przycięciem treści. **Nie obejmuje:** danych osobowych pod neutralnymi nazwami i sekretów w nietypowych formatach; treści żądań w ogóle nie są przechowywane. Przy wrażliwych integracjach użyj `OUTBOUND_BODIES=off` albo `INSPECTOR_PORTS` z dokładnymi portami.
+- **Dane niezaufane.** Opisy narzędzi i instrukcja serwera mówią modelowi, że każda wartość pochodzi z badanych procesów i serwisów i nie jest poleceniem. Nazwy aplikacji są ograniczone do `[\w@./+:-]`, z tekstów usuwane są znaki sterujące.
+- **Co opuszcza maszynę:** URL-e, nagłówki, treści odpowiedzi (po redakcji), teksty błędów, ścieżki ze stosu i katalog procesu badanych aplikacji.
+
 ## Ograniczenia
 - Funkcja Node jest **eksperymentalna**. Wymagany Node ≥ 24 (testowane w CI na 24 i najnowszej wersji). Na starszym Node kolektor nie startuje, a proces aplikacji nie jest podsłuchiwany (powód w `inspector_status`).
 - **Bun** jako runtime nie jest obsługiwany (WebKit Inspector zamiast CDP). Działa, jeśli Bun służy tylko do instalowania pakietów i uruchamiania skryptów, a aplikacja działa na Node.
@@ -164,7 +175,7 @@ Pełne porównanie: [docs/nextjs-mcp-comparison.md](docs/nextjs-mcp-comparison.m
 - Treści z `content-encoding` (gzip, br, deflate, zstd) są dekompresowane (`body_encoding`, `body_encoded_bytes`). Gdy `content-type` ma `charset`, inspektor Node oddaje skompresowane bajty jako zniekształcony tekst i treść ma stan `unavailable`.
 - **Błąd Node [#66551](https://github.com/nodejs/node/issues/66551):** gdy aplikacja czyta odpowiedź `node:http` po `res.setEncoding()` (robi tak wiele bibliotek), a do procesu jest podłączony klient z inspekcją sieci, Node rzuca `Missing dataLength in event` i niszczy połączenie. Aplikacja dostaje wtedy błąd albo nie dostaje odpowiedzi wcale. `outbound-mcp` instaluje w procesie aplikacji obejście przed włączeniem inspekcji (`node_workarounds` w `inspector_status`). **Same Chrome DevTools (bez kolektora) nadal wywołują ten błąd.**
 - Zachowanie inspektora Node, na które narzędzie nie ma wpływu: gdy połączenie `node:http` zerwie się w trakcie odbierania treści, zapytanie zostaje w toku (brak zdarzenia końcowego).
-- Sekrety są redagowane, zanim trafią do agenta: nagłówki, parametry URL i pola skalarne treści JSON o nazwach wyglądających na sekret (`access_token`, `client_secret`, `password`, …). Inne dane osobowe w treściach nie są redagowane, więc przy wrażliwych integracjach użyj `OUTBOUND_BODIES=off`.
+- Redakcja to najlepsze staranie; zob. [Model bezpieczeństwa](#model-bezpieczeństwa).
 
 ## Dokumentacja
 - [`llms.txt`](llms.txt): instrukcja integracji i użycia dla agentów AI (po angielsku)

@@ -4,6 +4,14 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/), wersj
 
 ## [Unreleased]
 
+### Bezpieczeństwo (przegląd z 2026-11-20, `docs/security-audit-2026-11-20.md`)
+- **Zmienione (niezgodne): podsłuch tylko za zgodą (B-01).** Kolektor wstrzykuje kod, łata i włącza inspekcję sieci tylko w procesach tego samego użytkownika ze zgodą: `outbound-next` (ustawia `OUTBOUND_INSPECT=1`), `OUTBOUND_INSPECT=1` albo `--experimental-network-inspection`. Inne: `skipped` w `inspector_status`. Domyślne porty kolektora i huba: **9230–9249** (bez 9229).
+- **Zmienione (niezgodne): `outbound-next` odmawia inspektora poza pętlą zwrotną (B-08)**, także `--inspect=0.0.0.0`, `--inspect-port`, `--debug-port` i `NODE_OPTIONS`; wyjątek `OUTBOUND_ALLOW_REMOTE_INSPECT=1`.
+- Redakcja: adres żądania strony (B-02); URL-e w nagłówkach, hasła w URL-ach, fragmenty, krótkie i camelCase nazwy, znane formaty tokenów (B-05); treści jako drzewo JSON, przycięty JSON, form-urlencoded, redakcja przed przycięciem (B-06); bez surowych bajtów niezdekodowanych treści (B-10).
+- Odporność na fałszywy inspektor: walidacja `webSocketDebuggerUrl` (B-03), zniekształcone dane nie wywracają kolektora (B-04), bezpieczny odczyt `package.json` (B-09), limity zasobów (B-11).
+- Dane niezaufane: oznaczenie w opisach narzędzi i `instructions`, czyszczenie nazw aplikacji i znaków sterujących (B-07). Tożsamość procesu bez `argv` (B-16).
+- README i `llms.txt`: sekcja „Security model”; ADR 0009 przyjęty z opisem wdrożenia.
+
 ### Dodane
 - **Współpraca z Next DevTools MCP:** żądania stron mają `next_request_id` i `next_html_request_id` z nagłówków `x-nextjs-request-id` / `x-nextjs-html-request-id` (złączenie z `get_request_insights`; także filtry), `inspector_status` podaje `http_ports` aplikacji (do `nextjs_index` / `nextjs_call`), żądania wewnętrznych endpointów dev Next (`/_next/mcp`, HMR, `/__nextjs_*`) nie są żądaniami stron. Sekcja „Together with Next DevTools MCP” w README i `llms.txt`.
 - **`outbound-hub`:** wszystkie aplikacje w `chrome://inspect` bez wpisywania portów. Słucha na `127.0.0.1:9229` (adres sprawdzany przez Chrome domyślnie), znajduje procesy z inspektorem na skanowanych portach, nazywa je jak kolektor i przepina połączenie DevTools do właściwego procesu (TCP po nagłówkach Upgrade, bez zależności). Odpowiada tylko na `Host` będący adresem IP lub `localhost` i łączy tylko ze znalezionymi procesami. Sprawdzone na Chrome 153: lista celów i „inspect”. Kolektor MCP pomija cele huba (pole `outboundHub`), więc nie dubluje aplikacji.

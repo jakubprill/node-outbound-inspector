@@ -154,6 +154,17 @@ Full comparison (Polish): [docs/nextjs-mcp-comparison.md](docs/nextjs-mcp-compar
 - Requests to Next's own dev endpoints (`/_next/mcp`, HMR, `/__nextjs_*`) are not treated as page requests.
 - A request missing here but present in `get_request_insights` with cache status `hit` or `hmr` was served from Next's cache.
 
+## Security model
+
+The Node inspector gives full control over a process, and whatever the tools return goes to your AI model provider. The tool is built for local development only, with these safeguards (security review: [docs/security-audit-2026-11-20.md](docs/security-audit-2026-11-20.md), in Polish):
+
+- **Consent.** The MCP server attaches to every inspector on ports 9230–9249, but injects code, patches and enables network inspection only in processes of the same user that opted in: started with `outbound-next` (sets `OUTBOUND_INSPECT=1`), with `OUTBOUND_INSPECT=1`, or with `--experimental-network-inspection`. Other processes show up in `inspector_status` with `skipped: "no_consent"` or `"other_user"`. Port 9229 (plain `node --inspect`) is not scanned by default.
+- **Loopback only.** Targets are accepted only when their WebSocket address points to the scanned port on 127.0.0.1/localhost. `outbound-next` refuses an inspector on another address (`--inspect=0.0.0.0`, `--inspect-port`, `NODE_OPTIONS`) unless `OUTBOUND_ALLOW_REMOTE_INSPECT=1`. In Docker publish the port as `-p 127.0.0.1:<port>:<port>`. `outbound-hub` listens on 127.0.0.1, checks the `Host` header (DNS rebinding) and forwards only to apps it found.
+- **Hostile local processes.** Anything on a scanned port can pretend to be an inspector. Malformed data is dropped, sizes are capped (targets, sessions, URLs, headers), and `package.json` is read only as a regular file.
+- **Redaction before storage** (best effort): headers by name; URLs inside headers (`Location`, `Link`); URL query and fragment parameters by name, passwords in URLs; the page request URL; JSON bodies as a tree (objects and arrays under secret-like keys too) and truncated JSON; form-urlencoded bodies; known token formats anywhere (JWT, GitHub, Stripe, Slack, AWS, Google API keys, Telegram bot tokens, Slack/Discord webhooks, PEM private keys). Redaction runs before bodies are cut. **Not covered:** personal data under neutral names, secrets in unusual formats, request bodies are not stored at all. Use `OUTBOUND_BODIES=off` for sensitive integrations, or `INSPECTOR_PORTS` with exact ports.
+- **Untrusted data.** Tool descriptions and server instructions tell the model that every value comes from inspected processes and services and is not an instruction. App names are reduced to `[\w@./+:-]`, control characters are stripped from texts.
+- **What leaves the machine:** URLs, headers, response bodies (after redaction), error texts, stack paths and the process directory of inspected apps.
+
 ## Limitations
 - The Node feature is **experimental**. Node ≥ 24 is required (tested in CI on 24 and the latest version). On older Node the collector does not start, and an app process is not inspected (the reason is in `inspector_status`).
 - **Bun** as a runtime is not supported (WebKit Inspector instead of CDP). It works if Bun only installs packages and runs scripts while the app runs on Node.
@@ -164,7 +175,7 @@ Full comparison (Polish): [docs/nextjs-mcp-comparison.md](docs/nextjs-mcp-compar
 - Bodies with `content-encoding` (gzip, br, deflate, zstd) are decompressed (`body_encoding`, `body_encoded_bytes`). When `content-type` has a `charset`, the Node inspector returns the compressed bytes as garbled text and the body is marked `unavailable`.
 - **Node bug [#66551](https://github.com/nodejs/node/issues/66551):** when an app reads a `node:http` response after `res.setEncoding()` (many libraries do) while a client with network inspection is attached, Node throws `Missing dataLength in event` and destroys the connection. The app then gets an error or no response at all. `outbound-mcp` installs a workaround in the app process before enabling inspection (`node_workarounds` in `inspector_status`). **Chrome DevTools alone (without the collector) still triggers this bug.**
 - Node inspector behavior the tool cannot change: when a `node:http` connection drops while the body is being received, the request stays in flight (no final event).
-- Secrets are redacted before they reach the agent: headers, URL parameters and scalar fields of JSON bodies with secret-like names (`access_token`, `client_secret`, `password`, …). Other personal data in bodies is not redacted, so use `OUTBOUND_BODIES=off` for sensitive integrations.
+- Redaction is best effort; see [Security model](#security-model).
 
 ## Documentation
 - [`llms.txt`](llms.txt): integration and usage guide for AI agents

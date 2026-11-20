@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-11-19
 ---
 
@@ -24,6 +24,16 @@ Inspektor Node daje pełną kontrolę nad procesem. Prototyp łączy się z każ
 - **Pełne ukrycie wartości** (`***`). Agent nie stwierdzi wtedy, czy dwa zapytania niosły ten sam token, a to częste pytanie przy błędach 401. Skrót o długości sześciu znaków na to pozwala i nie odtwarza sekretu o dużej entropii.
 - **Wstrzykiwanie domyślnie włączone** (stan obecny). Wygodne, ale kolektor wykonuje wtedy kod w każdym procesie, który akurat słucha na skanowanym porcie.
 - **Token dostępu do kolektora.** Zbędny, dopóki kolektor nie słucha na żadnym gnieździe (stdio).
+
+## Wdrożenie (2026-11-20, po przeglądzie bezpieczeństwa)
+
+Przegląd ([docs/security-audit-2026-11-20.md](../security-audit-2026-11-20.md)) pokazał, że punkty 1–2 i 4 nie były wdrożone tak, jak opisano. Stan po poprawkach:
+
+1. **Pętla zwrotna:** cel przyjmowany tylko z adresem WebSocket na skanowanym porcie 127.0.0.1/localhost (kolektor i hub). Launcher blokuje inspektor poza pętlą zwrotną (`OUTBOUND_ALLOW_REMOTE_INSPECT=1` to wyjątek). Zgłaszania w `inspector_status` procesu słuchającego na innym adresie nie ma.
+2. **Zgoda:** zamiast `OUTBOUND_INJECT` — zgoda procesu: `OUTBOUND_INSPECT=1` (ustawia `outbound-next`) albo flaga `--experimental-network-inspection`, tylko ten sam użytkownik. Bez zgody: bez wyrażeń modyfikujących, łatek i `Network.enable`; jedynie odczyt tożsamości. Domyślne porty 9230–9249. `OUTBOUND_HOOK` nie istnieje; korelację wyłącza `PAGE_CORRELATION=0`.
+3. **Ślad w CDP:** poza wyrażeniami do odczytu kolektor instaluje hak i łatę nodejs/node#66551 (`Runtime.evaluate`). `Runtime.addBinding` nie jest jeszcze używany (M4).
+4. **Redakcja:** jak w README, sekcja „Security model”; HMAC-SHA256 zamiast SHA-256 (niżej).
+5. **Dane niezaufane:** oznaczenie w opisach wszystkich narzędzi i w `instructions`, czyszczenie nazw i znaków sterujących.
 
 ## Konsekwencje
 
