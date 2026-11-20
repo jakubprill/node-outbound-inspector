@@ -96,14 +96,14 @@ test('wada 6: sekrety z nagłówków, treści JSON i adresu strony nie występuj
     await m.waitForApps(1);
     await sc.hit(sc.apps[0], '/auth/callback?code=OAUTH_CODE_789&token=PAGE_URL_SECRET'); await sleep(300);
     const [r] = (await m.call('list_server_requests', { url_contains: '/secure' })).requests;
-    assert.match(r.page, /^GET \/auth\/callback\?code=OAUTH_CODE_789&token=%5Bredacted\+%C2%B7\+%23[0-9a-f]{6}%5D$/, r.page);
+    assert.match(r.page, /^GET \/auth\/callback\?code=%5Bredacted\+%C2%B7\+%23[0-9a-f]{6}%5D&token=%5Bredacted\+%C2%B7\+%23[0-9a-f]{6}%5D$/, r.page);
     const outputs = [];
     for (const [name, args] of [['inspector_status', {}], ['list_server_requests', {}], ['analyze_server_timeline', {}],
       ['get_server_request', { id: r.id }], ['list_server_requests', { url_contains: 'secure' }]]) {
       outputs.push((await m.rpc('tools/call', { name, arguments: args })).result.content[0].text);
     }
     const all = outputs.join('\n');
-    for (const secret of ['secret-token', 'session=abc', 'body-secret-tok', 'PAGE_URL_SECRET']) assert.ok(!all.includes(secret), `wyciek: ${secret}`);
+    for (const secret of ['secret-token', 'session=abc', 'body-secret-tok', 'PAGE_URL_SECRET', 'OAUTH_CODE_789']) assert.ok(!all.includes(secret), `wyciek: ${secret}`);
     const d = await m.call('get_server_request', { id: r.id });
     assert.match(d.requestHeaders.authorization, /^\[redacted: Bearer · 19 chars · #[0-9a-f]{6}\]$/);
     assert.match(d.body, /"access_token":"\[redacted: 15 chars · #[0-9a-f]{6}\]","expires_in":60/);

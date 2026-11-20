@@ -6,12 +6,36 @@ import { createHmac, randomBytes } from 'node:crypto';
 
 export const SENSITIVE_HEADERS = Object.freeze(['authorization', 'proxy-authorization', 'cookie', 'set-cookie', 'x-api-key']);
 const SENSITIVE_NAME = /token|secret|password|passwd|session|api[-_]?key|(^|[-_])key($|[-_])|auth(?!or)|signature|credential/i;
+// krótkie nazwy dopasowywane w całości, żeby nie łapać np. country_code (audyt B-05)
+const SENSITIVE_EXACT = /^(sig|code|pass|pwd|pin|otp|jwt|assertion|client_assertion|dsn|cookie|private_key)$/i;
+// wartości rozpoznawalne po formacie, niezależnie od nazwy pola (audyt B-05, B-06)
+const VALUE_PATTERNS = [
+  /\beyJ[\w-]{5,}\.[\w-]{5,}\.[\w-]*/g,                                  // JWT
+  /\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{20,})/g,          // GitHub
+  /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{10,}/g,                            // Stripe
+  /\bxox[abprs]-[A-Za-z0-9-]{10,}/g,                                        // Slack
+  /\bAKIA[0-9A-Z]{16}\b/g,                                                  // AWS access key id
+  /\bAIza[0-9A-Za-z_-]{35}\b/g,                                             // Google API key
+  /\bbot\d{5,}:[\w-]{30,}/g,                                                // Telegram bot token
+  /(?<=hooks\.slack\.com\/services\/)[\w/]+/g,                              // Slack webhook
+  /(?<=discord(?:app)?\.com\/api\/webhooks\/)\d+\/[\w-]+/g,                  // Discord webhook
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, // klucz prywatny PEM
+];
+const URL_IN_TEXT = /https?:\/\/[^\s<>"'`,;]+/g;
+const FORM = /^[\w.%[\]-]+=[^&\s]*(&[\w.%[\]-]+=[^&\s]*)*$/;
+/** camelCase → snake_case przed sprawdzeniem nazwy (privateKey → private_key). */
+const snake = name => name.replace(/([a-z0-9])([A-Z])/g, '$1_$2');
 // Pole JSON z wartością skalarną: "nazwa": "tekst" albo "nazwa": liczba. Obiekty i tablice nie są redagowane.
 const JSON_FIELD = /"((?:[^"\\]|\\.){1,100})"(\s*:\s*)("(?:[^"\\]|\\.)*"|-?\d[\d.eE+-]*)/g;
 const SCHEME = /^(Bearer|Basic|Digest|Negotiate|Token|ApiKey)\s/i;
 
 /** Czy nazwa (parametru, pola) wygląda na sekret — ta sama reguła co dla nagłówków i parametrów URL. */
-export const isSensitiveName = name => SENSITIVE_NAME.test(name);
+const decodeURIComponentSafe = s => { try { return decodeURIComponent(s); } catch { return s; } };
+
+// nazwy, które pasują do reguły, ale nie niosą sekretów (OAuth/OIDC): bez nich odpowiedź tokenowa traci czytelność
+const NOT_SECRET = /^(token_type|token_endpoint|auth_time|authorization_endpoint|session_state|code_challenge_method|expires_in)$/i;
+
+export const isSensitiveName = name => !NOT_SECRET.test(snake(name)) && (SENSITIVE_NAME.test(name) || SENSITIVE_EXACT.test(name) || SENSITIVE_EXACT.test(snake(name)) || SENSITIVE_NAME.test(snake(name)));
 
 /**
  * @param {{ enabled?: boolean, extraHeaders?: readonly string[], key?: Buffer }} [opts]
@@ -19,7 +43,16 @@ export const isSensitiveName = name => SENSITIVE_NAME.test(name);
 export function createRedactor({ enabled = true, extraHeaders = [], key = randomBytes(32) } = {}) {
   const names = new Set([...SENSITIVE_HEADERS, ...extraHeaders.map(h => h.toLowerCase())]);
   const hash = v => createHmac('sha256', key).update(String(v)).digest('hex').slice(0, 6);
-  const isSensitive = name => names.has(name.toLowerCase()) || SENSITIVE_NAME.test(name);
+  const isSensitive = name => typeof name === 'string' && (names.has(name.toLowerCase()) || isSensitiveName(name));
+  const short = v => `[redacted · #${hash(v)}]`;
+
+  /** Wartości o rozpoznawalnym formacie (JWT, tokeny GitHub/Stripe/Slack, klucze AWS, webhooki, PEM) w dowolnym tekście. */
+  function values(text) {
+    if (!enabled || typeof text !== 'string') return { text, count: 0 };
+    let count = 0, out = text;
+    for (const re of VALUE_PATTERNS) out = out.replace(re, m => { count++; return short(m); });
+    return { text: out, count };
+  }
 
   /** Opis zastępujący wartość, np. „[redacted: Bearer · 12 chars · #a1b2c3]”. */
   function describe(value) {
@@ -28,43 +61,112 @@ export function createRedactor({ enabled = true, extraHeaders = [], key = random
     return `[redacted: ${scheme ? scheme + ' · ' : ''}${v.length} chars · #${hash(v)}]`;
   }
 
+  /** Nagłówki: po nazwie; w pozostałych URL-e (Location, Link, Refresh…) i wartości o znanym formacie (audyt B-05). */
   function headers(h) {
     if (!enabled || !h) return h;
     const out = {};
-    for (const [name, value] of Object.entries(h)) out[name] = isSensitive(name) ? describe(value) : value;
+    for (const [name, value] of Object.entries(h)) {
+      if (isSensitive(name)) { out[name] = describe(value); continue; }
+      out[name] = typeof value === 'string' ? values(value.replace(URL_IN_TEXT, m => url(m))).text : value;
+    }
     return out;
   }
 
-  /** URL bezwzględny albo ścieżka względna (adres żądania strony, np. `/callback?code=…`, audyt B-02). */
+  /**
+   * URL bezwzględny albo ścieżka względna (adres żądania strony, np. `/callback?code=…`, audyt B-02): parametry
+   * zapytania i fragmentu o nazwach sekretów, hasło w userinfo, wartości o znanym formacie w ścieżce (audyt B-05).
+   */
   function url(u) {
-    if (!enabled || typeof u !== 'string' || !u.includes('?')) return u;
+    if (!enabled || typeof u !== 'string') return u;
     const relative = u.startsWith('/') && !u.startsWith('//');
-    let parsed; try { parsed = relative ? new URL(u, 'http://relative.invalid') : new URL(u); } catch { return u; }
+    let parsed; try { parsed = relative ? new URL(u, 'http://relative.invalid') : new URL(u); } catch { return values(u).text; }
     let changed = false;
     for (const [name, value] of parsed.searchParams) {
-      if (isSensitive(name)) { parsed.searchParams.set(name, `[redacted · #${hash(value)}]`); changed = true; }
+      if (isSensitive(name)) { parsed.searchParams.set(name, short(value)); changed = true; }
     }
-    if (!changed) return u;
-    return relative ? parsed.pathname + parsed.search + parsed.hash : parsed.toString();
+    if (parsed.password) { parsed.password = 'redacted'; changed = true; }
+    if (parsed.hash.includes('=')) {
+      const frag = new URLSearchParams(parsed.hash.slice(1));
+      let fragChanged = false;
+      for (const [name, value] of frag) if (isSensitive(name)) { frag.set(name, short(value)); fragChanged = true; }
+      if (fragChanged) { parsed.hash = frag.toString(); changed = true; }
+    }
+    const path = values(decodeURIComponentSafe(parsed.pathname));
+    if (path.count) changed = true;
+    const pathOut = path.count ? path.text : parsed.pathname;
+    const tail = parsed.search + parsed.hash;
+    const built = !changed ? u : relative ? pathOut + tail
+      : `${parsed.protocol}//${parsed.username ? parsed.username + (parsed.password ? ':' + parsed.password : '') + '@' : ''}${parsed.host}${pathOut}${tail}`;
+    return values(built).text; // wzorce zależne od hosta (webhooki Slack, Discord)
   }
 
   /**
    * Treść JSON (także przycięta): wartości pól o nazwach sekretów zastępuje opis. Działa na tekście,
-   * więc zachowuje formatowanie i nie wymaga poprawnego JSON-a.
+   * więc zachowuje formatowanie i nie wymaga poprawnego JSON-a. Niezamknięta wartość sekretu na końcu
+   * przyciętej treści też jest zastępowana (audyt B-06).
    * @returns {{ text: string, count: number }}
    */
   function jsonBody(text) {
     if (!enabled || typeof text !== 'string' || !text.includes('"')) return { text, count: 0 };
     let count = 0;
-    const out = text.replace(JSON_FIELD, (m, name, sep, val) => {
+    let out = text.replace(JSON_FIELD, (m, name, sep, val) => {
       if (!isSensitive(name)) return m;
       count++;
       let raw = val;
       if (val.startsWith('"')) { try { raw = JSON.parse(val); } catch { raw = val.slice(1, -1); } }
       return `"${name}"${sep}"${describe(raw)}"`;
     });
+    out = out.replace(/"((?:[^"\\]|\\.){1,100})"(\s*:\s*)"((?:[^"\\]|\\.)*)$/, (m, name, sep, val) => {
+      if (!isSensitive(name)) return m;
+      count++;
+      return `"${name}"${sep}"[redacted: cut value · ${val.length}+ chars]"`;
+    });
     return { text: out, count };
   }
 
-  return { enabled, headers, url, jsonBody, describe, isSensitive };
+  /** Drzewo JSON: poddrzewo pod kluczem-sekretem (także obiekt lub tablica) zastępuje opis. */
+  function jsonTree(node) {
+    let count = 0;
+    const walk = v => {
+      if (Array.isArray(v)) return v.map(walk);
+      if (v && typeof v === 'object') {
+        return Object.fromEntries(Object.entries(v).map(([k, x]) => {
+          if (isSensitive(k)) { count++; return [k, describe(typeof x === 'string' ? x : JSON.stringify(x))]; }
+          return [k, walk(x)];
+        }));
+      }
+      return v;
+    };
+    return { value: walk(node), count };
+  }
+
+  /**
+   * Treść odpowiedzi dowolnego typu tekstowego (audyt B-06): JSON jako drzewo (przycięty — tekstowo),
+   * form-urlencoded po nazwach, a w każdej treści wartości o znanym formacie.
+   * @returns {{ text: string, count: number }}
+   */
+  function body(text, contentType = '') {
+    if (!enabled || typeof text !== 'string' || !text) return { text, count: 0 };
+    let out = text, count = 0;
+    const trimmed = text.trimStart();
+    if (/json/i.test(contentType) || trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      let parsed, ok = false;
+      try { parsed = JSON.parse(text); ok = true; } catch {}
+      if (ok) {
+        const t = jsonTree(parsed);
+        if (t.count) { out = JSON.stringify(t.value, null, /\n\s+"/.test(text) ? 2 : 0); count += t.count; }
+      } else {
+        const j = jsonBody(text); out = j.text; count += j.count;
+      }
+    } else if (/x-www-form-urlencoded/i.test(contentType) || FORM.test(text.trim())) {
+      const form = new URLSearchParams(text.trim());
+      let n = 0;
+      for (const [name, value] of form) if (isSensitive(name)) { form.set(name, short(value)); n++; }
+      if (n) { out = form.toString(); count += n; }
+    }
+    const v = values(out);
+    return { text: v.text, count: count + v.count };
+  }
+
+  return { enabled, headers, url, jsonBody, body, values, describe, isSensitive };
 }

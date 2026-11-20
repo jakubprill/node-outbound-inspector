@@ -176,7 +176,8 @@ test('get_server_request: treść stronicowana przez body_offset', async () => {
 test('redakcja treści JSON: pola sekretów zastąpione, reszta bez zmian, także w treści przyciętej', () => {
   const r = createRedactor();
   const { text, count } = r.jsonBody('{"access_token": "eyJhbGciOi.x.y", "expires_in": 3600, "author": "Jan", "client_secret":"s\\"q", "nested": {"api_key": 12345}, "id_token":"cut');
-  assert.equal(count, 3);
+  assert.equal(count, 4, 'także niezamknięta wartość na końcu przyciętej treści');
+  assert.match(text, /"id_token":"\[redacted: cut value · 3\+ chars\]"$/);
   assert.match(text, /"access_token": "\[redacted: 14 chars · #[0-9a-f]{6}\]"/);
   assert.match(text, /"client_secret":"\[redacted: 3 chars · #[0-9a-f]{6}\]"/);
   assert.match(text, /"api_key": "\[redacted: 5 chars · #[0-9a-f]{6}\]"/);

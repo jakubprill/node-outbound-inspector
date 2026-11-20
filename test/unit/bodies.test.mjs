@@ -72,19 +72,19 @@ test('dekompresja: kilka kodowań, wielkość liter, identity', () => {
   assert.deepEqual(parseCodings(' gzip ,identity, BR'), ['gzip', 'br']);
 });
 
-test('dekompresja: nieznane kodowanie i uszkodzone dane → base64 z powodem', () => {
+test('dekompresja: nieznane kodowanie i uszkodzone dane → skipped z powodem, bez surowych bajtów (audyt B-10)', () => {
   const src = Buffer.from(JSON_TEXT);
   const unknown = classifyBody(...packed('compress', src), opts());
   assert.equal(unknown.state, 'skipped');
-  assert.equal(unknown.data, src.toString('base64'), 'surowe bajty zostają w base64');
+  assert.equal(unknown.data, undefined, 'surowe bajty ominęłyby redakcję');
   assert.equal(unknown.encodedBytes, src.length);
-  assert.match(unknown.reason, /unsupported encoding compress.*base64/);
+  assert.match(unknown.reason, /unsupported encoding compress/);
   const broken = zlib.gzipSync(src); broken[20] ^= 0xff; broken[21] ^= 0xff;
   const b = classifyBody(...packed('gzip', broken), opts());
   assert.equal(b.state, 'skipped');
   assert.match(b.reason, /could not decompress the body \(gzip: /);
   assert.equal(classifyBody(...packed('br', Buffer.from('to nie jest brotli, tylko tekst')), opts()).state, 'skipped');
-  assert.ok(classifyBody(...packed('gzip', broken), opts({ maxStoredBytes: 16 })).data.length <= 16, 'base64 w limicie kolektora');
+  assert.equal(classifyBody(...packed('gzip', broken), opts({ maxStoredBytes: 16 })).data, undefined);
 });
 
 test('dekompresja: bomba dekompresyjna → truncated w limicie kolektora', () => {
@@ -124,4 +124,25 @@ test('dekompresja: treść binarna nie jest rozpakowywana; pusta treść i tekst
   const m = classifyBody({ body: mangled, base64Encoded: false }, { responseHeaders: { 'content-type': 'application/json; charset=utf-8', 'content-encoding': 'gzip' } }, opts());
   assert.equal(m.state, 'unavailable');
   assert.match(m.reason, /garbled/);
+});
+
+test('redakcja przed przycięciem: sekret na granicy limitu nie wycieka (audyt B-06)', async () => {
+  const { createRedactor } = await import('../../src/redact.mjs');
+  const r = createRedactor();
+  const text = JSON.stringify({ data: 'x'.repeat(200), access_token: 'A'.repeat(60) });
+  const res = { body: text, base64Encoded: false };
+  const out = classifyBody(res, { mimeType: 'application/json', responseHeaders: { 'content-type': 'application/json' } },
+    { maxStoredBytes: 230, missingState: 'unavailable', redactText: r.body });
+  assert.equal(out.state, 'truncated');
+  assert.ok(!out.data.includes('AAAAAAAAAA'), out.data);
+  assert.equal(out.redactedFields, 1);
+});
+
+test('zstd ponad limit kolektora: skipped bez danych (audyt B-10)', { skip: !zlib.zstdCompressSync && 'brak zstd' }, () => {
+  const json = JSON.stringify({ items: Array.from({ length: 5000 }, (_, i) => ({ i, name: 'item ' + i })), access_token: 'TOPSECRET123' });
+  const out = classifyBody({ body: zlib.zstdCompressSync(Buffer.from(json)).toString('base64'), base64Encoded: true },
+    { responseHeaders: { 'content-type': 'application/json', 'content-encoding': 'zstd' } }, { maxStoredBytes: 16 * 1024, missingState: 'unavailable' });
+  assert.equal(out.state, 'skipped');
+  assert.equal(out.data, undefined);
+  assert.match(out.reason, /exceeds the collector limit/);
 });

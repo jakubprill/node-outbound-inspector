@@ -26,21 +26,12 @@ export function createCollector(config, { log = () => {}, now = Date.now } = {})
 
   let lastActivityAt = now(); // ostatnie zdarzenie sieciowe (dla settle_ms)
 
-  /** Sekrety w polach treści JSON zastępuje opis, zanim treść trafi do magazynu. */
-  function redactBody(body, mimeType) {
-    if (!redact.enabled || typeof body?.data !== 'string' || !['available', 'truncated'].includes(body.state)) return;
-    if (!/json/i.test(mimeType ?? '') && !/^\s*[[{]/.test(body.data)) return;
-    const { text, count } = redact.jsonBody(body.data);
-    if (count) { body.data = text; body.redactedFields = count; }
-  }
-
   /** Pobiera treść z inspektora i zapisuje ją w rekordzie z jawnym stanem. */
   async function fetchBody(r, missingState) {
     const session = byProcess.get(r.processId);
     if (!session) { r.body = { state: missingState, reason: 'app process disconnected' }; return; }
     const res = await session.send('Network.getResponseBody', { requestId: r.requestId }).catch(() => null);
-    r.body = classifyBody(res, r, { maxStoredBytes: config.bodyMaxBytes, missingState });
-    redactBody(r.body, r.mimeType);
+    r.body = classifyBody(res, r, { maxStoredBytes: config.bodyMaxBytes, missingState, redactText: redact.body });
     enforceBodyBudget(store.values(), { maxTotalBytes: config.bodiesTotalBytes });
   }
 

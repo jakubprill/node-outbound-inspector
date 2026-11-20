@@ -8,7 +8,7 @@
 //   unavailable — inspektor nie udostępnia treści (np. treść zniekształcona przez inspektor)
 //   evicted     — treść usunięta (z bufora inspektora albo z budżetu kolektora)
 //   skipped     — nie pokazana jako tekst: treść binarna, tryb off albo kodowanie, którego nie da się
-//                 zdekodować (wtedy body.data to surowe bajty w base64, a body.reason to mówi)
+//                 zdekodować (bez surowych bajtów: ominęłyby redakcję, audyt B-10)
 // Treść z content-encoding: body.bytes to rozmiar po dekompresji, body.encodedBytes — na łączu,
 // body.encoding — kodowania w kolejności z nagłówka (np. 'gzip, br').
 import zlib from 'node:zlib';
@@ -51,8 +51,9 @@ function decodeLayer(buf, [decode, flushOpts], limit) {
   try { return { out: decode(buf, opts), cut: false, over: false }; }
   catch (e) { if (e.code !== 'ERR_BUFFER_TOO_LARGE' && e.code !== 'Z_BUF_ERROR') throw e; }
   const prefix = n => {
+    // każdy błąd prefiksu (zstd zgłasza urwany strumień, nie przekroczenie limitu) to brak wyniku dla tej długości
     try { return decode(buf.subarray(0, n), { ...flushOpts, ...opts }); }
-    catch (e) { if (e.code === 'ERR_BUFFER_TOO_LARGE') return null; throw e; }
+    catch { return null; }
   };
   const whole = prefix(buf.length);
   if (whole) return { out: whole, cut: true, over: false }; // urwany strumień, ale mieści się w limicie
@@ -85,10 +86,12 @@ export function decodeContent(raw, codings, limit) {
 /**
  * @param {any} res wynik Network.getResponseBody albo null (błąd / brak treści w inspektorze)
  * @param {{ type?: string, mimeType?: string, responseHeaders?: object }} record
- * @param {{ maxStoredBytes: number, missingState: 'evicted' | 'unavailable' }} opts
- * @returns {{ state: string, data?: string, bytes?: number, encodedBytes?: number, encoding?: string, reason?: string }}
+ * @param {{ maxStoredBytes: number, missingState: 'evicted' | 'unavailable',
+ *   redactText?: (text: string, contentType: string) => { text: string, count: number } }} opts
+ *   redactText działa na pełnym tekście, przed przycięciem: cięcie nie odsłoni początku sekretu (audyt B-06)
+ * @returns {{ state: string, data?: string, bytes?: number, encodedBytes?: number, encoding?: string, reason?: string, redactedFields?: number }}
  */
-export function classifyBody(res, record, { maxStoredBytes, missingState }) {
+export function classifyBody(res, record, { maxStoredBytes, missingState, redactText }) {
   if (!res) return { state: missingState, reason: missingState === 'evicted' ? 'body is no longer available in the inspector' : 'the inspector returned no body' };
   const contentType = header(record.responseHeaders, 'content-type') ?? record.mimeType ?? '';
   const declared = Number(header(record.responseHeaders, 'content-length')); // bajty na łączu, czyli po kompresji
@@ -105,8 +108,7 @@ export function classifyBody(res, record, { maxStoredBytes, missingState }) {
   if (compressed) {
     let d;
     try { d = decodeContent(raw, codings, maxStoredBytes); } catch (e) {
-      const data = raw.subarray(0, Math.floor(maxStoredBytes / 4) * 3).toString('base64');
-      return { state: 'skipped', data, ...enc, reason: `could not decompress the body (${encoding}: ${e.message}); body holds the raw bytes in base64` };
+      return { state: 'skipped', ...enc, reason: `could not decompress the body (${encoding}: ${e.message})` };
     }
     ({ cut, over } = d); text = d.out.toString('utf8'); bytes = d.out.length;
   } else {
@@ -119,17 +121,20 @@ export function classifyBody(res, record, { maxStoredBytes, missingState }) {
   }
   const wireBytes = raw ? raw.length : (encoding ? null : bytes); // treść tekstowa z kodowaniem: rozmiar na łączu nieznany
 
+  if (over && !text) return { state: 'skipped', ...enc, reason: `the body exceeds the collector limit of ${maxStoredBytes} B after decompression and cannot be cut (${encoding})` };
+  let redacted = {};
+  if (redactText) { const r = redactText(text, contentType); if (r.count) { text = r.text; redacted = { redactedFields: r.count }; } }
   if (over) {
-    return { state: 'truncated', data: text, ...enc, reason: `collector limit of ${maxStoredBytes} B after decompression (compressed body: ${raw.length} B)` };
+    return { state: 'truncated', data: text, ...enc, ...redacted, reason: `collector limit of ${maxStoredBytes} B after decompression (compressed body: ${raw.length} B)` };
   }
   if (bytes > maxStoredBytes) {
-    return { state: 'truncated', data: Buffer.from(text).subarray(0, maxStoredBytes).toString('utf8'), bytes, reason: `limit kolektora ${maxStoredBytes} B` };
+    return { state: 'truncated', data: Buffer.from(text).subarray(0, maxStoredBytes).toString('utf8'), bytes, ...redacted, reason: `collector limit of ${maxStoredBytes} B` };
   }
   if (declared > 0 && wireBytes != null && wireBytes < declared) {
-    return { state: 'truncated', data: text, bytes, ...enc, reason: `the inspector buffer cut the body (${wireBytes} of ${declared}${compressed ? ' compressed' : ''} B)` };
+    return { state: 'truncated', data: text, bytes, ...enc, ...redacted, reason: `the inspector buffer cut the body (${wireBytes} of ${declared}${compressed ? ' compressed' : ''} B)` };
   }
-  if (cut) return { state: 'truncated', data: text, bytes, ...enc, reason: `the compressed stream (${encoding}) is incomplete` };
-  return { state: 'available', data: text, bytes, ...enc };
+  if (cut) return { state: 'truncated', data: text, bytes, ...enc, ...redacted, reason: `the compressed stream (${encoding}) is incomplete` };
+  return { state: 'available', data: text, bytes, ...enc, ...redacted };
 }
 
 /**
