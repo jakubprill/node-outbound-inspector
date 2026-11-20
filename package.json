@@ -20,10 +20,10 @@
   },
   "scripts": {
     "start": "node src/outbound-mcp.mjs",
-    "test": "node --test 'test/**/*.test.mjs'",
+    "test": "node --test \"test/**/*.test.mjs\"",
     "demo": "node scripts/mcp-demo.mjs",
     "record": "node scripts/record-fixture.mjs --scenario",
-    "golden:update": "UPDATE_GOLDEN=1 node --test test/golden/golden.test.mjs"
+    "golden:update": "node scripts/golden-update.mjs"
   },
   "keywords": [
     "mcp",

@@ -4,6 +4,10 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/), wersj
 
 ## [Unreleased]
 
+### Naprawione
+- Testy na Windows (issue #7): normalizacja golden zamienia `\` na `/` przed podmianą katalogu głównego; test haka kończy proces zamknięciem serwerów zamiast `process.exit()` (na Windows exit przy otwartych połączeniach keep-alive wywraca libuv); `npm test` i `npm run golden:update` działają w `cmd.exe`.
+- CI uruchamia testy także na Windows i macOS (Node 24).
+
 ## [0.5.0] — 2026-11-19
 
 ### Zmienione (niezgodne z 0.4.0)

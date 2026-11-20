@@ -10,7 +10,11 @@ const NODE_WARNING = /^Node \d+: /;
 
 const key = v => JSON.stringify(v);
 
+/** Ścieżki z `\\` (Windows) zapisane jak na POSIX, żeby golden był ten sam na każdym systemie (issue #7). */
+const slashes = s => s.replace(/\\/g, '/');
+
 export function normalize(value, root = process.cwd()) {
+  root = slashes(root);
   if (Array.isArray(value)) {
     const items = value.map(v => normalize(v, root));
     return items.sort((a, b) => key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0);
@@ -29,7 +33,7 @@ export function normalize(value, root = process.cwd()) {
     return out;
   }
   if (typeof value === 'string') {
-    return value
+    return slashes(value)
       .split(root).join('<root>')
       .replace(/127\.0\.0\.1:\d+/g, '127.0.0.1:<port>')
       .replace(/\(\d+ ms\)/g, '(<n> ms)');

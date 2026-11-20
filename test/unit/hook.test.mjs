@@ -19,7 +19,10 @@ const svc = http.createServer((q, s) => s.end('ok')).listen(0, '127.0.0.1', () =
     await fetch('http://127.0.0.1:' + app.address().port + '/page?x=1');
     results.log = JSON.parse(${DRAIN_EXPRESSION});
     results.afterDrain = JSON.parse(${DRAIN_EXPRESSION});
-    console.log(JSON.stringify(results)); process.exit(0);
+    console.log(JSON.stringify(results));
+    // bez process.exit(): na Windows exit przy otwartych połączeniach keep-alive wywraca libuv (issue #7);
+    // zamknięte serwery i połączenia pozwalają procesowi zakończyć się samemu
+    for (const s of [app, svc]) { s.close(); s.closeAllConnections(); }
   });
 });`;
 
