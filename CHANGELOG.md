@@ -4,6 +4,8 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/), wersj
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-11-20
+
 ### Zmienione (niezgodne): nazwy aplikacji bez scope npm (issue #8)
 - Nazwa wyświetlana bez scope: `@acme/web` → `web` (status, wiersze zapytań, klucze analizy, `chrome://inspect`). Gdy dwie aplikacje miałyby tę samą krótką nazwę (`@a/web`, `@b/web`), obie dostają pełne nazwy — także w już zebranych rekordach, niezależnie od kolejności startu. `APP_NAME_STRIP_SCOPE=0` przywraca pełne nazwy.
 - Aplikacja pod [portless](https://github.com/vercel-labs/portless) nazywa się jak w portless (`PORTLESS_URL`: `http://web.localhost:1355` → `web`).
@@ -122,7 +124,8 @@ Pierwsza wersja w repozytorium (prototyp).
 - Narzędzia: `inspector_status`, `list_server_requests`, `get_server_request`, `analyze_server_timeline`, `clear_server_requests`.
 - Testy e2e (dwie aplikacje uruchomione równolegle), przykład monorepo Next.js, skrypt demonstracyjny, dokumentacja analizy i wyników testów.
 
-[Unreleased]: https://github.com/jakubprill/node-outbound-inspector/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/jakubprill/node-outbound-inspector/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/jakubprill/node-outbound-inspector/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/jakubprill/node-outbound-inspector/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/jakubprill/node-outbound-inspector/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/jakubprill/node-outbound-inspector/releases/tag/v0.4.0
