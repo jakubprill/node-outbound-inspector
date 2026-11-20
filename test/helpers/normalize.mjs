@@ -14,7 +14,7 @@ const key = v => JSON.stringify(v);
 const slashes = s => s.replace(/\\/g, '/');
 
 export function normalize(value, root = process.cwd()) {
-  root = slashes(root);
+  root = slashes(root).replace(/\/$/, ''); // katalog z końcowym separatorem (fileURLToPath na Windows)
   if (Array.isArray(value)) {
     const items = value.map(v => normalize(v, root));
     return items.sort((a, b) => key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0);

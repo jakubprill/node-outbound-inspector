@@ -9,7 +9,7 @@ import { startMcp } from '../helpers/mcp-client.mjs';
 import { startScenario, sleep } from '../helpers/scenario.mjs';
 import { normalize } from '../helpers/normalize.mjs';
 
-const ROOT = fileURLToPath(new URL('../..', import.meta.url)).replace(/\/$/, '');
+const ROOT = fileURLToPath(new URL('../..', import.meta.url)).replace(/[\\/]$/, '');
 const UPDATE = process.env.UPDATE_GOLDEN === '1';
 const file = name => fileURLToPath(new URL(`./${name}.json`, import.meta.url));
 
