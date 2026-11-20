@@ -31,7 +31,7 @@ Node has an experimental `--experimental-network-inspection` flag (since 22.6 / 
 ## Quick start
 
 ### 1. Run the app with network inspection
-Add the tool as a devDependency (in a monorepo: at the root), e.g. `"node-outbound-inspector": "github:jakubprill/node-outbound-inspector#v0.5.0"`, and in the app:
+Add the tool as a devDependency (in a monorepo: at the root), e.g. `"node-outbound-inspector": "github:jakubprill/node-outbound-inspector#v0.6.0"`, and in the app:
 ```jsonc
 // app package.json — every app in a monorepo gets its OWN inspector port
 "dev:inspect": "outbound-next dev --port 3101 --inspect=9231"

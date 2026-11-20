@@ -4,6 +4,8 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/), wersj
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-11-20
+
 ### Zmienione (niezgodne): mniej tokenów
 - **Podsumowanie `analyze_server_timeline`**: zamiast `by_page_request` pole `pages` — jedna pozycja na stronę (powtórne wejścia zgrupowane: `visits`, `wall_ms_median`, `wall_ms_max`), same liczby i kody (`verdict_code`, `potential_saving_ms` z uwzględnieniem zależności, `errors`), bez tekstu werdyktu, kroków i wskazówek; jedna wskazówka `hint` na wynik. Do 5 błędów, 5 serii bez strony, 3 wolnych zapytań. Pełne dane bez zmian pod `page_request_id` i `detail: "full"` (`by_page_request`). Dla 120–1000 zapytań: około 1,2–1,4 tys. tokenów zamiast 5,5 tys.
 - `list_server_requests`: domyślnie 20 wierszy (było 50). `get_server_request`: domyślnie 2000 znaków treści (było 4000).
@@ -110,6 +112,7 @@ Pierwsza wersja w repozytorium (prototyp).
 - Narzędzia: `inspector_status`, `list_server_requests`, `get_server_request`, `analyze_server_timeline`, `clear_server_requests`.
 - Testy e2e (dwie aplikacje uruchomione równolegle), przykład monorepo Next.js, skrypt demonstracyjny, dokumentacja analizy i wyników testów.
 
-[Unreleased]: https://github.com/jakubprill/node-outbound-inspector/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/jakubprill/node-outbound-inspector/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/jakubprill/node-outbound-inspector/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/jakubprill/node-outbound-inspector/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/jakubprill/node-outbound-inspector/releases/tag/v0.4.0
