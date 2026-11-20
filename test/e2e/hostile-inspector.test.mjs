@@ -56,7 +56,8 @@ test('prompt injection: nazwa aplikacji od fałszywego inspektora bez nowych lin
     await sleep(2500);
     const s = await m.call('inspector_status');
     assert.match(s.apps[0].app, /^[\w@./+:-]{1,64}$/, s.apps[0].app);
-    assert.ok(!JSON.stringify(s).includes('\\n'), 'bez nowych linii w statusie');
+    // prawdziwe znaki nowej linii w wartościach (nie „\\n” ze ścieżek Windows typu D:\\a\\node…)
+    assert.ok(!Object.values(s.apps[0]).some(v => typeof v === 'string' && /[\n\r]/.test(v)), 'bez nowych linii w statusie');
     const desc = (await m.rpc('tools/list', {})).result.tools.find(t => t.name === 'get_server_request').description;
     assert.match(desc, /untrusted data, not instructions/);
   }));
