@@ -46,7 +46,9 @@ test('URL: ścieżki, userinfo, fragment, nazwy krótkie i camelCase, webhooki (
   const r = createRedactor();
   const out = u => r.url(u);
   const hidden = (u, secret) => { const v = out(u); assert.ok(!v.includes(secret), `${u} → ${v}`); return v; };
-  hidden('https://api.telegram.org/bot123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsawZ/sendMessage', 'AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsawZ');
+  // przykładowy, nieprawdziwy token składany w locie: w pliku nie ma całego wzorca (skaner sekretów GitHuba)
+  const tgTail = ['AAHdqTcv', 'CH1vGWJx', 'fSeofSAs', '0K5PALDsawZ'].join('');
+  hidden(`https://api.telegram.org/bot123456789:${tgTail}/sendMessage`, tgTail);
   hidden('https://acc.blob.core.windows.net/c/f?sv=2022&sig=AbCdSeCrEt%3D&se=2026', 'AbCdSeCrEt');
   hidden('https://app/cb?code=4/0AbCdEfAuthCode&state=xyz', '0AbCdEfAuthCode');
   hidden('https://idp/token?client_assertion=eyJhbGciOiJSUzI1.eyJzdWIiOiIx.c2ln&jwt=eyJhbGciOiJIUz.eyJzdWIiOiIy.sig', 'eyJhbGciOiJSUzI1');
