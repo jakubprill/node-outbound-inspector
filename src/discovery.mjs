@@ -15,7 +15,8 @@ export function createDiscovery(config, { isKnown, onTarget }) {
   let timer = null;
   const scanPort = async port => {
     const list = await listTargets(port, { timeoutMs: config.listTimeoutMs });
-    for (const t of list ?? []) if (t.webSocketDebuggerUrl && !isKnown(t.webSocketDebuggerUrl)) onTarget(t, port);
+    // cele wystawione przez outbound-hub to te same procesy co na ich własnych portach — pomijamy, żeby nie dublować
+    for (const t of list ?? []) if (t.webSocketDebuggerUrl && !t.outboundHub && !isKnown(t.webSocketDebuggerUrl)) onTarget(t, port);
   };
   const scan = () => config.ports.forEach(scanPort);
   return {

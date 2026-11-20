@@ -5,7 +5,7 @@ import { connectCdp } from './cdp-client.mjs';
 import { INSTALL_EXPRESSION, DRAIN_EXPRESSION } from './hook/hook.mjs';
 import { NODE_FIXES_EXPRESSION } from './hook/node-fixes.mjs';
 
-const IDENTITY_EXPRESSION = 'JSON.stringify({ cwd: process.cwd(), pkg: process.env.npm_package_name || null, pid: process.pid, argv: process.argv.slice(1).join(" "), execArgv: process.execArgv, node: process.version })';
+export const IDENTITY_EXPRESSION = 'JSON.stringify({ cwd: process.cwd(), pkg: process.env.npm_package_name || null, pid: process.pid, argv: process.argv.slice(1).join(" "), execArgv: process.execArgv, node: process.version })';
 const NETWORK_FLAG = '--experimental-network-inspection';
 
 export const MIN_NODE_MAJOR = 24;
@@ -36,7 +36,7 @@ export function resolveAppName({ port, appNames, pkg, pkgName, cwd }) {
   return appNames[port] || pkg || pkgName || (cwd ? path.basename(cwd) : `port-${port}`);
 }
 
-function readPackageName(cwd) {
+export function readPackageName(cwd) {
   if (!cwd) return null;
   try { return JSON.parse(readFileSync(path.join(cwd, 'package.json'), 'utf8')).name; } catch { return null; }
 }

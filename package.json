@@ -13,7 +13,8 @@
   "type": "module",
   "bin": {
     "outbound-mcp": "src/outbound-mcp.mjs",
-    "outbound-next": "bin/outbound-next.mjs"
+    "outbound-next": "bin/outbound-next.mjs",
+    "outbound-hub": "bin/outbound-hub.mjs"
   },
   "engines": {
     "node": ">=24"

@@ -15,7 +15,7 @@ This file tells language models how to integrate the tool into an existing proje
 Every inspected Node process needs two things:
 
 1. the `--experimental-network-inspection` flag as a **`node` argument**. Node rejects it in `NODE_OPTIONS`;
-2. its **own** inspector port. The collector scans 9229–9249 by default (`INSPECTOR_PORTS`). When two processes get the same port, the second one silently runs without an inspector.
+2. its **own** inspector port. The collector scans 9229–9249 by default (`INSPECTOR_PORTS`). When two processes get the same port, the second one silently runs without an inspector. Use 9230 and up if you run `outbound-hub` (it takes 9229).
 
 Next.js 16 runs the server in a child process. `next dev --inspect=<port>` moves the inspector to that process, so the port is a `next` argument, not a `node` argument.
 
@@ -34,6 +34,10 @@ node --experimental-network-inspection <path to next/dist/bin/next> dev --port 3
 Resolve the path from the app directory: `require.resolve('next/dist/bin/next')`. In a monorepo `next` may live in the root `node_modules`.
 
 A custom script that spawns the apps (e.g. started with `bun run`): change the spawn arguments following option A or B, with a unique port per app. Prefer enabling this conditionally, e.g. with an `OUTBOUND=1` variable, so the regular `dev` does not change. The inspector gives full control over the process: listen on `127.0.0.1` only (the default).
+
+## Optional: one address for chrome://inspect
+
+`outbound-hub` (bin of this package) listens on `127.0.0.1:9229`, the address `chrome://inspect` checks by default, and lists every app found on ports 9230–9249 by name, so developers do not add ports in Chrome. Start it next to the apps in the dev script (a second instance exits quietly). Requirement: no app may use inspector port 9229; give apps ports from 9230 up. The MCP server ignores the hub's proxied targets, so scanning 9229 does not duplicate apps.
 
 ## Integration: connect the MCP server
 

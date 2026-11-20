@@ -57,7 +57,11 @@ Dotychczasowy zapis `node --experimental-network-inspection $(node -p "require.r
 Jeśli aplikacje uruchamia własny skrypt (np. przez `bun run`), zmień tak samo argumenty spawnu, z unikalnym portem inspektora dla każdej aplikacji. Aplikacja musi działać w runtime Node, nie Buna (`bun --bun` nie działa). Instrukcja krok po kroku dla agentów: [`llms.txt`](llms.txt).
 
 ### 2a. Podgląd w Chrome
-`chrome://inspect` → **Open dedicated DevTools for Node** → zakładka **Network**.
+Uruchom `outbound-hub` obok aplikacji (np. w skrypcie dev). Słucha na `127.0.0.1:9229`, który `chrome://inspect` sprawdza domyślnie, znajduje każdą aplikację z inspektorem na portach 9230–9249 i pokazuje je po nazwie. Nie trzeba dopisywać portów w **Configure…**, nowe aplikacje pojawiają się same. Dalej: `chrome://inspect` → **inspect** przy aplikacji → zakładka **Network**.
+
+Hub odpowiada tylko na żądania z nagłówkiem `Host` będącym adresem IP albo `localhost` (ochrona przed DNS rebinding, jak w samym Node) i przekazuje połączenia DevTools tylko do aplikacji, które sam znalazł na skanowanych portach. Zostaw mu port 9229: aplikacjom daj porty inspektora od 9230. `OUTBOUND_HUB_PORT` zmienia port, a `INSPECTOR_PORTS` i `APP_NAMES` działają jak w serwerze MCP.
+
+Bez huba: **Open dedicated DevTools for Node** → **Connection** → dopisz `localhost:<port>` dla każdej aplikacji.
 
 ### 2b. Podłącz agenta (MCP)
 ```bash

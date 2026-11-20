@@ -57,7 +57,11 @@ The older form `node --experimental-network-inspection $(node -p "require.resolv
 If your own script spawns the apps (e.g. started with `bun run`), change the spawn arguments the same way, with a unique inspector port per app. The app must run on the Node runtime, not Bun's (`bun --bun` does not work). Step-by-step instructions for agents: [`llms.txt`](llms.txt).
 
 ### 2a. View in Chrome
-`chrome://inspect` → **Open dedicated DevTools for Node** → **Network** tab.
+Run `outbound-hub` next to your apps (e.g. in your dev script). It listens on `127.0.0.1:9229`, which `chrome://inspect` checks by default, finds every app with an inspector on ports 9230–9249 and lists them by name. No ports to add in **Configure…**, new apps show up on their own. Then: `chrome://inspect` → **inspect** next to the app → **Network** tab.
+
+The hub only answers requests whose `Host` is an IP address or `localhost` (DNS rebinding protection, like Node itself) and only forwards DevTools connections to apps it found on the scanned ports. Keep port 9229 free for it: give apps inspector ports from 9230 up. `OUTBOUND_HUB_PORT` changes the port, `INSPECTOR_PORTS` and `APP_NAMES` work as for the MCP server.
+
+Without the hub: **Open dedicated DevTools for Node** → **Connection** → add `localhost:<port>` for every app.
 
 ### 2b. Connect an agent (MCP)
 ```bash

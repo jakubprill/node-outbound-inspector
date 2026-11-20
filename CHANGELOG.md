@@ -4,6 +4,9 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/), wersj
 
 ## [Unreleased]
 
+### Dodane
+- **`outbound-hub`:** wszystkie aplikacje w `chrome://inspect` bez wpisywania portów. Słucha na `127.0.0.1:9229` (adres sprawdzany przez Chrome domyślnie), znajduje procesy z inspektorem na skanowanych portach, nazywa je jak kolektor i przepina połączenie DevTools do właściwego procesu (TCP po nagłówkach Upgrade, bez zależności). Odpowiada tylko na `Host` będący adresem IP lub `localhost` i łączy tylko ze znalezionymi procesami. Sprawdzone na Chrome 153: lista celów i „inspect”. Kolektor MCP pomija cele huba (pole `outboundHub`), więc nie dubluje aplikacji.
+
 ### Naprawione
 - Testy na Windows (issue #7): normalizacja golden zamienia `\` na `/` przed podmianą katalogu głównego; test haka kończy proces zamknięciem serwerów zamiast `process.exit()` (na Windows exit przy otwartych połączeniach keep-alive wywraca libuv); `npm test` i `npm run golden:update` działają w `cmd.exe`.
 - CI uruchamia testy także na Windows i macOS (Node 24).
