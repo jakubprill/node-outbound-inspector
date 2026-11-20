@@ -5,7 +5,7 @@
 import http from 'node:http';
 import net from 'node:net';
 import { isIP } from 'node:net';
-import { listTargets } from '../discovery.mjs';
+import { listTargets, validTarget, DISCOVERY_LIMITS } from '../discovery.mjs';
 import { connectCdp } from '../cdp-client.mjs';
 import { IDENTITY_EXPRESSION, readPackageName, resolveAppName } from '../session.mjs';
 
@@ -62,7 +62,7 @@ export function createHub({ host = '127.0.0.1', port, ports, appNames = {}, scan
           const res = await cdp.send('Runtime.evaluate', { expression: IDENTITY_EXPRESSION, returnByValue: true });
           let info = {};
           try { info = JSON.parse(res?.result?.value ?? '{}'); } catch {}
-          done(resolveAppName({ port: p, appNames, pkg: info.pkg, pkgName: readPackageName(info.cwd), cwd: info.cwd }));
+          done(resolveAppName({ port: p, appNames, pkg: info.pkg, pkgName: await readPackageName(info.cwd), cwd: info.cwd }));
         },
         onClose: () => done(fallback),
       });
@@ -71,7 +71,9 @@ export function createHub({ host = '127.0.0.1', port, ports, appNames = {}, scan
 
   async function scanPort(p) {
     const list = await listTargets(p, { timeoutMs: listTimeoutMs });
-    const targets = (list ?? []).filter(t => t.webSocketDebuggerUrl && !t.outboundHub && t.type === 'node');
+    // jak w kolektorze: tylko cele wskazujące ten sam port na pętli zwrotnej, z limitem (audyt B-03, B-11)
+    const targets = (list ?? []).filter(t => validTarget(t, p) && !t.outboundHub && t.type === 'node' && typeof t.id === 'string' && /^[\w-]{1,128}$/.test(t.id))
+      .slice(0, DISCOVERY_LIMITS.targetsPerPort);
     if (!targets.length) { if (apps.delete(p)) log(`gone port=${p}`); return; }
     for (const t of targets) {
       if (!names.has(t.webSocketDebuggerUrl)) {

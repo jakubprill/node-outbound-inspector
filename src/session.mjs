@@ -1,5 +1,5 @@
 // Jedna sesja CDP z procesem aplikacji: tożsamość, Network.enable, hak, odbiór dziennika haka.
-import { readFileSync } from 'node:fs';
+import { stat, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { connectCdp } from './cdp-client.mjs';
 import { INSTALL_EXPRESSION, DRAIN_EXPRESSION } from './hook/hook.mjs';
@@ -36,9 +36,19 @@ export function resolveAppName({ port, appNames, pkg, pkgName, cwd }) {
   return appNames[port] || pkg || pkgName || (cwd ? path.basename(cwd) : `port-${port}`);
 }
 
-export function readPackageName(cwd) {
-  if (!cwd) return null;
-  try { return JSON.parse(readFileSync(path.join(cwd, 'package.json'), 'utf8')).name; } catch { return null; }
+/**
+ * Nazwa z package.json w katalogu procesu. Katalog podaje badany proces, więc tylko zwykły plik do 1 MB
+ * i odczyt asynchroniczny: FIFO albo /dev/zero nie zawieszą kolektora (audyt B-09).
+ */
+export async function readPackageName(cwd) {
+  if (typeof cwd !== 'string' || !path.isAbsolute(cwd)) return null;
+  const file = path.join(cwd, 'package.json');
+  try {
+    const st = await stat(file);
+    if (!st.isFile() || st.size > 1 << 20) return null;
+    const name = JSON.parse(await readFile(file, 'utf8')).name;
+    return typeof name === 'string' ? name : null;
+  } catch { return null; }
 }
 
 /**
@@ -56,7 +66,7 @@ export function openSession(target, port, { config, log, onNetwork, onClose, pro
     let info = {};
     try { info = JSON.parse(res?.result?.value ?? '{}'); } catch {}
     session.pid = info.pid; session.cwd = info.cwd; session.argv = info.argv; session.node = info.node;
-    session.app = resolveAppName({ port, appNames: config.appNames, pkg: info.pkg, pkgName: readPackageName(info.cwd), cwd: info.cwd });
+    session.app = resolveAppName({ port, appNames: config.appNames, pkg: info.pkg, pkgName: await readPackageName(info.cwd), cwd: info.cwd });
     // Node < 24 nie jest wspierany: bez Network.enable i bez haka — status podaje powód
     if (!supportedNode(info.node)) {
       const check = processWarnings({ node: info.node });
@@ -86,6 +96,7 @@ export function openSession(target, port, { config, log, onNetwork, onClose, pro
     onOpen,
     onEvent: (method, params) => { if (method.startsWith('Network.')) onNetwork(session, method, params); },
     onClose: () => { onClose(session); log(`disconnected app="${session.app}" port=${port}`); },
+    onError: e => log(`event error app="${session.app}" port=${port}: ${e?.message ?? e}`),
   });
   session.send = cdp.send;
   session.close = cdp.close;
@@ -95,9 +106,11 @@ export function openSession(target, port, { config, log, onNetwork, onClose, pro
     const res = await session.send('Runtime.evaluate', { expression: DRAIN_EXPRESSION, returnByValue: true });
     let out;
     try { out = JSON.parse(res?.result?.value ?? '[]'); } catch { return []; }
-    if (Array.isArray(out)) return out; // hak starszej wersji (zainstalowany przez inny kolektor): sam dziennik
-    if (Array.isArray(out?.ports)) session.httpPorts = out.ports.filter(p => Number.isInteger(p) && p !== port).sort((a, b) => a - b);
-    return Array.isArray(out?.log) ? out.log : [];
+    const log = Array.isArray(out) ? out : Array.isArray(out?.log) ? out.log : []; // tablica: hak starszej wersji
+    if (Array.isArray(out?.ports)) session.httpPorts = out.ports.filter(p => Number.isInteger(p) && p > 0 && p < 65536 && p !== port).slice(0, 20).sort((a, b) => a - b);
+    // wpisy pochodzą z procesu aplikacji (każdy jego kod może je zapisać): tylko poprawny kształt (audyt B-04)
+    return log.slice(0, 5000).filter(e => e && typeof e.url === 'string' && typeof e.method === 'string' && Number.isFinite(e.t)
+      && e.page && typeof e.page === 'object' && typeof e.page.url === 'string' && typeof e.page.method === 'string');
   };
   return session;
 }

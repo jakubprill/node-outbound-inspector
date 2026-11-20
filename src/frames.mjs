@@ -65,9 +65,13 @@ const displayPath = url => url.replace(/^file:\/\/\/([A-Za-z]:[\\/])/, '$1').rep
  */
 export function userFrames(initiator, { libraryPaths = [] } = {}) {
   const frames = [];
-  for (let st = initiator?.stack; st; st = st.parent) frames.push(...(st.callFrames ?? []));
+  // dane z inspektora: kształt sprawdzany, głębokość i liczba ramek ograniczone (audyt B-04, B-11)
+  for (let st = initiator?.stack, depth = 0; st && typeof st === 'object' && depth < 50; st = st.parent, depth++) {
+    if (Array.isArray(st.callFrames)) frames.push(...st.callFrames.slice(0, 200));
+  }
+  const text = (v, n) => String(v ?? '').slice(0, n);
   return frames
-    .filter(f => !isLibraryFrame(f.url, libraryPaths))
+    .filter(f => f && typeof f.url === 'string' && !isLibraryFrame(f.url, libraryPaths))
     .slice(0, 5)
-    .map(f => `${f.functionName || '(anonymous)'} @ ${displayPath(f.url)}:${f.lineNumber + 1}:${f.columnNumber + 1}`);
+    .map(f => `${text(f.functionName, 200) || '(anonymous)'} @ ${text(displayPath(f.url), 1000)}:${Number(f.lineNumber) + 1}:${Number(f.columnNumber) + 1}`);
 }

@@ -14,6 +14,8 @@ export function applyPageEntries(pool, entries, pending, nowMs) {
       && Math.abs(r.wallStart - e.t) < 3000).sort((a, b) => Math.abs(a.wallStart - e.t) - Math.abs(b.wallStart - e.t))[0];
     if (cand) cand.page = e.page; else pending.push(e);
   }
+  // nieprzypisane wpisy wygasają po 10 s także pod ciągłym ruchem; najwyżej 1000 (audyt B-11)
+  if (pending.length) { const keep = pending.filter(e => nowMs - e.t < 10000).slice(-1000); pending.splice(0, pending.length, ...keep); }
   // wpisy, które przyszły przed zdarzeniem Network — spróbuj ponownie przy następnym odpytaniu
   if (pending.length && entries.length === 0) {
     const retry = pending.splice(0).filter(e => nowMs - e.t < 10000);

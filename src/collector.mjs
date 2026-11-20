@@ -9,6 +9,8 @@ import { createRedactor } from './redact.mjs';
 import { classifyBody, enforceBodyBudget } from './bodies.mjs';
 import { OTLP_RULES } from './ignore.mjs';
 
+const MAX_SESSIONS = 64;
+
 /**
  * @param {ReturnType<import('./config.mjs').loadConfig>} config
  * @param {{ log?: (msg: string) => void, now?: () => number }} [deps]
@@ -55,6 +57,7 @@ export function createCollector(config, { log = () => {}, now = Date.now } = {})
   const discovery = createDiscovery(config, {
     isKnown: url => sessions.has(url),
     onTarget: (target, port) => {
+      if (sessions.size >= MAX_SESSIONS) return; // limit wobec fałszywych inspektorów (audyt B-11)
       const session = openSession(target, port, {
         config, log, onNetwork, processId: ++processSeq,
         onClose: s => { sessions.delete(s.url); byProcess.delete(s.processId); },
@@ -66,7 +69,7 @@ export function createCollector(config, { log = () => {}, now = Date.now } = {})
 
   async function pollPages(session) {
     if (!config.pageCorrelation || !session.pageCorrelation) return;
-    const entries = await session.drainHookLog();
+    const entries = await session.drainHookLog().catch(() => []);
     const pool = store.values().filter(r => r.processId === session.processId && !r.page);
     applyPageEntries(pool, entries, session.pendingPages, now());
   }
@@ -105,7 +108,7 @@ export function createCollector(config, { log = () => {}, now = Date.now } = {})
     ensureBody,
     settle,
     start() {
-      pollTimer = setInterval(pollAll, config.pollIntervalMs); pollTimer.unref();
+      pollTimer = setInterval(() => pollAll().catch(e => log(`poll error: ${e?.message ?? e}`)), config.pollIntervalMs); pollTimer.unref();
       discovery.start();
     },
     stop() {
