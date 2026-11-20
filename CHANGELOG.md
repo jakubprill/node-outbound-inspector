@@ -5,6 +5,7 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/), wersj
 ## [Unreleased]
 
 ### Dodane
+- **Współpraca z Next DevTools MCP:** żądania stron mają `next_request_id` i `next_html_request_id` z nagłówków `x-nextjs-request-id` / `x-nextjs-html-request-id` (złączenie z `get_request_insights`; także filtry), `inspector_status` podaje `http_ports` aplikacji (do `nextjs_index` / `nextjs_call`), żądania wewnętrznych endpointów dev Next (`/_next/mcp`, HMR, `/__nextjs_*`) nie są żądaniami stron. Sekcja „Together with Next DevTools MCP” w README i `llms.txt`.
 - **`outbound-hub`:** wszystkie aplikacje w `chrome://inspect` bez wpisywania portów. Słucha na `127.0.0.1:9229` (adres sprawdzany przez Chrome domyślnie), znajduje procesy z inspektorem na skanowanych portach, nazywa je jak kolektor i przepina połączenie DevTools do właściwego procesu (TCP po nagłówkach Upgrade, bez zależności). Odpowiada tylko na `Host` będący adresem IP lub `localhost` i łączy tylko ze znalezionymi procesami. Sprawdzone na Chrome 153: lista celów i „inspect”. Kolektor MCP pomija cele huba (pole `outboundHub`), więc nie dubluje aplikacji.
 
 ### Naprawione

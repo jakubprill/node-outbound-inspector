@@ -80,7 +80,10 @@ export function analyze(rs, args = {}, appsSeen = []) {
     const pages = newest(byPage, L.pages).map(reqs => {
       const a = analyzeApp(reqs, { ...args, idle_gap_ms: 1e9 });
       const b = a.bursts[0];
-      return b && { page: pageLabel(reqs[0]), page_request_id: reqs[0].page.id, requests: b.requests,
+      const pg = reqs[0].page;
+      return b && { page: pageLabel(reqs[0]), page_request_id: pg.id,
+        ...(pg.nextRequestId ? { next_request_id: pg.nextRequestId } : {}), ...(pg.nextHtmlRequestId ? { next_html_request_id: pg.nextHtmlRequestId } : {}),
+        requests: b.requests,
         wall_ms: b.wall_ms, max_concurrency: b.max_concurrency, verdict: b.verdict, verdict_code: b.verdict_code, sequential_chains: b.sequential_chains,
         potential_saving_ms_if_fully_parallel: b.potential_saving_ms_if_fully_parallel,
         ...(b.dependencies ? { dependencies: b.dependencies } : {}), ...(b.dependency_check ? { dependency_check: b.dependency_check } : {}),

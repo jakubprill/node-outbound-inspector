@@ -8,6 +8,8 @@ const sel = {
   url_contains: { type: 'string', description: 'Filter: substring of the outbound request URL' },
   page_contains: { type: 'string', description: 'Filter: substring of the page request that triggered the request, e.g. "/checkout"' },
   page_request_id: { type: 'string', description: 'Filter: one page request (page_request_id from analyze_server_timeline)' },
+  next_request_id: { type: 'string', description: 'Filter: Next.js request id of the page request (x-nextjs-request-id; requestId in get_request_insights of Next DevTools MCP)' },
+  next_html_request_id: { type: 'string', description: 'Filter: Next.js HTML document request id (x-nextjs-html-request-id; htmlRequestId in get_request_insights)' },
   status: { type: 'string', description: 'Filter: status code ("404"), class ("5xx"), "error" (4xx/5xx or failed), "failed" or "pending"' },
   last_ms: { type: 'number', description: 'Only requests from the last N milliseconds' },
   since_id: { type: 'number', description: 'Only requests with an id greater than this one (cursor: pass next_since_id from the previous call)' },

@@ -130,6 +130,15 @@ Skrypty `dev:inspect` aplikacji są przenośne (`outbound-next`). Skrypty zbiorc
 
 Minimalny klient CDP (to, co robi zakładka Network): [`examples/cdp-network-probe.mjs`](examples/cdp-network-probe.mjs).
 
+## Razem z Next DevTools MCP
+
+Next.js 16 ma własny serwer MCP (`/_next/mcp`, używany przez `next-devtools-mcp`): trasy, błędy, kompilacja, logi, Server Actions oraz, z `experimental.requestInsights: true`, `get_request_insights` (wywołania `fetch` w App Routerze ze statusem cache Next). Nie pokazuje nagłówków, treści, ruchu `node:http` (axios, SDK), zapytań poza żądaniem strony, błędów sieci ani analizy waterfall. Oba serwery się uzupełniają; skonfiguruj agentowi oba.
+
+- Żądania stron mają `next_request_id` / `next_html_request_id`, gdy przeglądarka wysłała nagłówki Next `x-nextjs-request-id` / `x-nextjs-html-request-id` (nawigacje po stronie klienta, Server Actions w dev). Przekaż je do `get_request_insights` jako `requestId` / `htmlRequestId` albo użyj jako filtrów tutaj.
+- `inspector_status` podaje `http_ports` każdej aplikacji: przekaż port do `nextjs_index` / `nextjs_call`. `next-devtools-mcp` sam znajduje serwery na portach 3000–3010; z `--inspect` proces Next słucha na dwóch portach, więc podawaj port jawnie, gdy aplikacja jest poza tym zakresem.
+- Żądania do wewnętrznych endpointów dev Next (`/_next/mcp`, HMR, `/__nextjs_*`) nie są traktowane jak żądania stron.
+- Zapytanie, którego tu brakuje, a które `get_request_insights` pokazuje ze statusem cache `hit` albo `hmr`, zostało obsłużone z cache Next.
+
 ## Ograniczenia
 - Funkcja Node jest **eksperymentalna**. Wymagany Node ≥ 24 (testowane w CI na 24 i najnowszej wersji). Na starszym Node kolektor nie startuje, a proces aplikacji nie jest podsłuchiwany (powód w `inspector_status`).
 - **Bun** jako runtime nie jest obsługiwany (WebKit Inspector zamiast CDP). Działa, jeśli Bun służy tylko do instalowania pakietów i uruchamiania skryptów, a aplikacja działa na Node.

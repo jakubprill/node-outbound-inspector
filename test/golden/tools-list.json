@@ -30,6 +30,14 @@
             "type": "string",
             "description": "Filter: one page request (page_request_id from analyze_server_timeline)"
           },
+          "next_request_id": {
+            "type": "string",
+            "description": "Filter: Next.js request id of the page request (x-nextjs-request-id; requestId in get_request_insights of Next DevTools MCP)"
+          },
+          "next_html_request_id": {
+            "type": "string",
+            "description": "Filter: Next.js HTML document request id (x-nextjs-html-request-id; htmlRequestId in get_request_insights)"
+          },
           "status": {
             "type": "string",
             "description": "Filter: status code (\"404\"), class (\"5xx\"), \"error\" (4xx/5xx or failed), \"failed\" or \"pending\""
@@ -93,6 +101,14 @@
           "page_request_id": {
             "type": "string",
             "description": "Filter: one page request (page_request_id from analyze_server_timeline)"
+          },
+          "next_request_id": {
+            "type": "string",
+            "description": "Filter: Next.js request id of the page request (x-nextjs-request-id; requestId in get_request_insights of Next DevTools MCP)"
+          },
+          "next_html_request_id": {
+            "type": "string",
+            "description": "Filter: Next.js HTML document request id (x-nextjs-html-request-id; htmlRequestId in get_request_insights)"
           },
           "status": {
             "type": "string",

@@ -4,6 +4,7 @@
       "app": "@acme/admin",
       "buffered_requests": 7,
       "cwd": "<root>/test/fixtures/apps/admin",
+      "http_ports": "<str>",
       "network_inspection": true,
       "node": "<str>",
       "node_workarounds": [
@@ -20,6 +21,7 @@
       "app": "@acme/web",
       "buffered_requests": 4,
       "cwd": "<root>/test/fixtures/apps/web",
+      "http_ports": "<str>",
       "network_inspection": true,
       "node": "<str>",
       "node_workarounds": [

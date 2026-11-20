@@ -130,6 +130,15 @@ The apps' `dev:inspect` scripts are portable (`outbound-next`). The aggregate sc
 
 A minimal CDP client (what the Network tab does): [`examples/cdp-network-probe.mjs`](examples/cdp-network-probe.mjs).
 
+## Together with Next DevTools MCP
+
+Next.js 16 has its own MCP server (`/_next/mcp`, used through `next-devtools-mcp`): routes, errors, compilation, logs, Server Actions and, with `experimental.requestInsights: true`, `get_request_insights` (App Router `fetch` calls with Next cache status). It does not show headers, bodies, `node:http` traffic (axios, SDKs), requests outside a page request, network errors or waterfall analysis. The two servers complement each other; configure both for the agent.
+
+- Page requests carry `next_request_id` / `next_html_request_id` when the browser sent Next's `x-nextjs-request-id` / `x-nextjs-html-request-id` headers (client navigations, Server Actions in dev). Pass them to `get_request_insights` as `requestId` / `htmlRequestId`, or use them as filters here.
+- `inspector_status` lists each app's `http_ports`: pass the port to `nextjs_index` / `nextjs_call`. `next-devtools-mcp` finds servers on ports 3000–3010 by itself; with `--inspect` the Next process listens on two ports, so pass the port explicitly when the app is not in that range.
+- Requests to Next's own dev endpoints (`/_next/mcp`, HMR, `/__nextjs_*`) are not treated as page requests.
+- A request missing here but present in `get_request_insights` with cache status `hit` or `hmr` was served from Next's cache.
+
 ## Limitations
 - The Node feature is **experimental**. Node ≥ 24 is required (tested in CI on 24 and the latest version). On older Node the collector does not start, and an app process is not inspected (the reason is in `inspector_status`).
 - **Bun** as a runtime is not supported (WebKit Inspector instead of CDP). It works if Bun only installs packages and runs scripts while the app runs on Node.

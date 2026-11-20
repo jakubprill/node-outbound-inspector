@@ -31,7 +31,9 @@ const failedStatus = error => error?.trim() ? `FAILED: ${error}` : FAILED_NO_TEX
 /** @param {any} r rekord zapytania  @param {number} [t0] początek osi czasu (sekundy inspektora) */
 export function row(r, t0) {
   return {
-    id: r.id, app: r.app, page: r.page ? `${r.page.method} ${r.page.url}` : null, method: r.method, url: shortUrl(r.url),
+    id: r.id, app: r.app, page: r.page ? `${r.page.method} ${r.page.url}` : null,
+    ...(r.page?.nextRequestId ? { next_request_id: r.page.nextRequestId } : {}),
+    method: r.method, url: shortUrl(r.url),
     status: r.state === 'failed' ? failedStatus(r.error) : (r.status ?? 'pending'),
     start_ms: t0 != null ? Math.round((r.tsStart - t0) * 1000) : undefined,
     duration_ms: duration(r),

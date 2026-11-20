@@ -719,7 +719,7 @@ Warstwa `ingest` jest jedynym miejscem znającym kształt zdarzeń CDP. Gdyby fl
 | 6 | Sekrety albo dane osobowe z integracji trafiają do dostawcy modelu | średnie | wysoki | redakcja domyślnie włączona, tryby treści, decyzja zespołu (pytanie 3) |
 | 7 | Wstrzyknięcie instrukcji przez treść odpowiedzi serwisu | niskie | średni | przycinanie, oznaczenie danych, `instructions` |
 | 8 | Zmiany w specyfikacji MCP (duża rewizja w lipcu 2026) | wysokie | niski | serwer obu er, testy protokołu, kryteria przejścia na SDK |
-| 9 | Next sam dostarczy to samo (`experimental.requestInsights`) | średnie | średni | narzędzie jest niezależne od frameworka i pokazuje nagłówki oraz treści; ocena przed M6 |
+| 9 | Next sam dostarczy to samo (`experimental.requestInsights`) | niskie (2026-11-20) | średni | sprawdzone w kodzie Next 16.4.6 i canary 16.5: `get_request_insights` widzi tylko `fetch` w kontekście żądania, bez nagłówków, treści, `node:http`, błędów sieci i analizy; uzupełnia nas statusem cache i trasą. Sprawdzać przy każdej wersji minor |
 | 10 | Martwe wpisy i rezerwacje po twardym zabiciu procesów | wysokie | niski | sprawdzanie pid przy odczycie, sprzątanie przez launcher |
 | 11 | Format map źródeł Turbopacka inny niż założony albo zmienny | średnie | niski | resolver obsługuje mapy zwykłe i indeksowe oraz cztery schematy ścieżek; przy błędzie zostaje ścieżka chunku |
 | 12 | Kilka kolektorów naraz obciąża aplikację (każdy pobiera treści) | niskie | niski | limity, tryb `lazy`; demon dopiero, gdy stanie się to realnym problemem (ADR 0002) |
@@ -742,7 +742,7 @@ Tych rzeczy nie dało się sprawdzić bez Next.js. Każda zajmuje kilka minut na
 | S2 | Czy `next dev --inspect=127.0.0.1:<port>` przyjmuje adres z hostem? | uruchomić ręcznie | M3 |
 | S3 | Czy zewnętrzna warstwa `fetch` daje ramkę strony (wariant B w sondzie) i czy sam subskrybent też ją widzi (wariant A)? | sonda, linie A i B | M5 |
 | S4 | Format map Turbopacka: czy chunk ma `sourceMappingURL`, czy mapa ma `sections`, jakie są `sources`? | `tail -c 200` chunku, `head -c 400` mapy | M5 |
-| S5 | Co zwraca `get_request_insights` z `experimental.requestInsights`? | Next DevTools MCP | M6 |
+| S5 | ~~Co zwraca `get_request_insights` z `experimental.requestInsights`?~~ **Rozstrzygnięte 2026-11-20** (kod Next 16.4.6, canary 16.5): `fetch` z URL, metodą, statusem, czasem do nagłówków, statusem cache i `requestId`/`htmlRequestId`/`route`; bez nagłówków, treści i `node:http`. Złączenie z naszymi wynikami: `next_request_id`, `next_html_request_id` | Next DevTools MCP | M6 |
 | S6 | Node 26: jednostki `wallTime`, treść żądań, limity bufora | `npm test` i sondy zgodności na Node 26 | M2 |
 
 ### M1. Refaktor bez zmiany zachowania (M)

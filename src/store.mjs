@@ -41,12 +41,14 @@ export function createStore({ maxRequests }) {
     appsSeen: () => [...new Set([...requests.values()].map(r => r.app))],
 
     /** Filtr jak w narzędziach MCP; `nowMs` potrzebne tylko dla `last_ms`. */
-    select({ app, url_contains, page_contains, page_request_id, status, last_ms, since_id } = {}, nowMs = 0) {
+    select({ app, url_contains, page_contains, page_request_id, next_request_id, next_html_request_id, status, last_ms, since_id } = {}, nowMs = 0) {
       let rs = [...requests.values()];
       if (app) rs = rs.filter(r => matchesApp(r, app));
       if (url_contains) rs = rs.filter(r => r.url.includes(url_contains));
       if (page_contains) rs = rs.filter(r => r.page && `${r.page.method} ${r.page.url}`.includes(page_contains));
       if (page_request_id != null && page_request_id !== '') rs = rs.filter(r => r.page && String(r.page.id) === String(page_request_id));
+      if (next_request_id) rs = rs.filter(r => r.page?.nextRequestId === String(next_request_id));
+      if (next_html_request_id) rs = rs.filter(r => r.page?.nextHtmlRequestId === String(next_html_request_id));
       if (status != null && status !== '') rs = rs.filter(statusMatcher(status));
       if (since_id) rs = rs.filter(r => r.id > since_id);
       if (last_ms) { const cut = nowMs - last_ms; rs = rs.filter(r => r.wallStart >= cut); }

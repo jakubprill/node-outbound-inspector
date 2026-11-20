@@ -121,7 +121,10 @@ export function createCollector(config, { log = () => {}, now = Date.now } = {})
         ignored_otlp: config.ignoreOtlp ? OTLP_RULES : [], ignored_requests_total: { ...ignored },
         apps: [...sessions.values()].map(s => ({ app: s.app, port: s.port, pid: s.pid, cwd: s.cwd, network_inspection: !!s.networkOk, page_correlation: !!s.pageCorrelation, since: s.connectedAt,
           buffered_requests: store.values().filter(r => r.app === s.app).length,
-          node: s.node, ready: !!s.ready, node_workarounds: s.nodeWorkarounds ?? [], warnings: s.warnings })),
+          node: s.node, ready: !!s.ready, node_workarounds: s.nodeWorkarounds ?? [],
+          // porty HTTP procesu (z haka): np. port next dev do wywołań Next DevTools MCP
+          ...(s.httpPorts?.length ? { http_ports: s.httpPorts } : {}),
+          warnings: s.warnings })),
         buffered_requests_total: store.size, last_id: store.lastId,
         redaction: config.redact, bodies: config.bodies, warnings: globalWarnings(),
       };

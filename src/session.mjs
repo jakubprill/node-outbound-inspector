@@ -90,10 +90,14 @@ export function openSession(target, port, { config, log, onNetwork, onClose, pro
   session.send = cdp.send;
   session.close = cdp.close;
 
-  /** Odbiera i opróżnia dziennik haka (wpisy: url, method, page, t). */
+  /** Odbiera i opróżnia dziennik haka (wpisy: url, method, page, t); zapamiętuje porty HTTP procesu. */
   session.drainHookLog = async () => {
     const res = await session.send('Runtime.evaluate', { expression: DRAIN_EXPRESSION, returnByValue: true });
-    try { return JSON.parse(res?.result?.value ?? '[]'); } catch { return []; }
+    let out;
+    try { out = JSON.parse(res?.result?.value ?? '[]'); } catch { return []; }
+    if (Array.isArray(out)) return out; // hak starszej wersji (zainstalowany przez inny kolektor): sam dziennik
+    if (Array.isArray(out?.ports)) session.httpPorts = out.ports.filter(p => Number.isInteger(p) && p !== port).sort((a, b) => a - b);
+    return Array.isArray(out?.log) ? out.log : [];
   };
   return session;
 }
