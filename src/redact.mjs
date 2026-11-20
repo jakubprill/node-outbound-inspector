@@ -35,14 +35,17 @@ export function createRedactor({ enabled = true, extraHeaders = [], key = random
     return out;
   }
 
+  /** URL bezwzględny albo ścieżka względna (adres żądania strony, np. `/callback?code=…`, audyt B-02). */
   function url(u) {
     if (!enabled || typeof u !== 'string' || !u.includes('?')) return u;
-    let parsed; try { parsed = new URL(u); } catch { return u; }
+    const relative = u.startsWith('/') && !u.startsWith('//');
+    let parsed; try { parsed = relative ? new URL(u, 'http://relative.invalid') : new URL(u); } catch { return u; }
     let changed = false;
     for (const [name, value] of parsed.searchParams) {
       if (isSensitive(name)) { parsed.searchParams.set(name, `[redacted · #${hash(value)}]`); changed = true; }
     }
-    return changed ? parsed.toString() : u;
+    if (!changed) return u;
+    return relative ? parsed.pathname + parsed.search + parsed.hash : parsed.toString();
   }
 
   /**

@@ -42,18 +42,39 @@ export function buildNodeArgs({ cli, args, execArgv = [] }) {
  * @returns {string[]}
  */
 export function inspectWarnings(args) {
-  const values = args.flatMap((a, i) => {
-    const m = /^--inspect(?:-brk|-wait)?(?:=(.*))?$/.exec(a);
+  const values = inspectorValues(args, /^--inspect(?:-brk|-wait)?(?:=(.*))?$/);
+  if (!values.length) return ['No --inspect=<port> in the arguments: the process will have no inspector, so network inspection does nothing. Add e.g. --inspect=9231 (each app in a monorepo needs its own port).'];
+  return remoteInspectHosts(args).map(host =>
+    `The inspector on ${host} is reachable from outside this machine and gives full control over the process. Locally, use just the port (--inspect=<port> → 127.0.0.1).`);
+}
+
+const INSPECT_ANY = /^--(?:inspect(?:-brk|-wait)?|inspect-port|debug-port)(?:=(.*))?$/;
+
+/** Wartości flag inspektora: `--flag=v` albo `--flag v` (gdy następny argument nie jest flagą). */
+function inspectorValues(args, re) {
+  return args.flatMap((a, i) => {
+    const m = re.exec(a);
     if (!m) return [];
     return [m[1] ?? (args[i + 1] && !args[i + 1].startsWith('-') ? args[i + 1] : '')];
   });
-  if (!values.length) return ['No --inspect=<port> in the arguments: the process will have no inspector, so network inspection does nothing. Add e.g. --inspect=9231 (each app in a monorepo needs its own port).'];
-  return values.flatMap(v => {
-    const host = v.includes(':') ? v.slice(0, v.lastIndexOf(':')) : '';
-    return host && !LOOPBACK.has(host)
-      ? [`The inspector on ${host} is reachable from outside this machine and gives full control over the process. Locally, use just the port (--inspect=<port> → 127.0.0.1).`]
-      : [];
-  });
+}
+
+/** Host z wartości flagi: sam port → brak hosta; `[::]:9229`; `0.0.0.0:9229`; sam host (`--inspect=0.0.0.0`). */
+export function inspectorHost(v) {
+  if (!v || /^\d+$/.test(v)) return '';
+  if (v.startsWith('[')) return v.slice(0, v.indexOf(']') + 1);
+  const i = v.lastIndexOf(':');
+  return i >= 0 ? v.slice(0, i) : v;
+}
+
+/**
+ * Hosty inspektora spoza pętli zwrotnej w argumentach i w NODE_OPTIONS, także `--inspect=0.0.0.0` (sam host)
+ * i `--inspect-port` / `--debug-port` (audyt B-08).
+ * @param {string[]} args  @param {Record<string, string | undefined>} [env]
+ */
+export function remoteInspectHosts(args, env = {}) {
+  const all = [...args, ...String(env.NODE_OPTIONS ?? '').split(/\s+/).filter(Boolean)];
+  return [...new Set(inspectorValues(all, INSPECT_ANY).map(inspectorHost).filter(h => h && !LOOPBACK.has(h)))];
 }
 
 /** Sygnały przekazywane od razu. SIGBREAK istnieje tylko na Windows (Ctrl+Break). */
@@ -114,6 +135,12 @@ export async function runNext({ argv = process.argv.slice(2), env = process.env,
     cli = resolveCli({ cwd, env });
   } catch (e) {
     return fail(`Could not find ${NEXT_CLI} from ${cwd} (${e.code ?? e.message}). Run the script in an app directory that depends on "next", or point to the file with OUTBOUND_NEXT_BIN.`);
+  }
+  // inspektor poza pętlą zwrotną daje każdemu w sieci wykonanie kodu w procesie: blokada, chyba że jawnie dozwolone
+  const remote = remoteInspectHosts(argv, env);
+  if (remote.length && env.OUTBOUND_ALLOW_REMOTE_INSPECT !== '1') {
+    return fail(`The inspector would listen on ${remote.join(', ')}, reachable from outside this machine, which gives full control over the process. `
+      + 'Use just the port (--inspect=<port> → 127.0.0.1). To allow it anyway (e.g. inside a container), set OUTBOUND_ALLOW_REMOTE_INSPECT=1.');
   }
   for (const w of inspectWarnings(argv)) proc.stderr.write(`${TAG} warning: ${w}\n`);
   const result = await runChild({ execPath: proc.execPath, nodeArgs: buildNodeArgs({ cli, args: argv, execArgv: proc.execArgv }), proc });

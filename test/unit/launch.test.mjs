@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { buildNodeArgs, inspectWarnings, resolveCli, runChild, exitLike, NETWORK_FLAG } from '../../src/cli/launch.mjs';
+import { buildNodeArgs, inspectWarnings, remoteInspectHosts, resolveCli, runChild, exitLike, NETWORK_FLAG } from '../../src/cli/launch.mjs';
 
 test('buildNodeArgs: flaga przed plikiem CLI, flagi inspektora launchera odfiltrowane', () => {
   assert.deepEqual(buildNodeArgs({ cli: '/n/next', args: ['dev', '--inspect=9231'] }), [NETWORK_FLAG, '/n/next', 'dev', '--inspect=9231']);
@@ -17,6 +17,16 @@ test('inspectWarnings: brak inspektora i host spoza loopbacku', () => {
     assert.deepEqual(inspectWarnings(['dev', ...ok]), [], ok.join(' '));
   assert.match(inspectWarnings(['dev', '--inspect=0.0.0.0:9231'])[0], /0\.0\.0\.0/);
   assert.match(inspectWarnings(['dev', '--inspect', '10.0.0.5:9231'])[0], /10\.0\.0\.5/);
+});
+
+test('remoteInspectHosts: sam host, --inspect-port, NODE_OPTIONS, IPv6 (audyt B-08)', () => {
+  assert.deepEqual(remoteInspectHosts(['dev', '--inspect=0.0.0.0']), ['0.0.0.0']);
+  assert.deepEqual(remoteInspectHosts(['dev', '--inspect', 'myhost.lan']), ['myhost.lan']);
+  assert.deepEqual(remoteInspectHosts(['--inspect=9231', '--inspect-port=0.0.0.0:9231']), ['0.0.0.0']);
+  assert.deepEqual(remoteInspectHosts(['dev', '--inspect=[::]:9229']), ['[::]']);
+  assert.deepEqual(remoteInspectHosts(['dev', '--inspect=9231'], { NODE_OPTIONS: '--max-old-space-size=4096 --inspect=0.0.0.0:9230' }), ['0.0.0.0']);
+  for (const ok of [['--inspect=9231'], ['--inspect'], ['--inspect=127.0.0.1:9231'], ['--inspect=localhost'], ['--inspect=[::1]:9231'], ['--debug-port=9231']])
+    assert.deepEqual(remoteInspectHosts(ok), [], ok.join(' '));
 });
 
 test('resolveCli: OUTBOUND_NEXT_BIN względem cwd, inaczej require.resolve z cwd', () => {

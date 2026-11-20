@@ -70,6 +70,9 @@ export function createCollector(config, { log = () => {}, now = Date.now } = {})
   async function pollPages(session) {
     if (!config.pageCorrelation || !session.pageCorrelation) return;
     const entries = await session.drainHookLog().catch(() => []);
+    // adres żądania strony (np. /callback?code=…&token=…) redagowany jak URL zapytania; ten sam klucz HMAC,
+    // więc dopasowanie wpisu do zredagowanego rekordu nadal działa (audyt B-02)
+    for (const e of entries) { e.url = redact.url(e.url); e.page.url = redact.url(e.page.url); }
     const pool = store.values().filter(r => r.processId === session.processId && !r.page);
     applyPageEntries(pool, entries, session.pendingPages, now());
   }

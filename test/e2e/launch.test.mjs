@@ -67,12 +67,15 @@ test('bez --inspect: ostrzeżenie zamiast cichego braku inspektora; flagi node p
   assert.match(r.err, /\[outbound-next\] warning: No --inspect=<port>/);
 });
 
-test('host inspektora spoza loopbacku: ostrzeżenie', async () => {
-  const run = launch(['dev', `--inspect=0.0.0.0:${P2}`]);
+test('host inspektora spoza loopbacku: domyślnie blokada, z OUTBOUND_ALLOW_REMOTE_INSPECT=1 ostrzeżenie', async () => {
+  const blocked = await launch(['dev', '--inspect=0.0.0.0']).exited;
+  assert.equal(blocked.code, 1);
+  assert.match(blocked.err, /reachable from outside this machine.*OUTBOUND_ALLOW_REMOTE_INSPECT=1/s);
+  const run = launch(['dev', `--inspect=0.0.0.0:${P2}`], { env: { OUTBOUND_NEXT_BIN: FAKE_NEXT, OUTBOUND_ALLOW_REMOTE_INSPECT: '1' } });
   await run.firstLine;
   run.p.stdin.end();
   const r = await run.exited;
-  assert.match(r.err, /reachable from outside this machine/);
+  assert.match(r.err, /warning: The inspector on 0\.0\.0\.0 is reachable from outside this machine/);
 });
 
 test('SIGTERM trafia do potomka, a launcher kończy się tym samym sygnałem', { skip: process.platform === 'win32' && 'brak sygnałów POSIX' }, async () => {

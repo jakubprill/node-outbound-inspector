@@ -54,7 +54,7 @@ Użycie:
 - Ruch serwera jest w **osobnym** oknie DevTools, nie razem z ruchem strony.
 - Next sam odpytuje `registry.npmjs.org` (sprawdzanie aktualizacji). Wystarczy to odfiltrować.
 - Bun jako runtime (`bun --bun next dev`) nie jest obsługiwany. Zostaje `BUN_CONFIG_VERBOSE_FETCH=curl`. Jeśli Bun służy tylko do instalowania pakietów i uruchamiania skryptów, a Next działa na Node, wszystko działa.
-- Docker: `--inspect=0.0.0.0:<port>` i wystawiony port. Edge runtime nie jest objęty.
+- Docker: w kontenerze `--inspect=0.0.0.0:<port>` (z `outbound-next` wymaga `OUTBOUND_ALLOW_REMOTE_INSPECT=1`), a port wystawiony **tylko na pętli zwrotnej hosta**: `-p 127.0.0.1:<port>:<port>`. Samo `-p <port>:<port>` wystawia inspektor, czyli wykonanie kodu w procesie, każdemu w sieci. Edge runtime nie jest objęty.
 
 ## 5. Monorepo: kilka aplikacji naraz
 **Problem:** przy równoległym `dev` (turbo / workspaces) wszystkie aplikacje próbują zająć port 9229.
