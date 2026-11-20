@@ -1,38 +1,38 @@
-// Zależności danych między zapytaniami (heurystyka, czyste): czy zapytanie B użyło wartości z treści
-// odpowiedzi A? Jeśli tak, B musi czekać na A i Promise.all tego fragmentu nie skróci (issue #6).
+// Data dependencies between requests (heuristic, pure): did request B use a value from the body
+// of response A? If so, B must wait for A, and Promise.all will not shorten that part (issue #6).
 //
-// Dowód zależności A → B: wartość „identyfikatorowa” z treści odpowiedzi A (liść albo klucz JSON-a,
-// token tekstu) występuje w URL-u B (ścieżka, parametry — po dekodowaniu procentowym) albo w wartości
-// nagłówka B, a żadne zapytanie wysłane przed końcem A jej nie niosło (wtedy aplikacja znała ją
-// wcześniej, np. userId z adresu strony albo nagłówek x-request-id przekazywany dalej).
+// Evidence of a dependency A → B: an "id-like" value from A's response body (a JSON leaf or key,
+// a text token) appears in B's URL (path, parameters — after percent-decoding) or in a header
+// value of B, and no request sent before A ended carried it (then the app knew it
+// earlier, e.g. a userId from the page URL or an x-request-id header passed along).
 //
-// Brak dowodu to nie dowód niezależności: gdy treści odpowiedzi A nie ma (fetch na Node < 24, tryb
-// lazy/off, wyparcie), jest przycięta albo B wysłało treść żądania, której model nie zawiera,
-// para jest „nieznana”, a check() zgłasza stan inny niż 'complete'. Dane są już po redakcji, więc
-// sekrety (Authorization, parametry typu token) nigdy nie dają dopasowania.
+// No evidence is not evidence of independence: when A's response body is missing (fetch on Node < 24,
+// lazy/off mode, eviction), truncated, or B sent a request body the model does not contain,
+// the pair is "unknown", and check() reports a state other than 'complete'. The data is already redacted, so
+// secrets (Authorization, token-like parameters) never produce a match.
 import { isSensitiveName } from '../redact.mjs';
 
-const TOL = 0.001; // s — ta sama tolerancja co w waterfall.chains
-/** Ograniczenia kosztu: przeszukiwana długość treści, liczba kandydatów z jednej odpowiedzi, długość łańcucha w JSON-ie. */
+const TOL = 0.001; // s — the same tolerance as in waterfall.chains
+/** Cost limits: searched body length, number of candidates from one response, chain length in JSON. */
 export const LIMITS = Object.freeze({ scanChars: 256 * 1024, candidates: 2000, stringChars: 4096 });
 
 const TOKEN = /[\w.~@-]+/g;
 const PART = /[-_.~@]/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-// Wartości pospolite: występują w wielu zapytaniach niezależnie od siebie.
+// Common values: they appear in many requests independently of each other.
 const COMMON = [
-  /^(.)\1+$/,                      // xxxxxxxx, 00000000 (wypełnienia)
-  /^\d0+$/,                        // 100000, 1000000 (limity, okrągłe kwoty)
+  /^(.)\1+$/,                      // xxxxxxxx, 00000000 (padding)
+  /^\d0+$/,                        // 100000, 1000000 (limits, round amounts)
   /^\d{1,3}(\.\d{1,3}){3}$/,       // adres IPv4
-  /^\d{4}-\d{2}-\d{2}/,            // data ISO (dzisiejsza data trafia do wielu zapytań)
-  /^v?\d+(\.\d+){2,}/i,            // numer wersji
+  /^\d{4}-\d{2}-\d{2}/,            // ISO date (today's date goes into many requests)
+  /^v?\d+(\.\d+){2,}/i,            // version number
 ];
-// Nagłówki techniczne B, w których zbieżność wartości nic nie znaczy.
+// Technical headers of B, where a matching value means nothing.
 const IGNORED_HEADERS = new Set(['host', 'user-agent', 'accept', 'accept-encoding', 'accept-language', 'content-type',
   'content-length', 'connection', 'keep-alive', 'te', 'cache-control', 'pragma', 'origin', 'referer']);
 const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH']);
 
-/** Czy token może być identyfikatorem przekazanym dalej: ≥ 8 znaków z cyfrą, UUID, liczba ≥ 6 cyfr. */
+/** Whether a token can be an id passed along: ≥ 8 characters with a digit, a UUID, a number of ≥ 6 digits. */
 export function isCandidate(t) {
   if (t.length > 256 || COMMON.some(re => re.test(t))) return false;
   if (/^\d+$/.test(t)) return t.length >= 6;
@@ -42,7 +42,7 @@ export function isCandidate(t) {
 
 const decode = s => { try { return decodeURIComponent(s); } catch { return s; } };
 
-/** Wartości wysłane przez zapytanie (URL bez hosta, nagłówki) → miejsce wystąpienia. Także części tokenu (ord-123456 → 123456). */
+/** Values sent by a request (URL without host, headers) → where they occur. Also token parts (ord-123456 → 123456). */
 export function sentValues(r, base) {
   const out = new Map();
   const add = (s, where) => {
@@ -68,12 +68,12 @@ export function sentValues(r, base) {
 const bodyReason = b => b?.reason ?? (b?.state === 'none' || !b ? 'response body was not fetched (lazy mode or no response)' : `response body: ${b.state}`);
 
 /**
- * Kandydaci z treści odpowiedzi: wartość → ścieżka JSON (albo null dla tekstu).
- * `complete: false`, gdy treści brak, jest przycięta albo przekroczono limit — wtedy brak dopasowania nic nie znaczy.
+ * Candidates from the response body: value → JSON path (or null for text).
+ * `complete: false` when the body is missing, truncated or a limit was exceeded — then no match means nothing.
  */
 export function responseValues(r) {
   const values = new Map();
-  if (r.state === 'failed') return { values, complete: true }; // brak odpowiedzi — nie ma danych do użycia
+  if (r.state === 'failed') return { values, complete: true }; // no response — no data to use
   const body = r.body;
   if (body?.data == null || !['available', 'truncated'].includes(body.state)) return { values, complete: false, reason: bodyReason(body) };
   let complete = body.state === 'available', reason = complete ? undefined : bodyReason(body);
@@ -92,10 +92,10 @@ export function responseValues(r) {
   return { values, complete, reason };
 }
 
-// Duże liczby całkowite (> 2^53) z tekstu źródłowego, bez utraty cyfr (JSON.parse z kontekstem, Node ≥ 21).
+// Large integers (> 2^53) from the source text, without losing digits (JSON.parse with context, Node ≥ 21).
 const parseJson = s => {
   try { return JSON.parse(s, (k, v, ctx) => (Number.isInteger(v) && !Number.isSafeInteger(v) && /^-?\d+$/.test(ctx?.source ?? '')) ? BigInt(ctx.source) : v); }
-  catch { return undefined; } // np. treść przycięta — przeszukujemy jak tekst
+  catch { return undefined; } // e.g. a truncated body — searched as text
 };
 
 function walk(v, path, add, depth) {
@@ -108,7 +108,7 @@ function walk(v, path, add, depth) {
   }
 }
 
-/** Przycięty dowód; wartość spod klucza wyglądającego na sekret (na dowolnym poziomie ścieżki) nie jest pokazywana. */
+/** Truncated evidence; a value under a secret-looking key (at any level of the path) is not shown. */
 function evidence(value, fromPath, foundIn) {
   let path = fromPath, shown = value.length > 24 ? `${value.slice(0, 20)}…` : value;
   const secret = fromPath?.match(/\.([^.[\]]+)/g)?.find(seg => isSensitiveName(seg.slice(1)));
@@ -116,13 +116,13 @@ function evidence(value, fromPath, foundIn) {
   return { value: shown, ...(path ? { from_path: path.length > 60 ? `${path.slice(0, 59)}…` : path } : {}), found_in: foundIn };
 }
 
-/** Czy treść żądania B (niewidoczna w modelu) mogła nieść wartość z A. */
+/** Whether B's request body (invisible in the model) could carry a value from A. */
 const hasHiddenBody = r => BODY_METHODS.has(String(r.method).toUpperCase())
   || Number(Object.entries(r.requestHeaders ?? {}).find(([k]) => k.toLowerCase() === 'content-length')?.[1]) > 0;
 
 /**
- * Graf zależności danych w grupie zakończonych zapytań (seria albo żądanie strony).
- * Koszt ~ liczba wysłanych wartości × krótkie listy z indeksu; stan sprawdzenia liczony na żądanie.
+ * Data dependency graph within a group of finished requests (a burst or a page request).
+ * Cost ~ number of sent values × short lists from the index; the check state is computed on demand.
  * @param {any[]} group
  * @returns {{ edges: { from: any, to: any, evidence: object }[], check(members: any[]): { status: string, reason?: string } | null }}
  */
@@ -130,9 +130,9 @@ export function dependencyGraph(group) {
   const done = group.filter(r => r.tsEnd != null);
   const sent = new Map(group.map(r => [r, sentValues(r, 'http://x')]));
   const produced = new Map(done.map(r => [r, responseValues(r)]));
-  const producers = new Map(); // wartość → odpowiedzi, które ją zawierały, rosnąco po tsEnd
+  const producers = new Map(); // value → responses that contained it, ascending by tsEnd
   for (const A of [...done].sort((x, y) => x.tsEnd - y.tsEnd)) for (const t of produced.get(A).values.keys()) (producers.get(t) ?? producers.set(t, []).get(t)).push(A);
-  const firstSent = new Map(); // wartość → dwa najwcześniej wysłane zapytania z nią (drugie, gdy pierwszym jest samo B)
+  const firstSent = new Map(); // value → the two earliest requests that sent it (the second when the first is B itself)
   for (const [r, m] of sent) for (const t of m.keys()) {
     const f = firstSent.get(t) ?? firstSent.set(t, []).get(t);
     f.push(r); f.sort((x, y) => x.tsStart - y.tsStart); if (f.length > 2) f.pop();
@@ -141,7 +141,7 @@ export function dependencyGraph(group) {
   for (const url of new Set(group.map(r => r.page?.url).filter(Boolean))) for (const t of sentValues({ url }, 'http://page').keys()) pageKnown.add(t);
 
   const before = (A, B) => A !== B && B.tsStart >= A.tsEnd - TOL;
-  // wartość znana przed końcem A: z adresu strony, wysłana przez samo A albo przez zapytanie (poza B) rozpoczęte wcześniej
+  // value known before A ended: from the page URL, sent by A itself or by a request (other than B) started earlier
   const knownBefore = (t, A, B) => {
     const R = (firstSent.get(t) ?? []).find(x => x !== B);
     return pageKnown.has(t) || sent.get(A).has(t) || (R != null && R.tsStart < A.tsEnd - TOL);
@@ -150,7 +150,7 @@ export function dependencyGraph(group) {
   for (const B of group) {
     const found = new Map();
     for (const [t, where] of sent.get(B)) {
-      // źródłem jest najwcześniejsza odpowiedź zawierająca wartość, której aplikacja wcześniej nie znała
+      // the source is the earliest response containing a value the app did not know before
       const A = producers.get(t)?.find(a => before(a, B) && !knownBefore(t, a, B));
       if (A && !found.has(A)) found.set(A, evidence(t, produced.get(A).values.get(t), where));
     }
@@ -160,11 +160,11 @@ export function dependencyGraph(group) {
 
   return {
     edges,
-    /** Stan sprawdzenia par (A zakończone przed startem B) wśród `members`; null, gdy takich par nie ma. Sumy prefiksowe: O(n log n). */
+    /** Check state of pairs (A finished before B started) among `members`; null when there are no such pairs. Prefix sums: O(n log n). */
     check(members) {
       const ms = members.filter(r => produced.has(r)).sort((x, y) => x.tsEnd - y.tsEnd);
       const index = new Map(ms.map((r, i) => [r, i]));
-      const incomplete = [0], firstReason = new Map(); // liczba niepełnych treści w ms[0..i); powód → pierwszy indeks
+      const incomplete = [0], firstReason = new Map(); // number of incomplete bodies in ms[0..i); reason → first index
       ms.forEach((r, i) => {
         const p = produced.get(r);
         incomplete.push(incomplete[i] + (p.complete ? 0 : 1));
@@ -173,11 +173,11 @@ export function dependencyGraph(group) {
       let pairs = 0, unknown = 0;
       const reasons = new Set();
       for (const B of ms) {
-        let lo = 0, hi = ms.length; // k = liczba zapytań zakończonych najpóźniej w chwili startu B
+        let lo = 0, hi = ms.length; // k = number of requests finished at the latest when B started
         while (lo < hi) { const mid = (lo + hi) >> 1; if (ms[mid].tsEnd <= B.tsStart + TOL) lo = mid + 1; else hi = mid; }
         const k = lo, self = index.get(B) < k ? 1 : 0;
         const deps = [...(dependent.get(B) ?? [])].filter(A => index.get(A) < k);
-        const n = k - self - deps.length; // pary bez dowodu
+        const n = k - self - deps.length; // pairs without evidence
         if (n <= 0) { pairs += deps.length; continue; }
         pairs += n + deps.length;
         if (hasHiddenBody(B)) { unknown += n; reasons.add(`${B.method} request body is not available in the model`); continue; }

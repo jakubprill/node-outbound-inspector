@@ -1,6 +1,6 @@
 // Programowe API huba (issue #9): `import { startHub } from 'node-outbound-inspector/hub'`.
-// Hub w procesie wywołującego (np. skrypt dev monorepo), bez procesu potomnego, bez process.exit
-// i bez nasłuchu sygnałów: o sprzątaniu decyduje wywołujący (`await hub.close()`).
+// The hub in the caller's process (e.g. a monorepo dev script), without a child process, without process.exit
+// and without signal handlers: the caller decides about cleanup (`await hub.close()`).
 import { readFileSync } from 'node:fs';
 import { createHub, HUB_MARKER } from './hub.mjs';
 import { parsePorts, parseAppNames } from '../config.mjs';
@@ -14,7 +14,7 @@ const VERSION = (() => {
   try { return JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version; } catch { return '0'; }
 })();
 
-/** Kto zajmuje port: inny outbound-hub (znacznik w /json/version), inspektor Node albo coś innego. */
+/** Who holds the port: another outbound-hub (marker in /json/version), a Node inspector or something else. */
 async function probe(host, port) {
   try {
     const res = await fetch(`http://${host === '::1' ? '[::1]' : host}:${port}/json/version`, { signal: AbortSignal.timeout(1000) });
@@ -25,12 +25,12 @@ async function probe(host, port) {
 }
 
 /**
- * Uruchamia hub dla chrome://inspect w bieżącym procesie.
+ * Starts the hub for chrome://inspect in the current process.
  *
- * Status zamiast wyjątku dla zajętego portu: `listening` (ten hub słucha), `already-running` (na porcie działa
- * już inny outbound-hub — nic do zrobienia), `port-taken` (port trzyma inny proces, np. `node --inspect` bez portu).
- * Wyjątek tylko dla błędów środowiska: Node < 24 (`ERR_OUTBOUND_NODE_VERSION`) albo inny błąd nasłuchu.
- * Pod Bunem hub działa (sprawdzone na Bun 1.4.4), więc wersja jest sprawdzana tylko pod Node.
+ * A status instead of an exception for a taken port: `listening` (this hub listens), `already-running` (another
+ * outbound-hub already runs on the port — nothing to do), `port-taken` (another process holds the port, e.g. `node --inspect` without a port).
+ * An exception only for environment errors: Node < 24 (`ERR_OUTBOUND_NODE_VERSION`) or another listen error.
+ * The hub works under Bun (checked on Bun 1.4.4), so the version is checked only under Node.
  *
  * @param {import('./api.d.ts').StartHubOptions} [options]
  * @returns {Promise<import('./api.d.ts').Hub>}

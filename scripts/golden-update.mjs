@@ -1,5 +1,5 @@
-// Odświeża zrzuty golden (npm run golden:update). Zmienna środowiskowa ustawiana tutaj, a nie w skrypcie
-// package.json, bo składnia `ZMIENNA=1 polecenie` nie działa w cmd.exe na Windows (issue #7).
+// Refreshes the golden snapshots (npm run golden:update). The environment variable is set here, not in the
+// package.json script, because the `VARIABLE=1 command` syntax does not work in cmd.exe on Windows (issue #7).
 import { spawnSync } from 'node:child_process';
 
 const r = spawnSync(process.execPath, ['--test', 'test/golden/golden.test.mjs'], { stdio: 'inherit', env: { ...process.env, UPDATE_GOLDEN: '1' } });

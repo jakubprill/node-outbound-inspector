@@ -1,9 +1,9 @@
-// Definicje narzędzi MCP: schematy wejścia i wywołania kolektora. Każdy wynik mieści się w budżecie (ADR 0008).
+// MCP tool definitions: input schemas and collector calls. Every result fits the budget (ADR 0008).
 import { row, details } from './render.mjs';
 import { fitToBudget, size, DEFAULT_MAX_CHARS } from './budget.mjs';
 import { analyze, SUMMARY_HINT } from '../analyze/findings.mjs';
 
-// opisy krótkie: trafiają do kontekstu agenta w każdej rozmowie (koszt tokenów)
+// short descriptions: they go into the agent's context in every conversation (token cost)
 const sel = {
   app: { type: 'string', description: 'App name or inspector port' },
   url_contains: { type: 'string', description: 'Substring of the request URL' },
@@ -33,14 +33,14 @@ export function createTools(collector, { maxChars = DEFAULT_MAX_CHARS } = {}) {
   const { store } = collector;
   const fit = (value, hint) => fitToBudget(value, { limit: maxChars, hint });
 
-  /** Lista z kursorem: z `since_id` od najstarszych po kursorze, bez niego najnowsze; zawsze w budżecie. */
+  /** A list with a cursor: with `since_id` the oldest after the cursor, without it the newest; always within the budget. */
   function list(a) {
     const limit = Math.max(1, Math.min(a.limit || 20, 1000));
     const cursor = a.since_id != null;
     const all = store.select(a, collector.now()).sort((x, y) => x.id - y.id);
     let rows = (cursor ? all.slice(0, limit) : all.slice(-limit)).map(r => row(r));
     const room = maxChars - 300;
-    // przycinanie od strony, która nie psuje kursora: w trybie kursora odcinamy najnowsze, inaczej najstarsze
+    // trimming from the side that does not break the cursor: in cursor mode we cut the newest, otherwise the oldest
     while (rows.length > 1 && size(rows) > room) rows = cursor ? rows.slice(0, Math.ceil(rows.length * 0.8)) : rows.slice(-Math.ceil(rows.length * 0.8));
     const last = rows.at(-1)?.id ?? (cursor ? a.since_id : store.lastId);
     const remaining = all.filter(r => r.id > last).length;
@@ -74,7 +74,7 @@ export function createTools(collector, { maxChars = DEFAULT_MAX_CHARS } = {}) {
         const r = store.byId(id);
         if (!r) throw new Error(`No request with id ${id}`);
         await collector.ensureBody(r);
-        // miejsce na treść liczone po reszcie wyniku, żeby budżet nie ucinał treści za plecami body_next_offset
+        // room for the body computed after the rest of the result, so the budget does not cut the body behind body_next_offset
         const rest = size(details(r, 0, body_offset)) + 400;
         const max = Math.max(1, Math.min(max_body_chars, maxChars - rest));
         return fit(details(r, max, body_offset), HINTS.get);

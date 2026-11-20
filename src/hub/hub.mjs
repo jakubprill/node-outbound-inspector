@@ -1,7 +1,7 @@
-// outbound-hub: jeden adres dla chrome://inspect. Słucha na 127.0.0.1:9229 (adres, który chrome://inspect
-// sprawdza bez konfiguracji), znajduje procesy Node z inspektorem na skanowanych portach i wystawia je jako
-// jedną listę celów. Połączenie DevTools jest przepinane do właściwego procesu na poziomie TCP po nagłówkach
-// HTTP Upgrade — bez rozumienia protokołu WebSocket i bez zależności.
+// outbound-hub: one address for chrome://inspect. Listens on 127.0.0.1:9229 (the address chrome://inspect
+// checks without configuration), finds Node processes with an inspector on the scanned ports and exposes them as
+// one target list. The DevTools connection is forwarded to the right process at TCP level after the HTTP
+// Upgrade headers — without understanding the WebSocket protocol and without dependencies.
 import http from 'node:http';
 import net from 'node:net';
 import { isIP } from 'node:net';
@@ -13,8 +13,8 @@ import { appIdentity, assignNames } from '../names.mjs';
 export const HUB_MARKER = 'node-outbound-inspector-hub';
 
 /**
- * Ochrona przed DNS rebinding, jak w samym Node: przyjmujemy tylko nagłówek Host będący adresem IP albo `localhost`.
- * Strona z innej domeny, która przemapuje swoją nazwę na 127.0.0.1, wyśle Host ze swoją nazwą i zostanie odrzucona.
+ * DNS rebinding protection, as in Node itself: we accept only a Host header that is an IP address or `localhost`.
+ * A page from another domain that remaps its name to 127.0.0.1 sends a Host with its own name and is rejected.
  */
 export function allowedHost(hostHeader) {
   if (!hostHeader) return false;
@@ -22,7 +22,7 @@ export function allowedHost(hostHeader) {
   return host === 'localhost' || isIP(host) !== 0;
 }
 
-/** Cel inspektora przepisany na adres huba: ścieżka `/<port>/<id>` wskazuje proces docelowy. */
+/** An inspector target rewritten to the hub address: the `/<port>/<id>` path points to the target process. */
 export function rewriteTarget(t, { port, name, hubHost }) {
   const ws = `${hubHost}/${port}/${t.id}`;
   const front = u => typeof u === 'string' ? u.replace(/([?&]ws=)[^&]*/, `$1${ws}`) : u;
@@ -33,7 +33,7 @@ export function rewriteTarget(t, { port, name, hubHost }) {
     webSocketDebuggerUrl: `ws://${ws}`,
     devtoolsFrontendUrl: front(t.devtoolsFrontendUrl),
     devtoolsFrontendUrlCompat: front(t.devtoolsFrontendUrlCompat),
-    outboundHub: true, // kolektor MCP pomija takie cele (to te same procesy co na ich portach)
+    outboundHub: true, // the MCP collector skips such targets (the same processes as on their own ports)
   };
 }
 
@@ -45,11 +45,11 @@ export function createHub({ host = '127.0.0.1', port, ports, appNames = {}, stri
   const scanned = ports.filter(p => p !== port);
   /** port → { targets, name } */
   const apps = new Map();
-  /** webSocketDebuggerUrl → tożsamość nazwy (ustalana raz na proces) */
+  /** webSocketDebuggerUrl → name identity (determined once per process) */
   const identities = new Map();
   let timer = null;
 
-  /** Tożsamość nazwy jak w kolektorze: APP_NAMES → portless → pakiet (bez scope) → katalog → port. */
+  /** Name identity as in the collector: APP_NAMES → portless → package (without scope) → directory → port. */
   function identifyTarget(t, p) {
     const fallback = appIdentity({ port: p, appNames }, { stripScope });
     if (appNames[p] || !identify) return Promise.resolve(fallback);
@@ -59,7 +59,7 @@ export function createHub({ host = '127.0.0.1', port, ports, appNames = {}, stri
       const cdp = connectCdp(t.webSocketDebuggerUrl, {
         timeoutMs: 1500,
         onOpen: async () => {
-          // tylko odczyt tożsamości; bez Network.enable (zob. nodejs/node#66551) i bez haka
+          // identity read only; no Network.enable (see nodejs/node#66551) and no hook
           const res = await cdp.send('Runtime.evaluate', { expression: IDENTITY_EXPRESSION, returnByValue: true });
           let info = {};
           try { info = JSON.parse(res?.result?.value ?? '{}'); } catch {}
@@ -70,7 +70,7 @@ export function createHub({ host = '127.0.0.1', port, ports, appNames = {}, stri
     });
   }
 
-  /** Nazwy wyświetlane: krótkie, przy kolizji pełne (issue #8) — liczone dla celów widocznych teraz. */
+  /** Display names: short, full on a collision (issue #8) — computed for the targets visible now. */
   function displayNames() {
     const urls = [...apps.values()].flatMap(a => a.targets.map(t => t.webSocketDebuggerUrl)).filter(u => identities.has(u));
     const names = assignNames(urls.map(u => identities.get(u)));
@@ -79,7 +79,7 @@ export function createHub({ host = '127.0.0.1', port, ports, appNames = {}, stri
 
   async function scanPort(p) {
     const list = await listTargets(p, { timeoutMs: listTimeoutMs });
-    // jak w kolektorze: tylko cele wskazujące ten sam port na pętli zwrotnej, z limitem (audyt B-03, B-11)
+    // as in the collector: only targets pointing to the same port on loopback, with a limit (audit B-03, B-11)
     const targets = (list ?? []).filter(t => validTarget(t, p) && !t.outboundHub && t.type === 'node' && typeof t.id === 'string' && /^[\w-]{1,128}$/.test(t.id))
       .slice(0, DISCOVERY_LIMITS.targetsPerPort);
     if (!targets.length) { if (apps.delete(p)) log(`gone port=${p}`); return; }
@@ -94,14 +94,14 @@ export function createHub({ host = '127.0.0.1', port, ports, appNames = {}, stri
   }
   const scan = () => Promise.all(scanned.map(scanPort));
 
-  /** Lista celów dla chrome://inspect (Host z żądania, żeby adresy pasowały do tego, czym Chrome się łączył). */
+  /** The target list for chrome://inspect (Host from the request, so addresses match what Chrome connected to). */
   const list = hubHost => {
     const names = displayNames();
     return [...apps].sort(([a], [b]) => a - b)
       .flatMap(([p, a]) => a.targets.map(t => rewriteTarget(t, { port: p, name: names.get(t.webSocketDebuggerUrl) ?? `port-${p}`, hubHost })));
   };
 
-  // jak inspektor Node: Content-Length i bez keep-alive — prosty klient HTTP w chrome://inspect nie czyta odpowiedzi chunked
+  // like the Node inspector: Content-Length and no keep-alive — chrome://inspect's simple HTTP client does not read chunked responses
   const json = (res, code, body) => {
     const data = Buffer.from(JSON.stringify(body));
     res.writeHead(code, { 'Content-Type': 'application/json; charset=UTF-8', 'Content-Length': data.length, 'Cache-Control': 'no-cache', Connection: 'close' });
@@ -113,12 +113,12 @@ export function createHub({ host = '127.0.0.1', port, ports, appNames = {}, stri
     if (!allowedHost(req.headers.host)) return json(res, 403, { error: 'Host header must be an IP address or localhost' });
     const url = new URL(req.url, 'http://hub').pathname.replace(/\/+$/, ''); // Chrome dokleja parametry, np. ?t=…
     if (url === '/json' || url === '/json/list') return json(res, 200, list(req.headers.host));
-    // chrome://inspect pokazuje cele typu `node` tylko pod „przeglądarką” `node.js/…`; nasz znacznik jest osobnym polem
+    // chrome://inspect shows `node` targets only under a `node.js/…` "browser"; our marker is a separate field
     if (url === '/json/version') return json(res, 200, { Browser: `node.js/${process.version}`, 'Protocol-Version': '1.1', [HUB_MARKER]: version });
     return json(res, 404, { error: 'Not found' });
   });
 
-  // przepięcie WebSocket: tylko do procesów, które hub sam znalazł na skanowanych portach (nie dowolny port)
+  // WebSocket forwarding: only to processes the hub itself found on the scanned ports (not any port)
   server.on('upgrade', (req, socket, head) => {
     const reject = (code, msg) => { socket.end(`HTTP/1.1 ${code} ${msg}\r\nConnection: close\r\n\r\n`); };
     if (!allowedHost(req.headers.host)) return reject(403, 'Forbidden');

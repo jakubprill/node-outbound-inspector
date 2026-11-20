@@ -1,15 +1,15 @@
-// Programowe API huba (issue #9): import przez `exports`, statusy zamiast process.exit, close() zawsze bezpieczne.
+// Programmatic hub API (issue #9): import through `exports`, statuses instead of process.exit, close() always safe.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { startHub } from 'node-outbound-inspector/hub'; // samoodwołanie przez pole `exports` w package.json
+import { startHub } from 'node-outbound-inspector/hub'; // self-reference through the `exports` field in package.json
 import { startScenario, sleep } from '../helpers/scenario.mjs';
 
 const listen = srv => new Promise(r => srv.listen(0, '127.0.0.1', () => r(srv.address().port)));
 
-test('startHub: listening, znalezione aplikacje, drugi hub → already-running, close() idempotentne', async () => {
+test('startHub: listening, apps found, a second hub → already-running, idempotent close()', async () => {
   const apps = [{ name: '@acme/web', dir: 'web' }];
   const sc = await startScenario({ apps });
   const logs = [];
@@ -29,14 +29,14 @@ test('startHub: listening, znalezione aplikacje, drugi hub → already-running, 
     assert.match(second.holder, /^outbound-hub /);
     assert.deepEqual(second.apps(), []);
     await second.close();
-    assert.ok((await fetch(`${hub.url}/json/version`)).ok, 'close() drugiego nie zamyka pierwszego');
+    assert.ok((await fetch(`${hub.url}/json/version`)).ok, 'close() of the second does not close the first');
   } finally {
     await hub.close(); await hub.close(); sc.stop();
   }
   assert.deepEqual(hub.apps(), []);
 });
 
-test('startHub: port zajęty przez inny proces → port-taken z informacją, kto go trzyma', async () => {
+test('startHub: port taken by another process → port-taken with information on who holds it', async () => {
   const fakeInspector = http.createServer((req, res) => res.end(JSON.stringify({ Browser: 'node.js/v24.1.0', 'Protocol-Version': '1.1' })));
   const other = http.createServer((req, res) => res.end('nope'));
   const [p1, p2] = [await listen(fakeInspector), await listen(other)];
@@ -49,7 +49,7 @@ test('startHub: port zajęty przez inny proces → port-taken z informacją, kto
   } finally { fakeInspector.close(); other.close(); }
 });
 
-test('startHub: ports i appNames także jako tekst jak w zmiennych środowiskowych', async () => {
+test('startHub: ports and appNames also as text, as in environment variables', async () => {
   const apps = [{ name: '@acme/web', dir: 'web' }];
   const sc = await startScenario({ apps });
   const hub = await startHub({ port: 0, ports: `${apps[0].inspect}`, appNames: `${apps[0].inspect}=frontend`, scanIntervalMs: 200 });
@@ -61,7 +61,7 @@ test('startHub: ports i appNames także jako tekst jak w zmiennych środowiskowy
 });
 
 const bun = spawnSync('bun', ['--version'], { encoding: 'utf8' });
-test('startHub pod Bunem: hub wykrywa aplikację i przepuszcza DevTools (skrypt dev uruchamiany przez bun run)', { skip: bun.status !== 0 && 'brak bun' }, async () => {
+test('startHub under Bun: the hub finds the app and forwards DevTools (a dev script run with bun run)', { skip: bun.status !== 0 && 'no bun' }, async () => {
   const apps = [{ name: '@acme/web', dir: 'web' }];
   const sc = await startScenario({ apps });
   try {

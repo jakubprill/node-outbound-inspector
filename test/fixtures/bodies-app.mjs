@@ -1,5 +1,5 @@
-// Aplikacja testowa dla treści odpowiedzi: /fetch i /http (ta sama mała treść), /big?n=K (K odpowiedzi po 2 MB przez node:http),
-// /gzip (node:http: gzip, br, deflate, gzip z charset; kolejno).
+// Test app for response bodies: /fetch and /http (the same small body), /big?n=K (K responses of 2 MB through node:http),
+// /gzip (node:http: gzip, br, deflate, gzip with charset; in turn).
 import http from 'node:http';
 const SVC = `http://127.0.0.1:${process.env.SERVICES_PORT || 4711}`;
 const httpGet = url => new Promise((ok, err) => http.get(url, r => { r.resume(); r.on('end', ok); }).on('error', err));

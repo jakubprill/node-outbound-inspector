@@ -1,4 +1,4 @@
-// Fałszywy „inspektor Node” na skanowanym porcie: dowolny lokalny proces może tak odpowiadać (testy z audytu B-03, B-04, B-07, B-09).
+// A fake "Node inspector" on a scanned port: any local process can answer like this (tests from audit B-03, B-04, B-07, B-09).
 import http from 'node:http';
 import crypto from 'node:crypto';
 const PORT = +process.env.PORT || 9233;

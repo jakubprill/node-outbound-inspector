@@ -1,10 +1,10 @@
-// Przypisanie zapytań wychodzących do żądania strony na podstawie wpisów haka
-// (metoda + URL + czas; czyste — czas przychodzi jako argument).
+// Assigning outbound requests to the page request based on hook entries
+// (method + URL + time; pure — time comes in as an argument).
 
 /**
- * @param {any[]} pool rekordy procesu bez przypisanej strony
- * @param {{ url: string, method: string, page: object, t: number }[]} entries nowe wpisy haka
- * @param {any[]} pending wpisy, których nie udało się dopasować wcześniej (modyfikowane w miejscu)
+ * @param {any[]} pool the process's records without an assigned page
+ * @param {{ url: string, method: string, page: object, t: number }[]} entries new hook entries
+ * @param {any[]} pending entries that could not be matched earlier (modified in place)
  * @param {number} nowMs
  */
 export function applyPageEntries(pool, entries, pending, nowMs) {
@@ -14,9 +14,9 @@ export function applyPageEntries(pool, entries, pending, nowMs) {
       && Math.abs(r.wallStart - e.t) < 3000).sort((a, b) => Math.abs(a.wallStart - e.t) - Math.abs(b.wallStart - e.t))[0];
     if (cand) cand.page = e.page; else pending.push(e);
   }
-  // nieprzypisane wpisy wygasają po 10 s także pod ciągłym ruchem; najwyżej 1000 (audyt B-11)
+  // unassigned entries expire after 10 s, also under continuous traffic; at most 1000 (audit B-11)
   if (pending.length) { const keep = pending.filter(e => nowMs - e.t < 10000).slice(-1000); pending.splice(0, pending.length, ...keep); }
-  // wpisy, które przyszły przed zdarzeniem Network — spróbuj ponownie przy następnym odpytaniu
+  // entries that arrived before the Network event — retry at the next poll
   if (pending.length && entries.length === 0) {
     const retry = pending.splice(0).filter(e => nowMs - e.t < 10000);
     for (const e of retry) {

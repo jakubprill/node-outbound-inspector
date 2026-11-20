@@ -4,7 +4,7 @@ import { createRedactor } from '../../src/redact.mjs';
 
 const key = Buffer.alloc(32, 7);
 
-test('nagłówki: lista i wzorzec nazw; schemat, długość, skrót', () => {
+test('headers: list and name pattern; scheme, length, digest', () => {
   const r = createRedactor({ key });
   const out = r.headers({ Authorization: 'Bearer SECRET', cookie: 'a=b', 'Set-Cookie': 'sid=1', 'x-api-key': 'k', 'X-Session-Id': 's', 'x-auth-token': 't', 'content-type': 'application/json', 'keep-alive': 'timeout=5', 'x-request-id': 'req-1' });
   assert.match(out.Authorization, /^\[redacted: Bearer · 13 chars · #[0-9a-f]{6}\]$/);
@@ -15,38 +15,38 @@ test('nagłówki: lista i wzorzec nazw; schemat, długość, skrót', () => {
   assert.ok(!JSON.stringify(out).includes('SECRET'));
 });
 
-test('ten sam sekret → ten sam skrót; inny klucz kolektora → inny skrót', () => {
+test('the same secret → the same digest; another collector key → another digest', () => {
   const a = createRedactor({ key }), b = createRedactor({ key: Buffer.alloc(32, 8) });
   assert.equal(a.describe('Bearer X'), a.describe('Bearer X'));
   assert.notEqual(a.describe('Bearer X'), a.describe('Bearer Y'));
   assert.notEqual(a.describe('Bearer X'), b.describe('Bearer X'));
 });
 
-test('dodatkowe nagłówki firmowe', () => {
+test('extra company headers', () => {
   const r = createRedactor({ key, extraHeaders: ['X-Acme-Internal'] });
   assert.match(r.headers({ 'x-acme-internal': 'v' })['x-acme-internal'], /redacted/);
 });
 
-test('parametry URL', () => {
+test('URL parameters', () => {
   const r = createRedactor({ key });
   const u = r.url('http://svc/a?token=abc&ms=150&api_key=k&sig=x');
   assert.ok(!u.includes('abc') && !u.includes('api_key=k'));
   assert.match(u, /ms=150/);
-  assert.equal(r.url('http://svc/a?ms=150&status=500'), 'http://svc/a?ms=150&status=500', 'bez zmian, gdy nic do redakcji');
-  assert.equal(r.url('nie-url?token=1'), 'nie-url?token=1');
+  assert.equal(r.url('http://svc/a?ms=150&status=500'), 'http://svc/a?ms=150&status=500', 'unchanged when there is nothing to redact');
+  assert.equal(r.url('not-a-url?token=1'), 'not-a-url?token=1');
 });
 
-test('wyłączona redakcja', () => {
+test('redaction off', () => {
   const r = createRedactor({ enabled: false, key });
   assert.deepEqual(r.headers({ authorization: 'Bearer S' }), { authorization: 'Bearer S' });
   assert.equal(r.url('http://s/?token=1'), 'http://s/?token=1');
 });
 
-test('URL: ścieżki, userinfo, fragment, nazwy krótkie i camelCase, webhooki (audyt B-05)', () => {
+test('URL: paths, userinfo, fragment, short and camelCase names, webhooks (audit B-05)', () => {
   const r = createRedactor();
   const out = u => r.url(u);
   const hidden = (u, secret) => { const v = out(u); assert.ok(!v.includes(secret), `${u} → ${v}`); return v; };
-  // przykładowy, nieprawdziwy token składany w locie: w pliku nie ma całego wzorca (skaner sekretów GitHuba)
+  // a sample, fake token built at runtime: the file does not contain the whole pattern (GitHub secret scanner)
   const tgTail = ['AAHdqTcv', 'CH1vGWJx', 'fSeofSAs', '0K5PALDsawZ'].join('');
   hidden(`https://api.telegram.org/bot123456789:${tgTail}/sendMessage`, tgTail);
   hidden('https://acc.blob.core.windows.net/c/f?sv=2022&sig=AbCdSeCrEt%3D&se=2026', 'AbCdSeCrEt');
@@ -58,11 +58,11 @@ test('URL: ścieżki, userinfo, fragment, nazwy krótkie i camelCase, webhooki (
   hidden('https://x/y#access_token=abc123', 'abc123');
   hidden('https://hooks.slack.com/services/T000/B000/XXXXSECRET', 'XXXXSECRET');
   hidden('https://discord.com/api/webhooks/123456/AbCdEfSecret', 'AbCdEfSecret');
-  assert.equal(out('https://x/a?country_code=PL&q=1'), 'https://x/a?country_code=PL&q=1', 'bez zmian, gdy nic do ukrycia');
-  assert.equal(out('https://x/a%20b?q=1'), 'https://x/a%20b?q=1', 'ścieżka zakodowana bez zmian');
+  assert.equal(out('https://x/a?country_code=PL&q=1'), 'https://x/a?country_code=PL&q=1', 'unchanged when there is nothing to hide');
+  assert.equal(out('https://x/a%20b?q=1'), 'https://x/a%20b?q=1', 'an encoded path unchanged');
 });
 
-test('nagłówki: URL-e w Location i Link, wartości o znanym formacie (audyt B-05)', () => {
+test('headers: URLs in Location and Link, values of a known format (audit B-05)', () => {
   const h = createRedactor().headers({ location: 'https://app/cb?access_token=LOC_SECRET', link: '<https://x/?token=LINK_SECRET>; rel=next',
     'x-forwarded-jwt': 'eyJhbGciOiJIUzI1.eyJzdWIiOiIxMjM0.c2lnbmF0dXJl', 'x-gh': 'ghp_abcdefghijklmnopqrstuvwxyz0123456789', 'content-type': 'application/json' });
   const all = JSON.stringify(h);
@@ -70,7 +70,7 @@ test('nagłówki: URL-e w Location i Link, wartości o znanym formacie (audyt B-
   assert.equal(h['content-type'], 'application/json');
 });
 
-test('treści: drzewo JSON, form-urlencoded, XML/tekst, przycięty JSON (audyt B-06)', () => {
+test('bodies: JSON tree, form-urlencoded, XML/text, truncated JSON (audit B-06)', () => {
   const r = createRedactor();
   const check = (text, type, secrets, count) => {
     const o = r.body(text, type);
@@ -85,6 +85,6 @@ test('treści: drzewo JSON, form-urlencoded, XML/tekst, przycięty JSON (audyt B
   check('access_token=gho_FORM_SECRET_456&scope=repo', 'text/plain', ['gho_FORM_SECRET_456']);
   check('<r><key>ghp_abcdefghijklmnopqrstuvwxyz0123456789</key></r>', 'text/xml', ['ghp_abcdef'], 1);
   check('{"data":"xxx","access_token":"AAAAAAAAAAAAA', 'application/json', ['AAAAAAAAAAAAA'], 1);
-  assert.equal(r.body('{"name":"Jan","items":[1,2]}', 'application/json').text, '{"name":"Jan","items":[1,2]}', 'bez sekretów bez zmian');
-  assert.equal(r.body('{\n  "a": 1,\n  "token": "x"\n}', 'application/json').text.includes('\n  "a": 1'), true, 'wcięcia zachowane');
+  assert.equal(r.body('{"name":"Jan","items":[1,2]}', 'application/json').text, '{"name":"Jan","items":[1,2]}', 'unchanged without secrets');
+  assert.equal(r.body('{\n  "a": 1,\n  "token": "x"\n}', 'application/json').text.includes('\n  "a": 1'), true, 'indentation kept');
 });

@@ -1,16 +1,16 @@
-// Kształt pojedynczego wiersza zapytania w odpowiedziach narzędzi (czyste).
+// The shape of a single request row in tool responses (pure).
 import { duration } from '../analyze/timeline.mjs';
 import { shortUrl } from './budget.mjs';
 
 export const NO_ORIGIN = '(no frame from app code — e.g. fetch wrapped by Next.js; search by URL)';
 
-/** Status nieudanego zapytania, gdy inspektor Node podał pusty errorText (issue #3). */
+/** Status of a failed request when the Node inspector gave an empty errorText (issue #3). */
 export const FAILED_NO_TEXT = 'FAILED (no error text from the inspector)';
 export const EMPTY_ERROR_HINT = 'The Node inspector reported an empty errorText (that is error.message). Most common cause: the host has several addresses '
   + '(e.g. localhost → ::1 and 127.0.0.1), the connection failed on all of them and Node reports an AggregateError without a message — '
   + 'usually nothing is listening at that address (ECONNREFUSED).';
 
-// Rodzaj błędu z errorText inspektora. Kolejność ma znaczenie: „aborted due to timeout” to timeout.
+// Error kind from the inspector's errorText. Order matters: "aborted due to timeout" is a timeout.
 const ERROR_KINDS = [
   ['timeout', /timeout|timed out|ETIMEDOUT/i],
   ['aborted', /abort/i],
@@ -28,7 +28,7 @@ export function errorKind(text) {
 
 const failedStatus = error => error?.trim() ? `FAILED: ${error}` : FAILED_NO_TEXT;
 
-/** @param {any} r rekord zapytania  @param {number} [t0] początek osi czasu (sekundy inspektora) */
+/** @param {any} r request record  @param {number} [t0] timeline start (inspector seconds) */
 export function row(r, t0) {
   return {
     id: r.id, app: r.app, page: r.page ? `${r.page.method} ${r.page.url}` : null,
@@ -41,10 +41,10 @@ export function row(r, t0) {
   };
 }
 
-/** Czas do pierwszego bajtu odpowiedzi w ms. */
+/** Time to the first response byte in ms. */
 export const ttfb = r => (r.tsResponse != null && r.tsStart != null) ? Math.round((r.tsResponse - r.tsStart) * 1000) : null;
 
-/** Szczegóły jednego zapytania (narzędzie get_server_request). Nagłówki są już zredagowane przy przyjęciu. */
+/** Details of one request (the get_server_request tool). Headers are already redacted at ingestion. */
 export function details(r, maxBodyChars, bodyOffset = 0) {
   const data = r.body?.data;
   const off = Math.max(0, Math.floor(bodyOffset) || 0), end = off + maxBodyChars;
@@ -53,17 +53,17 @@ export function details(r, maxBodyChars, bodyOffset = 0) {
     ...row(r), url: r.url, port: r.port, pid: r.pid, statusText: r.statusText, mimeType: r.mimeType,
     requestHeaders: r.requestHeaders, responseHeaders: r.responseHeaders,
     body: data == null ? null : data.slice(off, end), body_truncated: more,
-    // M6: stronicowanie treści (tylko gdy dotyczy)
+    // M6: body paging (only when relevant)
     ...(off > 0 ? { body_offset: off } : {}), ...(more ? { body_next_offset: end } : {}),
     error: r.error, call_stack: r.origin, wallStart: new Date(r.wallStart).toISOString(),
-    // M2: stan treści zamiast pustego łańcucha; czas do pierwszego bajtu
+    // M2: body state instead of an empty string; time to first byte
     body_state: r.body?.state ?? 'none', body_bytes: r.body?.bytes ?? null, body_reason: r.body?.reason ?? null,
-    // tylko dla treści z content-encoding (bez klucza w pozostałych): kodowanie i rozmiar przed dekompresją
+    // only for bodies with content-encoding (no key otherwise): the encoding and the size before decompression
     body_encoding: r.body?.encoding, body_encoded_bytes: r.body?.encodedBytes,
-    // liczba pól JSON w treści zastąpionych opisem (tylko gdy były)
+    // number of JSON fields in the body replaced with a description (only when there were any)
     body_redacted_fields: r.body?.redactedFields,
     ttfb_ms: ttfb(r),
-    // issue #3: rodzaj błędu (tylko dla nieudanych) i wyjaśnienie pustego opisu
+    // issue #3: error kind (only for failed ones) and an explanation of the empty message
     ...(r.state === 'failed' ? { error_kind: errorKind(r.error) } : {}),
     ...(r.state === 'failed' && !r.error?.trim() ? { error_hint: EMPTY_ERROR_HINT } : {}),
   };

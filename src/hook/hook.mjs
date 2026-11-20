@@ -1,9 +1,9 @@
-// Hak: kod działający w procesie aplikacji. Przy każdym przychodzącym żądaniu HTTP zapamiętuje je
-// w AsyncLocalStorage, a przy każdym zapytaniu wychodzącym (fetch/undici, node:http) zapisuje,
-// w kontekście którego żądania strony powstało. Bez zmian w kodzie aplikacji.
+// Hook: code running in the app process. For every incoming HTTP request it remembers it
+// in AsyncLocalStorage, and for every outbound request (fetch/undici, node:http) it records
+// in the context of which page request it was made. No changes to app code.
 //
-// installHook musi być samowystarczalna (bez importów i domknięć), bo jest wysyłana jako tekst
-// przez Runtime.evaluate.
+// installHook must be self-contained (no imports or closures), because it is sent as text
+// through Runtime.evaluate.
 
 export function installHook() {
   if (globalThis.__outboundInspector) return 'already';
@@ -11,16 +11,16 @@ export function installHook() {
   const { AsyncLocalStorage } = process.getBuiltinModule('node:async_hooks');
   const als = new AsyncLocalStorage(); const log = []; const ports = new Set(); let n = 0;
   globalThis.__outboundInspector = { log, ports };
-  // porty HTTP procesu (np. serwer next dev): te, na których już słucha, i te, na które przychodzą żądania
+  // the process's HTTP ports (e.g. the next dev server): those it already listens on and those requests arrive on
   try { for (const h of process._getActiveHandles()) { const a = h && typeof h.address === 'function' && h.listening && h.address(); if (a && a.port) ports.add(a.port); } } catch {}
-  // wewnętrzne żądania narzędzi dev Next (serwer MCP, HMR, ramki stosu) nie są żądaniami stron
+  // internal requests of Next dev tooling (MCP server, HMR, stack frames) are not page requests
   const internal = /^\/(_next\/(mcp|webpack-hmr|turbopack-hmr)|__nextjs_)/;
-  const header = (request, name) => { const v = request.headers && request.headers[name]; return typeof v === 'string' && /^[\w.:-]{1,200}$/.test(v) ? v : undefined; }; // tylko identyfikatory, bez dowolnego tekstu
+  const header = (request, name) => { const v = request.headers && request.headers[name]; return typeof v === 'string' && /^[\w.:-]{1,200}$/.test(v) ? v : undefined; }; // ids only, no arbitrary text
   dc.subscribe('http.server.request.start', ({ request }) => {
     const port = request.socket && request.socket.localPort; if (port) ports.add(port);
     if (internal.test(request.url || '')) { als.enterWith(null); return; }
-    // identyfikatory żądań Next (przeglądarka wysyła je w dev przy nawigacjach RSC i Server Actions):
-    // pozwalają złączyć wynik z get_request_insights z Next DevTools MCP
+    // Next request ids (the browser sends them in dev with RSC navigations and Server Actions):
+    // they allow joining the result with get_request_insights from Next DevTools MCP
     const nextRequestId = header(request, 'x-nextjs-request-id'), nextHtmlRequestId = header(request, 'x-nextjs-html-request-id');
     als.enterWith({ id: process.pid + '-' + (++n), method: request.method, url: request.url, t: Date.now(),
       ...(nextRequestId ? { nextRequestId } : {}), ...(nextHtmlRequestId ? { nextHtmlRequestId } : {}) });
@@ -31,8 +31,8 @@ export function installHook() {
   return 'installed';
 }
 
-/** Wyrażenie dla Runtime.evaluate instalujące hak. */
+/** A Runtime.evaluate expression that installs the hook. */
 export const INSTALL_EXPRESSION = `(${installHook.toString()})()`;
 
-/** Wyrażenie dla Runtime.evaluate odbierające (i opróżniające) dziennik haka oraz porty HTTP procesu. */
+/** A Runtime.evaluate expression that receives (and drains) the hook log and the process's HTTP ports. */
 export const DRAIN_EXPRESSION = 'JSON.stringify(globalThis.__outboundInspector ? { log: globalThis.__outboundInspector.log.splice(0), ports: [...(globalThis.__outboundInspector.ports || [])] } : { log: [], ports: [] })';

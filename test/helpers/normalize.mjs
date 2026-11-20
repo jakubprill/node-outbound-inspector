@@ -1,20 +1,20 @@
-// Normalizacja wyników narzędzi do porównań golden: usuwa wartości zmienne (id, pid, porty, czasy,
-// ścieżki bezwzględne) i porządkuje elementy, których kolejność zależy od wyścigu współbieżnych zapytań.
+// Normalizing tool results for golden comparisons: removes volatile values (ids, pids, ports, times,
+// absolute paths) and orders elements whose order depends on a race between concurrent requests.
 const VOLATILE_NUM = new Set(['id', 'pid', 'port', 'start_ms', 'duration_ms', 'wall_ms', 'sum_of_durations_ms',
   'if_parallel_ms', 'potential_saving_ms', 'potential_saving_ms_if_fully_parallel', 'last_id', 'since_id', 'next_since_id', 'ttfb_ms', 'waited_ms']);
 const VOLATILE_STR = new Set(['since', 'http_ports', 'wallStart', 'page_request_id', 'connectedAt', 'node', 'ports_scanned']);
-// Treść odpowiedzi i jej pochodne mogą różnić się między wersjami Node — sprawdzają je osobne testy e2e.
-// Tak samo stan sprawdzenia zależności danych, który wynika z dostępności treści (issue #6).
+// The response body and its derivatives may differ between Node versions — separate e2e tests check them.
+// Likewise the data dependency check state, which follows from body availability (issue #6).
 const NODE_DEPENDENT = new Set(['body', 'body_state', 'body_bytes', 'body_reason', 'dependency_check']);
 const NODE_WARNING = /^Node \d+: /;
 
 const key = v => JSON.stringify(v);
 
-/** Ścieżki z `\\` (Windows) zapisane jak na POSIX, żeby golden był ten sam na każdym systemie (issue #7). */
+/** Paths with `\\` (Windows) written as on POSIX, so the golden is the same on every system (issue #7). */
 const slashes = s => s.replace(/\\/g, '/');
 
 export function normalize(value, root = process.cwd()) {
-  root = slashes(root).replace(/\/$/, ''); // katalog z końcowym separatorem (fileURLToPath na Windows)
+  root = slashes(root).replace(/\/$/, ''); // the directory with a trailing separator (fileURLToPath on Windows)
   if (Array.isArray(value)) {
     const items = value.map(v => normalize(v, root));
     return items.sort((a, b) => key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0);

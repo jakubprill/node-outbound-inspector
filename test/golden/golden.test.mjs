@@ -1,6 +1,6 @@
-// Testy charakteryzacyjne (golden): kontrakt narzędzi MCP dla agenta. Zrzuty powstały z prototypu
-// przed refaktorem M1; po refaktorze wyniki (po normalizacji) muszą być identyczne.
-// Aktualizacja zrzutów: UPDATE_GOLDEN=1 npm test  (zmiana kontraktu wymaga wpisu w CHANGELOG.md)
+// Characterization (golden) tests: the MCP tool contract for the agent. The snapshots were made from the prototype
+// before the M1 refactor; after the refactor the results (after normalization) must be identical.
+// Updating snapshots: npm run golden:update  (a contract change needs a CHANGELOG.md entry)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -57,8 +57,8 @@ test('list_server_requests app + page_contains', () => golden('list-admin-page',
 test('analyze_server_timeline', () => golden('analyze-all', results.analyzeAll));
 test('analyze_server_timeline app', () => golden('analyze-web', results.analyzeWeb));
 test('get_server_request', () => golden('get-payment', results.getPayment));
-test('get_server_request — brak id', () => golden('get-missing', results.getMissing));
-test('nieznane narzędzie', () => golden('unknown-tool', results.unknownTool));
-test('nieznana metoda', () => golden('unknown-method', results.unknownMethod));
+test('get_server_request — missing id', () => golden('get-missing', results.getMissing));
+test('unknown tool', () => golden('unknown-tool', results.unknownTool));
+test('unknown method', () => golden('unknown-method', results.unknownMethod));
 test('clear_server_requests app', () => golden('clear-admin', results.clearAdmin));
-test('analyze po clear', () => golden('analyze-after-clear', results.analyzeAfterClear));
+test('analyze after clear', () => golden('analyze-after-clear', results.analyzeAfterClear));

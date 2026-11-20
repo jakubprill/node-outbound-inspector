@@ -4,7 +4,7 @@ import { userFrames, isLibraryFrame, normalizeFramePath } from '../../src/frames
 
 const f = (url, functionName = 'fn', lineNumber = 9, columnNumber = 4) => ({ url, functionName, lineNumber, columnNumber });
 
-test('pomija ramki Node, bibliotek i wnętrza Next.js; numeracja od 1', () => {
+test('skips Node, library and Next.js internal frames; numbering from 1', () => {
   const initiator = { stack: { callFrames: [
     f('node:internal/deps/undici/undici'),
     f('file:///repo/node_modules/next/dist/server/lib/patch-fetch.js'),
@@ -15,25 +15,25 @@ test('pomija ramki Node, bibliotek i wnętrza Next.js; numeracja od 1', () => {
   assert.deepEqual(userFrames(initiator), ['Page @ /repo/app/page.js:5:20', '(anonymous) @ /repo/lib/api.js:10:5']);
 });
 
-test('uwzględnia ramki rodzica i ogranicza do 5', () => {
+test('includes parent frames and limits to 5', () => {
   const many = Array.from({ length: 4 }, (_, i) => f(`file:///a${i}.js`));
   const initiator = { stack: { callFrames: many, parent: { callFrames: many } } };
   assert.equal(userFrames(initiator).length, 5);
 });
 
-test('brak stosu', () => assert.deepEqual(userFrames(undefined), []));
+test('no stack', () => assert.deepEqual(userFrames(undefined), []));
 
 test('normalizeFramePath: file://, Windows, %XX', () => {
   assert.equal(normalizeFramePath('file:///home/dev/repo/app/page.js'), '/home/dev/repo/app/page.js');
   assert.equal(normalizeFramePath('file:///C:/Users/dev/repo/app/page.js'), '/C:/Users/dev/repo/app/page.js');
   assert.equal(normalizeFramePath('C:\\Users\\dev\\repo\\app\\page.js'), '/C:/Users/dev/repo/app/page.js');
   assert.equal(normalizeFramePath('file:///Users/Jan%20Kowalski/repo/a.js'), '/Users/Jan Kowalski/repo/a.js');
-  assert.equal(normalizeFramePath('file:///repo/100%.js'), '/repo/100%.js'); // niepoprawne %XX zostaje bez zmian
+  assert.equal(normalizeFramePath('file:///repo/100%.js'), '/repo/100%.js'); // invalid %XX stays unchanged
 });
 
 const SSR = 'file:///Users/dev/next-network-test/monorepo/apps/web/.next/dev/server/chunks/ssr/';
 
-// Ramki, które muszą zostać rozpoznane jako biblioteki albo wnętrze frameworka.
+// Frames that must be recognized as libraries or framework internals.
 const LIBRARY = {
   'Node': ['node:internal/deps/undici/undici', 'node:diagnostics_channel', ''],
   'npm, Linux': [
@@ -58,15 +58,15 @@ const LIBRARY = {
     'file:///home/dev/repo/.pnp.cjs',
     'file:///home/dev/repo/.pnp.loader.mjs',
   ],
-  // Nazwa z issue #2 (Next 16.3, npm, Windows).
+  // The name from issue #2 (Next 16.3, npm, Windows).
   'Turbopack: npm (issue #2)': [
     'file:///repo/.next/dev/server/chunks/node_modules_@vercel_otel_dist_node_07k8e6v._.js',
     'C:\\Users\\dev\\acme\\.next\\dev\\server\\chunks\\node_modules_@vercel_otel_dist_node_07k8e6v._.js',
     'file:///C:/Users/dev/acme/.next/dev/server/chunks/node_modules_@vercel_otel_dist_node_07k8e6v._.js',
-    // syntetyczny: pakiet niewyniesiony do korzenia monorepo (ta sama reguła „…_node_modules_…”)
+    // synthetic: a package not hoisted to the monorepo root (the same "…_node_modules_…" rule)
     'file:///repo/.next/dev/server/chunks/ssr/apps_web_node_modules_@acme_sdk_dist_index_9z8y7x._.js',
   ],
-  // Prawdziwe nazwy z Next 16.4.0 (Turbopack, pnpm, monorepo, macOS), katalog .next/dev/server/chunks/ssr/.
+  // Real names from Next 16.4.0 (Turbopack, pnpm, monorepo, macOS), directory .next/dev/server/chunks/ssr/.
   'Turbopack: Next 16.4.0 + pnpm': [
     `${SSR}1sqn__pnpm_07kp6gukr-l32._.js`,
     `${SSR}0fe5_next_dist_esm_server_1giwg9ci3rpai._.js`,
@@ -86,39 +86,39 @@ const LIBRARY = {
   ],
 };
 
-// Ramki kodu aplikacji: nie mogą zostać odfiltrowane.
+// App code frames: they must not be filtered out.
 const APP = {
   'Linux / macOS': ['file:///home/dev/repo/app/page.js', 'file:///Users/dev/Projects/acme/apps/web/lib/api.ts', '/srv/app/server.js'],
   'Windows': ['file:///C:/Users/dev/repo/apps/web/app/seq/page.js', 'C:\\Users\\dev\\repo\\apps\\web\\lib\\api.js'],
-  'pakiety workspace (symlink → ścieżka rzeczywista)': ['file:///repo/packages/http-client/src/index.js'],
-  'fixture testów': ['file:///home/claude/node-outbound-inspector/test/fixtures/fake-app.mjs'],
-  // Prawdziwe nazwy z Next 16.4.0 + pnpm: oba chunki zawierają kod aplikacji (strona /seq, layout) razem
-  // z vendorowanym Next — zweryfikowane, nie mogą zostać odfiltrowane.
-  'Turbopack: chunki z kodem aplikacji (Next 16.4.0)': [
+  'workspace packages (symlink → real path)': ['file:///repo/packages/http-client/src/index.js'],
+  'test fixture': ['file:///home/claude/node-outbound-inspector/test/fixtures/fake-app.mjs'],
+  // Real names from Next 16.4.0 + pnpm: both chunks contain app code (page /seq, layout) together
+  // with vendored Next — verified, they must not be filtered out.
+  'Turbopack: chunks with app code (Next 16.4.0)': [
     `${SSR}[root-of-the-server]__1cq79-2rux-0n._.js`,
     `${SSR}_1z2yvldm0ete0._.js`,
     'C:\\Users\\dev\\monorepo\\apps\\web\\.next\\dev\\server\\chunks\\ssr\\[root-of-the-server]__1cq79-2rux-0n._.js',
     'file:///repo/.next/dev/server/app/seq/page.js',
   ],
-  // Syntetyczne: chunki nazwane ścieżką aplikacji (także trasa równoległa „@modal”).
-  'Turbopack: chunki nazwane ścieżką aplikacji (syntetyczne)': [
+  // Synthetic: chunks named after an app path (also the parallel route "@modal").
+  'Turbopack: chunks named after an app path (synthetic)': [
     `${SSR}apps_web_app_seq_page_1a2b3c._.js`,
     `${SSR}apps_web_app_@modal_(.)photo_page_7g8h9i._.js`,
   ],
-  // Prawdziwa biblioteka (@opentelemetry/api z pnpm), ale wzór „<hash>_@scope_…” jest niejednoznaczny
-  // (por. „@modal”), więc świadomie NIE jest filtrowany po nazwie — patrz komentarz w src/frames.mjs (M5).
-  'Turbopack: niejednoznaczny <hash>_@scope_ (Next 16.4.0)': [`${SSR}1a-q_@opentelemetry_api_build_esm_1z7x-zm6h4k4g._.js`],
-  'webpack: moduły aplikacji': ['webpack-internal:///(rsc)/./app/seq/page.js', 'file:///repo/.next/server/app/seq/page.js'],
+  // A real library (@opentelemetry/api from pnpm), but the "<hash>_@scope_…" pattern is ambiguous
+  // (cf. "@modal"), so it is deliberately NOT filtered by name — see the comment in src/frames.mjs (M5).
+  'Turbopack: ambiguous <hash>_@scope_ (Next 16.4.0)': [`${SSR}1a-q_@opentelemetry_api_build_esm_1z7x-zm6h4k4g._.js`],
+  'webpack: app modules': ['webpack-internal:///(rsc)/./app/seq/page.js', 'file:///repo/.next/server/app/seq/page.js'],
 };
 
 for (const [group, urls] of Object.entries(LIBRARY)) {
-  test(`biblioteka: ${group}`, () => { for (const u of urls) assert.equal(isLibraryFrame(u), true, u); });
+  test(`library: ${group}`, () => { for (const u of urls) assert.equal(isLibraryFrame(u), true, u); });
 }
 for (const [group, urls] of Object.entries(APP)) {
-  test(`kod aplikacji: ${group}`, () => { for (const u of urls) assert.equal(isLibraryFrame(u), false, u); });
+  test(`app code: ${group}`, () => { for (const u of urls) assert.equal(isLibraryFrame(u), false, u); });
 }
 
-test('issue #2: wrapper fetch z biblioteki w chunku Turbopacka nie jest miejscem wywołania', () => {
+test('issue #2: a library fetch wrapper in a Turbopack chunk is not a call site', () => {
   const initiator = { stack: { callFrames: [
     f('node:internal/deps/undici/undici', 'fetch'),
     f('file:///C:/Users/dev/acme/.next/dev/server/chunks/node_modules_@vercel_otel_dist_node_07k8e6v._.js', 'fetch', 11460, 30),
@@ -130,7 +130,7 @@ test('issue #2: wrapper fetch z biblioteki w chunku Turbopacka nie jest miejscem
     ['Page @ /Users/dev/next-network-test/monorepo/apps/web/.next/dev/server/chunks/ssr/[root-of-the-server]__1cq79-2rux-0n._.js:42:9']);
 });
 
-test('niejednoznaczny chunk <hash>_@scope_ można dopisać przez OUTBOUND_LIBRARY_PATHS', () => {
+test('an ambiguous <hash>_@scope_ chunk can be added through OUTBOUND_LIBRARY_PATHS', () => {
   const initiator = { stack: { callFrames: [
     f(`${SSR}1a-q_@opentelemetry_api_build_esm_1z7x-zm6h4k4g._.js`, 'with'),
     f(`${SSR}[root-of-the-server]__1cq79-2rux-0n._.js`, 'Page'),
@@ -139,7 +139,7 @@ test('niejednoznaczny chunk <hash>_@scope_ można dopisać przez OUTBOUND_LIBRAR
   assert.equal(userFrames(initiator, { libraryPaths: ['_@opentelemetry_'] }).length, 1);
 });
 
-test('same biblioteki → pusta lista (render pokaże NO_ORIGIN)', () => {
+test('libraries only → an empty list (render shows NO_ORIGIN)', () => {
   const initiator = { stack: { callFrames: [
     f('node:internal/deps/undici/undici'),
     f('file:///repo/.next/dev/server/chunks/node_modules_@vercel_otel_dist_node_07k8e6v._.js'),
@@ -148,7 +148,7 @@ test('same biblioteki → pusta lista (render pokaże NO_ORIGIN)', () => {
   assert.deepEqual(userFrames(initiator), []);
 });
 
-test('dodatkowe ścieżki bibliotek (OUTBOUND_LIBRARY_PATHS), także z „\\” w Windows', () => {
+test('extra library paths (OUTBOUND_LIBRARY_PATHS), also with "\\" on Windows', () => {
   const initiator = { stack: { callFrames: [
     f('C:\\repo\\packages\\http-client\\src\\index.js', 'apiFetch'),
     f('file:///C:/repo/.next/dev/server/chunks/ssr/a1b2_@acme_tracing_dist_index_0a1b._.js', 'traced'),
@@ -159,7 +159,7 @@ test('dodatkowe ścieżki bibliotek (OUTBOUND_LIBRARY_PATHS), także z „\\” 
     ['Page @ C:\\repo\\apps\\web\\app\\page.js:5:20']);
 });
 
-test('wyświetlana ścieżka: jak dotąd bez „file://”; Windows „file:///C:/…” → „C:/…”', () => {
+test('display path: as before without "file://"; Windows "file:///C:/…" → "C:/…"', () => {
   assert.deepEqual(userFrames({ stack: { callFrames: [f('file:///home/dev/a b.js'), f('file:///D:/repo/app/page.js')] } }),
     ['fn @ /home/dev/a b.js:10:5', 'fn @ D:/repo/app/page.js:10:5']);
 });

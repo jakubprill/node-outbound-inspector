@@ -1,7 +1,7 @@
-// Wady prototypu (docs/architecture.md, rozdz. 2). Naprawione mają zwykłe testy regresji;
-// pozostałe są oznaczone `todo` z numerem kamienia milowego, w którym zostaną naprawione.
-// Porty 47xx: unikamy portów blokowanych przez fetch (np. 5060/5061 — SIP), inaczej zapytania
-// aplikacji testowej są odrzucane, a jej odpowiedź nigdy się nie kończy.
+// Prototype defects (docs/architecture.md, section 2). Fixed ones have ordinary regression tests;
+// the rest are marked `todo` with the number of the milestone that will fix them.
+// Ports 47xx: we avoid ports blocked by fetch (e.g. 5060/5061 — SIP), otherwise the test app's
+// requests are rejected, and its response never ends.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { startMcp } from '../helpers/mcp-client.mjs';
@@ -16,7 +16,7 @@ async function withApp(a, fn, { servicesPort } = {}) {
   finally { mcps.forEach(m => m.close()); sc.stop(); }
 }
 
-test('wada 1: dwa kolektory naraz — oba widzą przypisanie do stron', { todo: 'M4: dziennik haka opróżniany przez pierwszy kolektor (splice)' }, () =>
+test('defect 1: two collectors at once — both see page assignment', { todo: 'M4: the hook log is drained by the first collector (splice)' }, () =>
   withApp(app(), async (sc, mcp) => {
     const [m1, m2] = [await mcp(), await mcp()];
     await m1.waitForApps(1); await m2.waitForApps(1);
@@ -28,7 +28,7 @@ test('wada 1: dwa kolektory naraz — oba widzą przypisanie do stron', { todo: 
     }
   }));
 
-test('wada 2: proces bez --experimental-network-inspection (ze zgodą OUTBOUND_INSPECT=1) — status to pokazuje i podaje powód', () =>
+test('defect 2: a process without --experimental-network-inspection (with OUTBOUND_INSPECT=1 consent) — the status shows it and gives the reason', () =>
   withApp(app({ flags: [], env: { OUTBOUND_INSPECT: '1' } }), async (sc, mcp) => {
     const m = await mcp();
     for (let i = 0; i < 40 && !(await m.call('inspector_status')).apps[0]?.ready; i++) await sleep(250);
@@ -38,7 +38,7 @@ test('wada 2: proces bez --experimental-network-inspection (ze zgodą OUTBOUND_I
     assert.match(s.warnings.join(' '), /without --experimental-network-inspection/);
   }));
 
-test('audyt B-01: proces z inspektorem bez zgody jest pomijany — bez haka, łatek i Network.enable', () =>
+test('audit B-01: a process with an inspector but without consent is skipped — no hook, patches or Network.enable', () =>
   withApp(app({ flags: [] }), async (sc, mcp) => {
     const m = await mcp();
     for (let i = 0; i < 40 && !(await m.call('inspector_status')).apps[0]?.ready; i++) await sleep(250);
@@ -47,7 +47,7 @@ test('audyt B-01: proces z inspektorem bez zgody jest pomijany — bez haka, ła
     assert.equal(s.network_inspection, false);
     assert.equal(s.page_correlation, false);
     assert.match(s.warnings[0], /no consent for inspection/);
-    // stan procesu sprawdzony własnym połączeniem z inspektorem: nic nie zostało wstrzyknięte
+    // the process state checked with our own connection to the inspector: nothing was injected
     const [t] = await (await fetch(`http://127.0.0.1:${sc.apps[0].inspect}/json/list`)).json();
     const ws = new WebSocket(t.webSocketDebuggerUrl);
     await new Promise(r => { ws.onopen = r; });
@@ -59,13 +59,13 @@ test('audyt B-01: proces z inspektorem bez zgody jest pomijany — bez haka, ła
     assert.equal(value, 'undefined,false');
   }));
 
-test('wada 3: restart aplikacji na tym samym porcie — rekordy sprzed restartu zostają', () =>
+test('defect 3: app restart on the same port — records from before the restart stay', () =>
   withApp(app(), async (sc, mcp) => {
     const m = await mcp();
     await m.waitForApps(1);
     await sc.hit(sc.apps[0], '/seq'); await sleep(300);
     sc.apps[0].proc.kill(); await sleep(500);
-    const again = await startScenario({ apps: [app({ port: sc.apps[0].port, inspect: sc.apps[0].inspect })] }); // ten sam port aplikacji i inspektora
+    const again = await startScenario({ apps: [app({ port: sc.apps[0].port, inspect: sc.apps[0].inspect })] }); // the same app and inspector port
     try {
       for (let i = 0; i < 40 && (await m.call('inspector_status')).apps.length < 1; i++) await sleep(250);
       await sleep(1500);
@@ -74,7 +74,7 @@ test('wada 3: restart aplikacji na tym samym porcie — rekordy sprzed restartu 
     } finally { again.stop(); }
   }));
 
-test('wada 5: analiza dużego ruchu mieści się w budżecie odpowiedzi', () =>
+test('defect 5: analysis of heavy traffic fits the response budget', () =>
   withApp(app(), async (sc, mcp) => {
     const m = await mcp();
     await m.waitForApps(1);
@@ -82,15 +82,15 @@ test('wada 5: analiza dużego ruchu mieści się w budżecie odpowiedzi', () =>
     await sleep(500);
     const len = async args => (await m.rpc('tools/call', { name: 'analyze_server_timeline', arguments: args })).result.content[0].text.length;
     const summary = await len({}), full = await len({ detail: 'full' });
-    assert.ok(summary <= 6000, `podsumowanie: ${summary} znaków (cel ADR 0008: 6000)`);
-    assert.ok(full <= 20000, `pełny raport: ${full} znaków (twardy limit 20 000)`);
+    assert.ok(summary <= 6000, `summary: ${summary} characters (ADR 0008 goal: 6000)`);
+    assert.ok(full <= 20000, `full report: ${full} characters (hard limit 20,000)`);
     const listed = (await m.rpc('tools/call', { name: 'list_server_requests', arguments: { limit: 1000 } })).result.content[0].text;
-    assert.ok(listed.length <= 20000, `lista: ${listed.length} znaków`);
+    assert.ok(listed.length <= 20000, `list: ${listed.length} characters`);
     const truncated = JSON.parse((await m.rpc('tools/call', { name: 'analyze_server_timeline', arguments: { detail: 'full' } })).result.content[0].text);
     if (truncated.truncated) assert.match(truncated.truncation_hint, /page_request_id/);
   }));
 
-test('wada 6: sekrety z nagłówków, treści JSON i adresu strony nie występują w żadnym wyniku żadnego narzędzia', () =>
+test('defect 6: secrets from headers, JSON bodies and the page URL appear in no result of any tool', () =>
   withApp(app({ script: 'secrets-app.mjs' }), async (sc, mcp) => {
     const m = await mcp();
     await m.waitForApps(1);
@@ -110,7 +110,7 @@ test('wada 6: sekrety z nagłówków, treści JSON i adresu strony nie występuj
     assert.equal(d.body_redacted_fields, 1);
   }));
 
-test('OUTBOUND_REDACT=0: wartości bez zmian i ostrzeżenie w statusie', () =>
+test('OUTBOUND_REDACT=0: values unchanged and a warning in the status', () =>
   withApp(app({ script: 'secrets-app.mjs' }), async (sc, mcp) => {
     const m = await mcp({ OUTBOUND_REDACT: '0' });
     await m.waitForApps(1);

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Najprostszy klient CDP: robi to samo co zakładka Network w "dedicated DevTools for Node".
-// Uruchom aplikację z `node --inspect --experimental-network-inspection app.js`, potem:
+// The simplest CDP client: does the same as the Network tab in "dedicated DevTools for Node".
+// Start the app with `node --inspect --experimental-network-inspection app.js`, then:
 //   node examples/cdp-network-probe.mjs [port=9229]
 const port = process.argv[2] || 9229;
 const [target] = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();

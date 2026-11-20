@@ -1,5 +1,5 @@
-// outbound-hub: jedna lista celów dla chrome://inspect, przepięcie połączenia DevTools do właściwego procesu,
-// ochrona przed DNS rebinding i przed użyciem huba jako pośrednika do dowolnego portu.
+// outbound-hub: one target list for chrome://inspect, forwarding the DevTools connection to the right process,
+// protection against DNS rebinding and against using the hub as a proxy to any port.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -12,7 +12,7 @@ import { startScenario, freePorts, sleep } from '../helpers/scenario.mjs';
 
 const HUB_BIN = fileURLToPath(new URL('../../bin/outbound-hub.mjs', import.meta.url));
 
-/** Surowe żądanie HTTP z dowolnym nagłówkiem Host (fetch go nie pozwala ustawić). */
+/** A raw HTTP request with any Host header (fetch does not allow setting it). */
 function rawGet(port, path, headers = {}) {
   return new Promise((resolve, reject) => {
     http.get({ host: '127.0.0.1', port, path, headers }, res => {
@@ -21,7 +21,7 @@ function rawGet(port, path, headers = {}) {
   });
 }
 
-/** Odpowiedź serwera na żądanie Upgrade: pierwsza linia (status). */
+/** The server response to an Upgrade request: the first line (status). */
 function rawUpgrade(port, path, host = `127.0.0.1:${port}`) {
   return new Promise((resolve, reject) => {
     const req = http.request({ host: '127.0.0.1', port, path, headers: { host, connection: 'Upgrade', upgrade: 'websocket', 'sec-websocket-version': '13', 'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==' } });
@@ -32,7 +32,7 @@ function rawUpgrade(port, path, host = `127.0.0.1:${port}`) {
   });
 }
 
-/** Runtime.evaluate przez WebSocket (tak jak DevTools). */
+/** Runtime.evaluate over WebSocket (as DevTools does). */
 function evaluate(wsUrl, expression) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsUrl);
@@ -43,12 +43,12 @@ function evaluate(wsUrl, expression) {
   });
 }
 
-test('allowedHost: IP i localhost tak, nazwy domen nie (DNS rebinding)', () => {
+test('allowedHost: IP and localhost yes, domain names no (DNS rebinding)', () => {
   for (const h of ['127.0.0.1:9229', 'localhost:9229', 'localhost', '[::1]:9229', '10.0.0.5']) assert.equal(allowedHost(h), true, h);
   for (const h of ['evil.example:9229', 'localhost.evil.example', '', undefined, 'attacker.test']) assert.equal(allowedHost(h), false, String(h));
 });
 
-test('rewriteTarget: adresy wskazują hub i ścieżkę /<port>/<id>', () => {
+test('rewriteTarget: addresses point to the hub and the /<port>/<id> path', () => {
   const t = { id: 'abc-1', title: 'node', type: 'node', webSocketDebuggerUrl: 'ws://127.0.0.1:9231/abc-1',
     devtoolsFrontendUrl: 'devtools://devtools/bundled/js_app.html?experiments=true&v8only=true&ws=127.0.0.1:9231/abc-1' };
   const r = rewriteTarget(t, { port: 9231, name: '@acme/web', hubHost: 'localhost:9229' });
@@ -58,7 +58,7 @@ test('rewriteTarget: adresy wskazują hub i ścieżkę /<port>/<id>', () => {
   assert.equal(r.outboundHub, true);
 });
 
-test('hub: lista z nazwami, przepięcie DevTools, Host, tylko znalezione procesy, kolektor bez duplikatów', async () => {
+test('hub: a list with names, DevTools forwarding, Host, only found processes, the collector without duplicates', async () => {
   const apps = [{ name: '@acme/web', dir: 'web' }, { name: '@acme/admin', dir: 'admin' }];
   const sc = await startScenario({ apps });
   const [hubPort, stranger] = await freePorts(2);
@@ -68,42 +68,42 @@ test('hub: lista z nazwami, przepięcie DevTools, Host, tylko znalezione procesy
     await hub.listen();
     let list = [];
     for (let i = 0; i < 50 && list.length < 2; i++) { await sleep(100); list = JSON.parse((await rawGet(hubPort, '/json/list')).body); }
-    assert.deepEqual(list.map(t => t.title).sort(), ['admin', 'web'], 'nazwy z package.json, jak w kolektorze');
+    assert.deepEqual(list.map(t => t.title).sort(), ['admin', 'web'], 'names from package.json, as in the collector');
     const web = list.find(t => t.title === 'web');
     assert.match(web.webSocketDebuggerUrl, new RegExp(`^ws://127\\.0\\.0\\.1:${hubPort}/${apps[0].inspect}/[\\w-]+$`));
     assert.match(web.devtoolsFrontendUrl, new RegExp(`ws=127\\.0\\.0\\.1:${hubPort}/${apps[0].inspect}/`));
     assert.equal(JSON.parse((await rawGet(hubPort, '/json')).body).length, 2, '/json to samo co /json/list');
     assert.ok(JSON.parse((await rawGet(hubPort, '/json/version')).body)['node-outbound-inspector-hub'], 'znacznik huba w /json/version');
 
-    // DevTools przez hub trafia do właściwego procesu
+    // DevTools through the hub reaches the right process
     assert.match(await evaluate(web.webSocketDebuggerUrl, 'process.cwd()'), /apps[\\/]web$/);
     const admin = list.find(t => t.title === 'admin');
     assert.match(await evaluate(admin.webSocketDebuggerUrl, 'process.cwd()'), /apps[\\/]admin$/);
 
-    // DNS rebinding: obca nazwa w Host → 403, dla listy i dla Upgrade
+    // DNS rebinding: a foreign name in Host → 403, for the list and for Upgrade
     assert.equal((await rawGet(hubPort, '/json/list', { host: `evil.example:${hubPort}` })).status, 403);
     const path = new URL(web.webSocketDebuggerUrl).pathname;
     assert.equal(await rawUpgrade(hubPort, path, `evil.example:${hubPort}`), 403);
-    // tylko procesy znalezione na skanowanych portach: nie dowolny port i nie nieznany cel
-    assert.equal(await rawUpgrade(hubPort, `/${stranger}/abc`), 404, 'port spoza skanowania');
+    // only processes found on the scanned ports: not any port and not an unknown target
+    assert.equal(await rawUpgrade(hubPort, `/${stranger}/abc`), 404, 'a port outside the scan');
     assert.equal(await rawUpgrade(hubPort, `/${apps[0].inspect}/not-a-target`), 404, 'nieznany cel');
     assert.equal(await rawUpgrade(hubPort, path), 101, 'znany cel');
 
-    // kolektor skanujący także port huba nie dubluje aplikacji
+    // a collector also scanning the hub port does not duplicate apps
     m = await startMcp({ env: { INSPECTOR_PORTS: [...apps.map(a => a.inspect), hubPort].join(',') }, stderr: 'ignore' });
     await m.waitForApps(2);
-    await sleep(1800); // jeden pełny cykl skanowania więcej
+    await sleep(1800); // one more full scan cycle
     const status = await m.call('inspector_status');
     assert.deepEqual(status.apps.map(a => a.app).sort(), ['admin', 'web']);
 
-    // proces znika z listy po zakończeniu
+    // a process disappears from the list after it ends
     sc.apps[1].proc.kill();
     for (let i = 0; i < 50 && list.length > 1; i++) { await sleep(100); list = JSON.parse((await rawGet(hubPort, '/json/list')).body); }
     assert.deepEqual(list.map(t => t.title), ['web']);
   } finally { m?.close(); await hub.close(); sc.stop(); }
 });
 
-test('outbound-hub: drugi hub na tym samym porcie kończy się bez błędu, obcy proces na porcie → kod 1', async () => {
+test('outbound-hub: a second hub on the same port exits without an error, a foreign process on the port → code 1', async () => {
   const [port] = await freePorts(1);
   const run = (env = {}) => new Promise(resolve => {
     const p = spawn(process.execPath, [HUB_BIN], { env: { ...process.env, OUTBOUND_HUB_PORT: String(port), INSPECTOR_PORTS: String(port), ...env }, stdio: ['ignore', 'ignore', 'pipe'] });
@@ -128,7 +128,7 @@ test('outbound-hub: drugi hub na tym samym porcie kończy się bez błędu, obcy
   } finally { blocker.close(); }
 });
 
-test('odpowiedzi HTTP jak w inspektorze Node: Content-Length, bez chunked (wymóg chrome://inspect)', async () => {
+test('HTTP responses as in the Node inspector: Content-Length, no chunked (a chrome://inspect requirement)', async () => {
   const [port] = await freePorts(1);
   const hub = createHub({ port, ports: [], identify: false });
   await hub.listen();
@@ -140,8 +140,8 @@ test('odpowiedzi HTTP jak w inspektorze Node: Content-Length, bez chunked (wymó
     assert.match(raw, /^HTTP\/1\.1 200/);
     assert.match(raw, /\r\nContent-Length: 2\r\n/i);
     assert.doesNotMatch(raw, /Transfer-Encoding: chunked/i);
-    assert.ok(raw.endsWith('\r\n\r\n[]'), 'połączenie zamknięte po odpowiedzi; parametry w URL nie przeszkadzają');
+    assert.ok(raw.endsWith('\r\n\r\n[]'), 'the connection closed after the response; URL parameters do not get in the way');
     const version = JSON.parse((await rawGet(port, '/json/version')).body);
-    assert.match(version.Browser, /^node\.js\//, 'chrome://inspect pokazuje cele node tylko pod node.js/…');
+    assert.match(version.Browser, /^node\.js\//, 'chrome://inspect shows node targets only under node.js/…');
   } finally { await hub.close(); }
 });

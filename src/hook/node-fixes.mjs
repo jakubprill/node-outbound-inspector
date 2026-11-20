@@ -1,13 +1,13 @@
-// Obejścia błędów Node w inspekcji sieci, instalowane w procesie aplikacji PRZED Network.enable.
+// Workarounds for Node bugs in network inspection, installed in the app process BEFORE Network.enable.
 //
-// nodejs/node#66551 (Node 24.16–24.22, 26.8 i inne; poprawka w PR #66552, niewydana w chwili pisania):
-// gdy odpowiedź node:http ma setEncoding(), wewnętrzny nasłuchiwacz inspektora dostaje fragmenty tekstowe,
-// wysyła Network.dataReceived bez dataLength i rzuca TypeError — strumień zostaje zniszczony, a aplikacja
-// dostaje "aborted" albo pada. Dzieje się to tylko przy podłączonym kliencie z Network.enable, czyli
-// właśnie wtedy, gdy podłącza się ten kolektor albo DevTools. Obejście: fragment tekstowy → Buffer.
-// Gdy Node przekazuje już Buffer (błąd naprawiony), obejście nic nie robi.
+// nodejs/node#66551 (Node 24.16–24.22, 26.8 and others; fixed in PR #66552, unreleased at the time of writing):
+// when a node:http response has setEncoding(), the inspector's internal listener gets text chunks,
+// sends Network.dataReceived without dataLength and throws a TypeError — the stream is destroyed, and the app
+// gets "aborted" or crashes. It happens only with an attached client that called Network.enable, i.e.
+// exactly when this collector or DevTools attaches. Workaround: text chunk → Buffer.
+// When Node already passes a Buffer (bug fixed), the workaround does nothing.
 //
-// installNodeFixes musi być samowystarczalna (bez importów i domknięć): wysyłana jako tekst przez Runtime.evaluate.
+// installNodeFixes must be self-contained (no imports or closures): sent as text through Runtime.evaluate.
 
 export function installNodeFixes() {
   const applied = [];
@@ -17,7 +17,7 @@ export function installNodeFixes() {
       const orig = Network.dataReceived;
       const fixed = function (params) {
         if (params && typeof params.data === 'string') {
-          // kodowanie strumienia nie jest znane w tym miejscu; utf8 to najczęstsze setEncoding()
+          // the stream encoding is not known here; utf8 is the most common setEncoding()
           const data = Buffer.from(params.data, 'utf8');
           params = { ...params, data, dataLength: params.dataLength ?? data.byteLength, encodedDataLength: params.encodedDataLength ?? data.byteLength };
         }
@@ -31,5 +31,5 @@ export function installNodeFixes() {
   return applied;
 }
 
-/** Wyrażenie dla Runtime.evaluate instalujące obejścia; zwraca listę zastosowanych (JSON). */
+/** A Runtime.evaluate expression that installs the workarounds; returns the list of applied ones (JSON). */
 export const NODE_FIXES_EXPRESSION = `JSON.stringify((${installNodeFixes.toString()})())`;

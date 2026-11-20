@@ -1,4 +1,4 @@
-// Błędy połączeń bez opisu (issue #3) i domyślne pomijanie eksportu OpenTelemetry (issue #4).
+// Connection errors without a message (issue #3) and skipping OpenTelemetry export by default (issue #4).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { startMcp } from '../helpers/mcp-client.mjs';
@@ -12,11 +12,11 @@ async function withApp(a, env, fn) {
   try { await m.waitForApps(1); return await fn(sc, m); } finally { m.close(); sc.stop(); }
 }
 
-test('odrzucone połączenie: status nigdy nie jest "FAILED: " bez opisu, szczegóły podają rodzaj błędu', () =>
+test('refused connection: the status is never "FAILED: " without a message, details give the error kind', () =>
   withApp(app(), {}, async (sc, m) => {
     await sc.hit(sc.apps[0], '/refused'); await sc.hit(sc.apps[0], '/timeout'); await sleep(300);
     const [refused] = (await m.call('list_server_requests', { url_contains: '/api' })).requests;
-    // Node 22 zgłasza tu AggregateError z pustym message; gdyby nowszy Node dodał opis, status go pokaże
+    // Node 22 reports an AggregateError with an empty message here; if a newer Node adds one, the status shows it
     assert.match(refused.status, /^FAILED(: \S| \(no error text from the inspector\)$)/, refused.status);
     const d = await m.call('get_server_request', { id: refused.id });
     assert.ok(['unknown', 'connection_refused', 'other'].includes(d.error_kind), d.error_kind);
@@ -29,18 +29,18 @@ test('odrzucone połączenie: status nigdy nie jest "FAILED: " bez opisu, szczeg
     assert.ok(errors.every(e => e.status !== 'FAILED: '), JSON.stringify(errors));
   }));
 
-test('eksport OTLP na :4318 domyślnie pomijany: brak w liście i błędach, widoczny w inspector_status', () =>
+test('OTLP export to :4318 skipped by default: not in the list or errors, visible in inspector_status', () =>
   withApp(app(), {}, async (sc, m) => {
     await sc.hit(sc.apps[0], '/otel'); await sleep(300);
     const rows = (await m.call('list_server_requests')).requests;
-    assert.deepEqual(rows.map(r => new URL(r.url).pathname), ['/user'], 'zostaje tylko zwykłe zapytanie');
+    assert.deepEqual(rows.map(r => new URL(r.url).pathname), ['/user'], 'only the ordinary request stays');
     assert.deepEqual((await m.call('analyze_server_timeline'))['web'].errors, []);
     const s = await m.call('inspector_status');
     assert.ok(s.ignored_otlp.includes('*:4318/v1/traces'));
     assert.equal(s.ignored_requests_total.otlp, 2, 'fetch i node:http');
   }));
 
-test('OUTBOUND_IGNORE_OTLP=0: eksport OTLP widoczny jako błąd', () =>
+test('OUTBOUND_IGNORE_OTLP=0: OTLP export visible as an error', () =>
   withApp(app(), { OUTBOUND_IGNORE_OTLP: '0' }, async (sc, m) => {
     await sc.hit(sc.apps[0], '/otel'); await sleep(300);
     const { errors } = (await m.call('analyze_server_timeline'))['web'];

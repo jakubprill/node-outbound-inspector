@@ -1,4 +1,4 @@
-// Udawane "wewnętrzne serwisy": ?ms=opóźnienie, ?status=kod odpowiedzi
+// Mock "internal services": ?ms=delay, ?status=response code
 import http from 'node:http';
 const port = +(process.env.PORT || 4001);
 http.createServer((req, res) => {

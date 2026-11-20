@@ -1,12 +1,12 @@
-// Wykrywanie celów: skanowanie portów inspektorów (`/json/list`).
+// Target discovery: scanning inspector ports (`/json/list`).
 
-/** Limity wobec procesu na skanowanym porcie, który może być dowolnym lokalnym programem (audyt B-11). */
+/** Limits against the process on a scanned port, which may be any local program (audit B-11). */
 export const DISCOVERY_LIMITS = Object.freeze({ listBytes: 64 * 1024, targetsPerPort: 8 });
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
 /**
- * Cel przyjmowany tylko wtedy, gdy jego adres WebSocket wskazuje ten sam port na pętli zwrotnej.
- * Bez tego fałszywy /json/list mógłby skierować kolektor do dowolnego innego procesu albo hosta (audyt B-03).
+ * A target is accepted only when its WebSocket address points to the same port on loopback.
+ * Without this a fake /json/list could direct the collector to any other process or host (audit B-03).
  */
 export function validTarget(t, port) {
   if (!t || typeof t !== 'object' || typeof t.webSocketDebuggerUrl !== 'string' || t.webSocketDebuggerUrl.length > 512) return false;
@@ -16,7 +16,7 @@ export function validTarget(t, port) {
   } catch { return false; }
 }
 
-/** Odpowiedź czytana z limitem rozmiaru; większa jest odrzucana. */
+/** A response read with a size limit; a larger one is rejected. */
 async function readLimited(res, maxBytes) {
   const chunks = []; let size = 0;
   for await (const chunk of res.body ?? []) {
@@ -27,7 +27,7 @@ async function readLimited(res, maxBytes) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-/** @returns {Promise<any[] | null>} lista celów inspektora albo null, gdy port nie odpowiada */
+/** @returns {Promise<any[] | null>} the inspector target list or null when the port does not answer */
 export async function listTargets(port, { timeoutMs }) {
   try {
     const res = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(timeoutMs) });
@@ -38,7 +38,7 @@ export async function listTargets(port, { timeoutMs }) {
 }
 
 /**
- * Cyklicznie skanuje porty i zgłasza nowe cele (po webSocketDebuggerUrl).
+ * Periodically scans ports and reports new targets (by webSocketDebuggerUrl).
  * @param {{ ports: readonly number[], scanIntervalMs: number, listTimeoutMs: number }} config
  * @param {{ isKnown: (wsUrl: string) => boolean, onTarget: (target: any, port: number) => void }} handlers
  */
@@ -46,7 +46,7 @@ export function createDiscovery(config, { isKnown, onTarget }) {
   let timer = null;
   const scanPort = async port => {
     const list = await listTargets(port, { timeoutMs: config.listTimeoutMs });
-    // cele wystawione przez outbound-hub to te same procesy co na ich własnych portach — pomijamy, żeby nie dublować
+    // targets exposed by outbound-hub are the same processes as on their own ports — skipped to avoid duplicates
     const targets = (list ?? []).filter(t => validTarget(t, port) && !t.outboundHub).slice(0, DISCOVERY_LIMITS.targetsPerPort);
     for (const t of targets) if (!isKnown(t.webSocketDebuggerUrl)) onTarget(t, port);
   };

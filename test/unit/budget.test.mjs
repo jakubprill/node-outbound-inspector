@@ -1,5 +1,5 @@
-// Budżet odpowiedzi (ADR 0008, M6): każdy wynik narzędzia to poprawny JSON nie dłuższy niż limit,
-// stronicowanie kursorem zwraca każdy rekord dokładnie raz, podsumowanie analizy jest krótkie.
+// Response budget (ADR 0008, M6): every tool result is valid JSON no longer than the limit,
+// cursor paging returns every record exactly once, the analysis summary is short.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createStore } from '../../src/store.mjs';
@@ -7,12 +7,12 @@ import { createTools } from '../../src/mcp/tools.mjs';
 import { fitToBudget, shortUrl, size } from '../../src/mcp/budget.mjs';
 import { createRedactor } from '../../src/redact.mjs';
 
-/** Deterministyczny generator liczb (mulberry32), żeby porażka była powtarzalna. */
+/** A deterministic number generator (mulberry32), so a failure is reproducible. */
 function rng(seed) {
   return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 }
 
-/** Magazyn z `n` losowymi zapytaniami: kilka aplikacji, strony, błędy, długie URL-e i treści, zapytania w toku. */
+/** A store with `n` random requests: several apps, pages, errors, long URLs and bodies, requests in flight. */
 function randomStore(n, seed) {
   const rnd = rng(seed), pick = a => a[Math.floor(rnd() * a.length)];
   const store = createStore({ maxRequests: 5000 });
@@ -39,7 +39,7 @@ function randomStore(n, seed) {
 const toolsFor = (store, maxChars = 20000) => createTools({ store, now: () => 1e12 + 1e6, status: () => ({ apps: [] }), ensureBody: async r => r }, { maxChars });
 const call = async (tools, name, args) => JSON.stringify(await tools[name].run(args));
 
-test('fitToBudget: wynik w limicie, przycięcie jawne, najnowsze elementy zostają', () => {
+test('fitToBudget: result within the limit, explicit truncation, the newest elements stay', () => {
   const v = { items: Array.from({ length: 500 }, (_, i) => ({ i, pad: 'x'.repeat(50) })), note: 'ok' };
   const out = fitToBudget(v, { limit: 3000, hint: 'narrow it' });
   assert.ok(size(out) <= 3000);
@@ -47,18 +47,18 @@ test('fitToBudget: wynik w limicie, przycięcie jawne, najnowsze elementy zostaj
   assert.equal(out.truncation_hint, 'narrow it');
   assert.equal(out.items.at(-1).i, 499, 'najnowszy element zostaje');
   assert.equal(out.note, 'ok');
-  assert.deepEqual(fitToBudget({ a: 1 }, { limit: 100, hint: 'h' }), { a: 1 }, 'mały wynik bez zmian');
+  assert.deepEqual(fitToBudget({ a: 1 }, { limit: 100, hint: 'h' }), { a: 1 }, 'a small result unchanged');
   const text = fitToBudget({ body: 'b'.repeat(10000) }, { limit: 2000, hint: 'h' });
   assert.ok(size(text) <= 2000 && text.body.endsWith('…'));
 });
 
-test('shortUrl: długi query string skracany, krótki bez zmian', () => {
+test('shortUrl: a long query string shortened, a short one unchanged', () => {
   assert.equal(shortUrl('http://s/a?x=1'), 'http://s/a?x=1');
   assert.equal(shortUrl('http://s/a?' + 'q=v&'.repeat(30)), 'http://s/a?…');
-  assert.equal(shortUrl('http://s/' + 'p'.repeat(500)), 'http://s/' + 'p'.repeat(500), 'ścieżki nie skracamy');
+  assert.equal(shortUrl('http://s/' + 'p'.repeat(500)), 'http://s/' + 'p'.repeat(500), 'the path is not shortened');
 });
 
-test('własność: każdy wynik każdego narzędzia to poprawny JSON w limicie (losowe magazyny do 5000 zapytań)', async () => {
+test('property: every result of every tool is valid JSON within the limit (random stores of up to 5000 requests)', async () => {
   for (const [n, seed] of [[0, 1], [1, 2], [37, 3], [600, 4], [5000, 5]]) {
     for (const limit of [20000, 6000]) {
       const store = randomStore(n, seed), tools = toolsFor(store, limit);
@@ -72,13 +72,13 @@ test('własność: każdy wynik każdego narzędzia to poprawny JSON w limicie (
         const text = await call(tools, name, args);
         assert.ok(text.length <= limit, `${name} ${JSON.stringify(args)} n=${n} limit=${limit}: ${text.length}`);
         const parsed = JSON.parse(text);
-        if (parsed.truncated) assert.ok(parsed.truncation_hint, 'przycięcie ze wskazówką');
+        if (parsed.truncated) assert.ok(parsed.truncation_hint, 'truncation with a hint');
       }
     }
   }
 });
 
-test('stronicowanie kursorem: każdy rekord dokładnie raz, także gdy budżet tnie strony', async () => {
+test('cursor paging: every record exactly once, also when the budget cuts pages', async () => {
   const store = randomStore(1200, 7);
   for (const [limit, maxChars] of [[50, 20000], [1000, 20000], [7, 6000]]) {
     const tools = toolsFor(store, maxChars), seen = [];
@@ -86,16 +86,16 @@ test('stronicowanie kursorem: każdy rekord dokładnie raz, także gdy budżet t
     for (;;) {
       const page = await tools.list_server_requests.run({ since_id: cursor, limit });
       seen.push(...page.requests.map(r => r.id));
-      assert.ok(page.next_since_id >= cursor, 'kursor nie cofa się');
+      assert.ok(page.next_since_id >= cursor, 'the cursor does not go back');
       cursor = page.next_since_id;
       if (!page.has_more) break;
-      assert.ok(++calls < 2000, 'kursor się nie zapętla');
+      assert.ok(++calls < 2000, 'the cursor does not loop');
     }
     assert.deepEqual(seen, store.values().map(r => r.id).sort((a, b) => a - b), `limit=${limit}`);
   }
 });
 
-test('lista bez kursora: najnowsze, next_since_id do odpytywania o nowe, liczba pominiętych starszych', async () => {
+test('a list without a cursor: the newest, next_since_id for polling new ones, the number of skipped older ones', async () => {
   const store = randomStore(120, 8), tools = toolsFor(store);
   const page = await tools.list_server_requests.run({ limit: 10 });
   assert.deepEqual(page.requests.map(r => r.id), Array.from({ length: 10 }, (_, i) => 111 + i));
@@ -106,7 +106,7 @@ test('lista bez kursora: najnowsze, next_since_id do odpytywania o nowe, liczba 
   assert.deepEqual(empty, { requests: [], next_since_id: 120 });
 });
 
-test('filtry status i page_request_id', async () => {
+test('status and page_request_id filters', async () => {
   const store = createStore({ maxRequests: 10 });
   const r = (key, extra) => store.add({ key, app: 'web', port: 1, url: `http://s/${key}`, method: 'GET', wallStart: 1, tsStart: 1, origin: [], ...extra });
   r('ok', { status: 200, tsEnd: 2, state: 'finished', page: { id: 'p1', method: 'GET', url: '/a' } });
@@ -116,7 +116,7 @@ test('filtry status i page_request_id', async () => {
   r('pend', {});
   const keys = a => store.select(a).map(x => x.key);
   assert.deepEqual(keys({ status: '404' }), ['nf']);
-  assert.deepEqual(keys({ status: 503 }), ['se'], 'liczba też działa');
+  assert.deepEqual(keys({ status: 503 }), ['se'], 'a number works too');
   assert.deepEqual(keys({ status: '5xx' }), ['se']);
   assert.deepEqual(keys({ status: 'error' }), ['nf', 'se', 'fail']);
   assert.deepEqual(keys({ status: 'failed' }), ['fail']);
@@ -125,7 +125,7 @@ test('filtry status i page_request_id', async () => {
   assert.throws(() => keys({ status: 'weird' }), /Unknown status filter/);
 });
 
-test('podsumowanie analizy: 132 zapytania (44 wejścia × 3) mieszczą się w 2000 znaków', async () => {
+test('analysis summary: 132 requests (44 visits × 3) fit in 2000 characters', async () => {
   const store = createStore({ maxRequests: 5000 });
   let t = 1;
   for (let p = 0; p < 44; p++) {
@@ -136,19 +136,19 @@ test('podsumowanie analizy: 132 zapytania (44 wejścia × 3) mieszczą się w 20
   }
   const tools = toolsFor(store);
   const summary = await call(tools, 'analyze_server_timeline', {});
-  assert.ok(summary.length <= 2000, `${summary.length} znaków`);
+  assert.ok(summary.length <= 2000, `${summary.length} characters`);
   const s = JSON.parse(summary)['@acme/admin'];
-  assert.equal(s.pages.length, 1, 'powtórne wejścia na /par w jednej pozycji');
+  assert.equal(s.pages.length, 1, 'repeated visits to /par in one entry');
   assert.equal(s.pages[0].visits, 44);
   assert.equal(s.page_requests_total, 44);
-  assert.equal(s.pages[0].page_request_id, '1093-43', 'dane najnowszego wejścia');
+  assert.equal(s.pages[0].page_request_id, '1093-43', 'data of the newest visit');
   assert.ok(s.pages.every(p => !p.timeline && !p.verdict && !p.sequential_chains), 'same liczby i kody');
   const one = JSON.parse(await call(tools, 'analyze_server_timeline', { page_request_id: '1093-7' }))['@acme/admin'];
   assert.equal(one.by_page_request.length, 1);
-  assert.equal(one.by_page_request[0].timeline.length, 3, 'jedno żądanie strony: pełna oś czasu');
+  assert.equal(one.by_page_request[0].timeline.length, 3, 'one page request: the full timeline');
 });
 
-test('ustalenia: duplikaty w obrębie strony i wolne zapytania', async () => {
+test('findings: duplicates within a page and slow requests', async () => {
   const store = createStore({ maxRequests: 100 });
   const page = { id: 'p1', method: 'GET', url: '/cart' };
   const add = (key, url, ms, extra = {}) => store.add({ key, app: 'web', port: 1, method: 'GET', url, wallStart: 1, tsStart: 1, tsEnd: 1 + ms / 1000, state: 'finished', status: 200, origin: [], page, ...extra });
@@ -160,7 +160,7 @@ test('ustalenia: duplikaty w obrębie strony i wolne zapytania', async () => {
   assert.equal(findings.slow_threshold_ms, 1000);
 });
 
-test('get_server_request: treść stronicowana przez body_offset', async () => {
+test('get_server_request: body paged with body_offset', async () => {
   const store = createStore({ maxRequests: 10 });
   const data = 'abcdefghij'.repeat(100);
   store.add({ key: 'k', app: 'web', port: 1, method: 'GET', url: 'http://s/big', wallStart: 1, tsStart: 1, tsEnd: 2, state: 'finished', status: 200, origin: [], body: { state: 'available', data, bytes: 1000 } });
@@ -174,20 +174,20 @@ test('get_server_request: treść stronicowana przez body_offset', async () => {
   assert.equal(all, data);
 });
 
-test('redakcja treści JSON: pola sekretów zastąpione, reszta bez zmian, także w treści przyciętej', () => {
+test('JSON body redaction: secret fields replaced, the rest unchanged, also in a truncated body', () => {
   const r = createRedactor();
   const { text, count } = r.jsonBody('{"access_token": "eyJhbGciOi.x.y", "expires_in": 3600, "author": "Jan", "client_secret":"s\\"q", "nested": {"api_key": 12345}, "id_token":"cut');
-  assert.equal(count, 4, 'także niezamknięta wartość na końcu przyciętej treści');
+  assert.equal(count, 4, 'also an unclosed value at the end of a truncated body');
   assert.match(text, /"id_token":"\[redacted: cut value · 3\+ chars\]"$/);
   assert.match(text, /"access_token": "\[redacted: 14 chars · #[0-9a-f]{6}\]"/);
   assert.match(text, /"client_secret":"\[redacted: 3 chars · #[0-9a-f]{6}\]"/);
   assert.match(text, /"api_key": "\[redacted: 5 chars · #[0-9a-f]{6}\]"/);
-  assert.match(text, /"expires_in": 3600, "author": "Jan"/, 'pola niebędące sekretami bez zmian');
+  assert.match(text, /"expires_in": 3600, "author": "Jan"/, 'non-secret fields unchanged');
   assert.ok(!text.includes('eyJhbGciOi') && !text.includes('12345'));
   assert.deepEqual(createRedactor({ enabled: false }).jsonBody('{"token":"x"}'), { text: '{"token":"x"}', count: 0 });
 });
 
-test('get_server_request: przy dużych nagłówkach treść skrócona do budżetu, body_next_offset nadal prawdziwy', async () => {
+test('get_server_request: with large headers the body is shortened to the budget, body_next_offset still true', async () => {
   const store = createStore({ maxRequests: 10 });
   const data = 'z'.repeat(30000);
   store.add({ key: 'k', app: 'web', port: 1, method: 'GET', url: 'http://s/big', wallStart: 1, tsStart: 1, tsEnd: 2, state: 'finished', status: 200, origin: [],
@@ -195,6 +195,6 @@ test('get_server_request: przy dużych nagłówkach treść skrócona do budżet
   const tools = toolsFor(store, 12000);
   const d = await tools.get_server_request.run({ id: 1, max_body_chars: 1e6 });
   assert.ok(size(d) <= 12000, String(size(d)));
-  assert.equal(d.truncated, undefined, 'bez przycięcia za plecami');
+  assert.equal(d.truncated, undefined, 'no truncation behind our back');
   assert.equal(d.body_next_offset, d.body.length);
 });

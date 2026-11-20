@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Demo: zachowuje się jak agent — uruchamia serwer MCP, generuje ruch na stronach aplikacji
-// i wypisuje analizę. Użycie (przykład dla examples/nextjs-monorepo):
+// Demo: behaves like an agent — starts the MCP server, generates traffic on the apps' pages
+// and prints the analysis. Usage (example for examples/nextjs-monorepo):
 //   APPS='[{"app":"@acme/web","url":"http://localhost:3101","pages":["/seq","/err"]},
 //          {"app":"@acme/admin","url":"http://localhost:3102","pages":["/par","/seq"]}]' node scripts/mcp-demo.mjs
 import { startMcp } from '../test/helpers/mcp-client.mjs';
@@ -15,9 +15,9 @@ console.log(`### ${mcp.init.serverInfo.name} ${mcp.init.serverInfo.version}`);
 const status = await mcp.waitForApps(APPS.length, 30000);
 for (const a of status.apps) console.log(`  connected ${a.app} (port ${a.port}, pid ${a.pid}) ${a.cwd}`);
 
-await hitAll(); await sleep(800);              // rozgrzewka (kompilacja stron w trybie dev)
+await hitAll(); await sleep(800);              // warm-up (page compilation in dev mode)
 await mcp.call('clear_server_requests');
-await hitAll(); await sleep(1500);             // pomiar: wszystkie strony wszystkich aplikacji naraz
+await hitAll(); await sleep(1500);             // measurement: all pages of all apps at once
 
 console.log('\n### Outbound requests');
 for (const r of (await mcp.call('list_server_requests', { limit: 200 })).requests)

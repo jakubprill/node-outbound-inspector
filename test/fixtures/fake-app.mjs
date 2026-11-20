@@ -1,5 +1,5 @@
-// Udaje serwer aplikacji (np. Next.js): każda ścieżka to "strona" wołająca wewnętrzne serwisy.
-// Wspólny kod dla wszystkich aplikacji — jak wspólny `next` w node_modules monorepo.
+// Pretends to be an app server (e.g. Next.js): every path is a "page" calling internal services.
+// Shared code for all apps — like a shared `next` in a monorepo's node_modules.
 import http from 'node:http';
 const SVC = `http://127.0.0.1:${process.env.SERVICES_PORT || 4711}`;
 const get = p => fetch(SVC + p).then(r => r.json());

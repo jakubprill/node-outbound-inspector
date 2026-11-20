@@ -1,6 +1,6 @@
-// Test end-to-end: dwie "aplikacje" uruchomione równolegle (jak w monorepo), każda z własnym portem inspektora,
-// jeden serwer MCP. Sprawdza rozpoznanie aplikacji, przypisanie zapytań do aplikacji i strony,
-// wykrywanie zapytań sekwencyjnych/równoległych oraz błędów.
+// End-to-end test: two "apps" started in parallel (as in a monorepo), each with its own inspector port,
+// one MCP server. Checks app recognition, assignment of requests to app and page,
+// detection of sequential/parallel requests and of errors.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -21,7 +21,7 @@ const hit = (app, path) => fetch(`http://127.0.0.1:${app.port}${path}`).then(r =
 before(async () => {
   procs.push(spawn(process.execPath, [fx('services.mjs')], { env: { ...process.env, PORT: SERVICES_PORT }, stdio: 'ignore' }));
   for (const a of APPS) {
-    // cwd = katalog aplikacji z package.json → serwer MCP sam ustala nazwę aplikacji
+    // cwd = the app directory with package.json → the MCP server determines the app name itself
     procs.push(spawn(process.execPath, ['--experimental-network-inspection', `--inspect=127.0.0.1:${a.inspect}`, fx('fake-app.mjs')],
       { cwd: a.dir, env: { ...process.env, PORT: a.port, SERVICES_PORT, npm_package_name: '' }, stdio: 'ignore' }));
   }
@@ -32,16 +32,16 @@ before(async () => {
 
 after(() => { mcp?.close(); procs.forEach(p => p.kill()); });
 
-test('rozpoznaje obie aplikacje po package.json w cwd', async () => {
+test('recognizes both apps by package.json in cwd', async () => {
   const s = await mcp.call('inspector_status');
   assert.deepEqual(s.apps.map(a => a.app).sort(), ['admin', 'web']);
   assert.ok(s.apps.every(a => a.network_inspection && a.page_correlation));
 });
 
-test('przypisuje zapytania do właściwej aplikacji i strony, gdy wszystko dzieje się naraz', async () => {
+test('assigns requests to the right app and page when everything happens at once', async () => {
   const [web, admin] = APPS;
   await mcp.call('clear_server_requests');
-  // ten sam URL /user wołany przez obie aplikacje i przez dwie strony jednej aplikacji jednocześnie
+  // the same URL /user called by both apps and by two pages of one app at the same time
   await Promise.all([hit(web, '/seq'), hit(web, '/err'), hit(admin, '/par'), hit(admin, '/seq'), hit(admin, '/http')]);
   await sleep(500);
   const reqs = (await mcp.call('list_server_requests', { limit: 100 })).requests;
@@ -50,11 +50,11 @@ test('przypisuje zapytania do właściwej aplikacji i strony, gdy wszystko dziej
   assert.deepEqual(pick('web', 'GET /err'), ['/payments']);
   assert.deepEqual(pick('admin', 'GET /par'), ['/audit', '/reports', '/user']);
   assert.deepEqual(pick('admin', 'GET /seq'), ['/offers', '/orders', '/user']);
-  assert.deepEqual(pick('admin', 'GET /http'), ['/legacy'], 'node:http też jest przypisany do strony');
+  assert.deepEqual(pick('admin', 'GET /http'), ['/legacy'], 'node:http is assigned to the page too');
   assert.equal(reqs.length, 11, "web: 3 + 1, admin: 3 + 3 + 1");
 });
 
-test('wykrywa waterfall, równoległość i błędy osobno dla każdej strony', async () => {
+test('detects waterfall, parallelism and errors separately for every page', async () => {
   const res = await mcp.call('analyze_server_timeline', { detail: 'full' });
   const page = (app, p) => res[app].by_page_request.find(x => x.page === p);
 
@@ -62,7 +62,7 @@ test('wykrywa waterfall, równoległość i błędy osobno dla każdej strony', 
   assert.equal(webSeq.max_concurrency, 1);
   assert.match(webSeq.verdict, /SEQUENTIAL/);
   assert.equal(webSeq.sequential_chains[0].length, 3);
-  assert.ok(webSeq.sequential_chains[0].potential_saving_ms > 250, 'oszczędność ok. 2 × 150 ms');
+  assert.ok(webSeq.sequential_chains[0].potential_saving_ms > 250, 'a saving of about 2 × 150 ms');
 
   const adminPar = page('admin', 'GET /par');
   assert.equal(adminPar.max_concurrency, 3);
@@ -73,7 +73,7 @@ test('wykrywa waterfall, równoległość i błędy osobno dla każdej strony', 
   assert.equal(res['admin'].errors.length, 0);
 });
 
-test('zwraca szczegóły zapytania z nagłówkami', async () => {
+test('returns request details with headers', async () => {
   const [err] = ((await mcp.call('list_server_requests', { app: '@acme/web', url_contains: '/payments' })).requests);
   const d = await mcp.call('get_server_request', { id: err.id });
   assert.equal(d.method, 'POST');
@@ -82,7 +82,7 @@ test('zwraca szczegóły zapytania z nagłówkami', async () => {
   assert.equal(d.responseHeaders['content-type'], 'application/json');
 });
 
-test('filtr app i clear działają per aplikacja', async () => {
+test('the app filter and clear work per app', async () => {
   const before = ((await mcp.call('list_server_requests', { app: '@acme/admin', limit: 100 })).requests).length;
   assert.ok(before > 0);
   await mcp.call('clear_server_requests', { app: '@acme/admin' });

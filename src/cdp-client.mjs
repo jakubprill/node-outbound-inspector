@@ -1,5 +1,5 @@
-// Połączenie WebSocket z inspektorem (Chrome DevTools Protocol).
-// `send` rozwiązuje się wynikiem albo null (błąd, przekroczony czas, brak połączenia).
+// WebSocket connection to the inspector (Chrome DevTools Protocol).
+// `send` resolves with the result or null (error, timeout, no connection).
 
 /**
  * @param {string} wsUrl
@@ -14,7 +14,7 @@ export function connectCdp(wsUrl, { timeoutMs, onOpen, onEvent, onClose, onError
     setTimeout(() => { if (pending.delete(i)) res(null); }, timeoutMs);
   });
   ws.onopen = () => onOpen?.();
-  // druga strona to dowolny lokalny proces: zniekształcona wiadomość ani błąd obsługi zdarzenia nie mogą wywrócić kolektora (audyt B-04)
+  // the other side is any local process: a malformed message or an event handler error must not crash the collector (audit B-04)
   ws.onmessage = ({ data }) => {
     let m;
     try { m = JSON.parse(typeof data === 'string' ? data : ''); } catch { return; }

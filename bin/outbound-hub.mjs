@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// outbound-hub: wszystkie procesy Node z inspektorem pod jednym adresem dla chrome://inspect (127.0.0.1:9229),
-// bez wpisywania portów w „Configure…”. Uruchom obok aplikacji, np. w skrypcie dev monorepo.
-// Cienka nakładka na API `node-outbound-inspector/hub` (issue #9): komunikaty, kody wyjścia i sygnały.
-//   OUTBOUND_HUB_PORT (domyślnie 9229), INSPECTOR_PORTS (domyślnie 9230-9249), APP_NAMES, APP_NAME_STRIP_SCOPE
+// outbound-hub: all Node processes with an inspector under one address for chrome://inspect (127.0.0.1:9229),
+// without typing ports in "Configure…". Run it next to the apps, e.g. in a monorepo dev script.
+// A thin wrapper around the `node-outbound-inspector/hub` API (issue #9): messages, exit codes and signals.
+//   OUTBOUND_HUB_PORT (default 9229), INSPECTOR_PORTS (default 9230-9249), APP_NAMES, APP_NAME_STRIP_SCOPE
 import { startHub, DEFAULT_HUB_PORT, DEFAULT_INSPECTOR_PORTS } from '../src/hub/api.mjs';
 
 const TAG = '[outbound-hub]';

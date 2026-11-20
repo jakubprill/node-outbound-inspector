@@ -1,5 +1,5 @@
-// Odtwarzanie każdego nagrania z test/fixtures/recordings (npm run record) przez czysty rdzeń:
-// ingest, redakcja, klasyfikacja treści, korelacja ze stronami, analiza.
+// Replaying every recording from test/fixtures/recordings (npm run record) through the pure core:
+// ingest, redaction, body classification, page correlation, analysis.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync } from 'node:fs';
@@ -10,16 +10,16 @@ import { analyze } from '../../src/analyze/findings.mjs';
 const DIR = fileURLToPath(new URL('../fixtures/recordings/', import.meta.url));
 const files = readdirSync(DIR).filter(f => f.endsWith('.ndjson'));
 
-test('jest co najmniej jedno nagranie', () => assert.ok(files.length >= 1));
+test('there is at least one recording', () => assert.ok(files.length >= 1));
 
 for (const file of files) {
   const entries = readRecording(DIR + file);
   const node = entries.find(e => e.kind === 'session')?.node ?? '';
 
-  test(`${file} (${node}): przypisanie do stron i werdykty jak w scenariuszu e2e`, () => {
+  test(`${file} (${node}): page assignment and verdicts as in the e2e scenario`, () => {
     const { store } = replay(entries);
     assert.equal(store.size, 11);
-    assert.ok(store.values().every(x => x.page), 'każde zapytanie przypisane do strony');
+    assert.ok(store.values().every(x => x.page), 'every request assigned to a page');
     const res = analyze(store.select(), { detail: 'full' });
     const page = (app, p) => res[app].by_page_request.find(x => x.page === p);
     assert.equal(page('@acme/web', 'GET /seq').verdict_code, 'sequential');
@@ -29,7 +29,7 @@ for (const file of files) {
     assert.deepEqual(res['@acme/web'].errors.map(e => e.status), [500]);
   });
 
-  test(`${file} (${node}): stan treści zależny od wersji Node (wada 4)`, () => {
+  test(`${file} (${node}): body state depends on the Node version (defect 4)`, () => {
     const { store } = replay(entries);
     const http = store.values().filter(r => r.type !== 'Fetch');
     const viaFetch = store.values().filter(r => r.type === 'Fetch');
@@ -40,12 +40,12 @@ for (const file of files) {
     }
   });
 
-  test(`${file} (${node}): zależności danych — bez treści fetch stan nieznany, nie „niezależne” (issue #6)`, () => {
+  test(`${file} (${node}): data dependencies — without the fetch body the state is unknown, not "independent" (issue #6)`, () => {
     const { store } = replay(entries);
     const seq = analyze(store.select(), { detail: 'full' })['@acme/web'].by_page_request.find(x => x.page === 'GET /seq');
     const [ch] = seq.sequential_chains;
-    assert.deepEqual(ch.dependencies, [], 'zapytania /user, /orders, /offers nie przekazują sobie danych');
+    assert.deepEqual(ch.dependencies, [], '/user, /orders, /offers do not pass data to each other');
     assert.equal(ch.dependency_check.status, 'complete');
-    assert.ok(ch.potential_saving_ms > 250, 'brak dowodu zależności — oszczędność jak dawniej');
+    assert.ok(ch.potential_saving_ms > 250, 'no evidence of a dependency — the saving as before');
   });
 }

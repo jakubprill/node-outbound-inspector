@@ -9,7 +9,7 @@ const ctx = { ignoreHosts: ['registry.npmjs.org'], inspectorPorts: [9231, 9241],
 const willBeSent = (requestId, url, extra = {}) => ['Network.requestWillBeSent',
   { requestId, request: { method: 'GET', url, headers: { a: '1' } }, timestamp: 1.5, wallTime: 1795097716628, initiator: { stack: { callFrames: [] } }, ...extra }];
 
-test('pełny cykl zapytania i efekt pobrania treści', () => {
+test('a full request cycle and the fetch-body effect', () => {
   const s = createStore({ maxRequests: 10 });
   applyNetworkEvent(s, session, ...willBeSent('r1', 'http://svc/user'), ctx);
   applyNetworkEvent(s, session, 'Network.responseReceived', { requestId: 'r1', type: 'Fetch', response: { status: 200, statusText: 'OK', mimeType: 'application/json', headers: { x: 'y' } } }, ctx);
@@ -20,7 +20,7 @@ test('pełny cykl zapytania i efekt pobrania treści', () => {
   assert.equal(r.state, 'finished'); assert.equal(r.tsEnd, 1.65); assert.equal(r.wallStart, 1795097716628);
 });
 
-test('zerwane połączenie', () => {
+test('a broken connection', () => {
   const s = createStore({ maxRequests: 10 });
   applyNetworkEvent(s, session, ...willBeSent('r1', 'http://svc/x'), ctx);
   applyNetworkEvent(s, session, 'Network.loadingFailed', { requestId: 'r1', timestamp: 2, errorText: 'ECONNREFUSED' }, ctx);
@@ -28,7 +28,7 @@ test('zerwane połączenie', () => {
   assert.equal(s.get('3:r1').error, 'ECONNREFUSED');
 });
 
-test('pomija ignorowane hosty i ruch do inspektorów', () => {
+test('skips ignored hosts and traffic to inspectors', () => {
   const s = createStore({ maxRequests: 10 });
   applyNetworkEvent(s, session, ...willBeSent('r1', 'https://registry.npmjs.org/next'), ctx);
   applyNetworkEvent(s, session, ...willBeSent('r2', 'http://127.0.0.1:9241/json/list'), ctx);
@@ -36,18 +36,18 @@ test('pomija ignorowane hosty i ruch do inspektorów', () => {
   assert.equal(s.size, 0);
 });
 
-test('eksport OTLP pomijany przy przyjęciu, z efektem do licznika w statusie (issue #4)', () => {
+test('OTLP export skipped at ingestion, with an effect for the counter in the status (issue #4)', () => {
   const s = createStore({ maxRequests: 10 });
   const on = { ...ctx, ignoreOtlp: true };
   assert.deepEqual(applyNetworkEvent(s, session, ...willBeSent('r1', 'http://localhost:4318/v1/traces'), on), [{ type: 'ignored', reason: 'otlp' }]);
-  assert.deepEqual(applyNetworkEvent(s, session, 'Network.loadingFailed', { requestId: 'r1', timestamp: 2, errorText: '' }, on), [], 'dalsze zdarzenia przepadają');
+  assert.deepEqual(applyNetworkEvent(s, session, 'Network.loadingFailed', { requestId: 'r1', timestamp: 2, errorText: '' }, on), [], 'later events are dropped');
   assert.deepEqual(applyNetworkEvent(s, session, ...willBeSent('r2', 'https://registry.npmjs.org/next'), on), [{ type: 'ignored', reason: 'hosts' }]);
   assert.equal(s.size, 0);
   applyNetworkEvent(s, session, ...willBeSent('r3', 'http://localhost:4318/v1/traces'), { ...ctx, ignoreOtlp: false });
   assert.equal(s.size, 1);
 });
 
-test('pusty errorText zostaje pustym łańcuchem (render pokazuje opis, issue #3)', () => {
+test('an empty errorText stays an empty string (render shows a description, issue #3)', () => {
   const s = createStore({ maxRequests: 10 });
   applyNetworkEvent(s, session, ...willBeSent('r1', 'http://localhost:4319/x'), ctx);
   applyNetworkEvent(s, session, 'Network.loadingFailed', { requestId: 'r1', timestamp: 2, type: 'Fetch', errorText: '' }, ctx);
@@ -55,21 +55,21 @@ test('pusty errorText zostaje pustym łańcuchem (render pokazuje opis, issue #3
   assert.equal(s.get('3:r1').error, '');
 });
 
-test('brak wallTime → czas kolektora; zdarzenia dla nieznanego zapytania są ignorowane', () => {
+test('no wallTime → collector time; events for an unknown request are ignored', () => {
   const s = createStore({ maxRequests: 10 });
   applyNetworkEvent(s, session, ...willBeSent('r1', 'http://svc/a', { wallTime: undefined }), ctx);
   assert.equal(s.get('3:r1').wallStart, 5000);
   assert.deepEqual(applyNetworkEvent(s, session, 'Network.loadingFinished', { requestId: 'nope', timestamp: 1 }, ctx), []);
 });
 
-test('klucz rekordu per proces: te same requestId po restarcie nie nadpisują rekordów (wada 3)', () => {
+test('per-process record key: the same requestIds after a restart do not overwrite records (defect 3)', () => {
   const s = createStore({ maxRequests: 10 });
   applyNetworkEvent(s, session, ...willBeSent('node-network-event-1', 'http://svc/a'), ctx);
   applyNetworkEvent(s, { ...session, processId: 4 }, ...willBeSent('node-network-event-1', 'http://svc/a'), ctx);
   assert.equal(s.size, 2);
 });
 
-test('redakcja przy przyjęciu: nagłówki żądania i odpowiedzi, parametry URL (wada 6)', () => {
+test('redaction at ingestion: request and response headers, URL parameters (defect 6)', () => {
   const s = createStore({ maxRequests: 10 });
   applyNetworkEvent(s, session, 'Network.requestWillBeSent', { requestId: 'r1', request: { method: 'GET', url: 'http://svc/a?token=T0P&ms=1', headers: { authorization: 'Bearer SECRET' } }, timestamp: 1, wallTime: 1795097716628 }, ctx);
   applyNetworkEvent(s, session, 'Network.responseReceived', { requestId: 'r1', response: { status: 200, headers: { 'set-cookie': 'sid=SECRET2' } } }, ctx);
@@ -78,7 +78,7 @@ test('redakcja przy przyjęciu: nagłówki żądania i odpowiedzi, parametry URL
   assert.match(s.get('3:r1').requestHeaders.authorization, /Bearer · 13 chars/);
 });
 
-test('tryby treści i czas do pierwszego bajtu', () => {
+test('body modes and time to first byte', () => {
   const run = bodies => {
     const s = createStore({ maxRequests: 10 });
     applyNetworkEvent(s, session, ...willBeSent('r1', 'http://svc/a'), { ...ctx, bodies });
@@ -92,13 +92,13 @@ test('tryby treści i czas do pierwszego bajtu', () => {
   assert.equal(run('eager').r.tsResponse, 1.53);
 });
 
-test('normalizacja wallTime: ms, sekundy, brak', () => {
+test('wallTime normalization: ms, seconds, missing', () => {
   assert.equal(normalizeWallTime(1795097716628, 1), 1795097716628);
   assert.equal(normalizeWallTime(1795097716.628, 1), 1795097716628);
   assert.equal(normalizeWallTime(undefined, 42), 42);
 });
 
-test('origin: ramki bibliotek pomijane, dodatkowe ścieżki z ctx.libraryPaths', () => {
+test('origin: library frames skipped, extra paths from ctx.libraryPaths', () => {
   const s = createStore({ maxRequests: 10 });
   const initiator = { stack: { callFrames: [
     { url: 'file:///repo/.next/dev/server/chunks/node_modules_@vercel_otel_dist_node_07k8e6v._.js', functionName: 'fetch', lineNumber: 11460, columnNumber: 30 },
@@ -111,7 +111,7 @@ test('origin: ramki bibliotek pomijane, dodatkowe ścieżki z ctx.libraryPaths',
   assert.deepEqual(s.get('3:r2').origin, ['Page @ /repo/app/page.js:5:20']);
 });
 
-test('dane z inspektora: zły kształt odrzucany, limity długości, bez znaków sterujących (audyt B-04, B-07, B-11)', () => {
+test('data from the inspector: bad shape rejected, length limits, no control characters (audit B-04, B-07, B-11)', () => {
   const s = createStore({ maxRequests: 10 });
   for (const bad of [null, {}, { requestId: 1 }, { requestId: 'x' }, { requestId: 'x', request: { url: 5, method: 'GET' }, timestamp: 1 },
     { requestId: 'x', request: { url: 'http://a/', method: 'GET' } }]) {

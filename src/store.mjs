@@ -1,9 +1,9 @@
-// Magazyn zapytań wychodzących w pamięci (czysty: bez zegarów i I/O).
-// Klucz rekordu: `${port}:${requestId}`; `id` to rosnący numer nadawany przy dodaniu.
+// In-memory store of outbound requests (pure: no clocks or I/O).
+// Record key: `${processId}:${requestId}`; `id` is an increasing number assigned on add.
 
 /**
- * Filtr statusu z narzędzi MCP: kod (`404`), klasa (`5xx`), `error` (4xx/5xx albo nieudane),
- * `failed` (bez odpowiedzi) albo `pending` (w toku).
+ * Status filter from the MCP tools: a code (`404`), a class (`5xx`), `error` (4xx/5xx or failed),
+ * `failed` (no response) or `pending` (in flight).
  * @returns {(r: any) => boolean}
  */
 export function statusMatcher(status) {
@@ -23,11 +23,11 @@ export function createStore({ maxRequests }) {
   const requests = new Map();
   let seq = 0;
 
-  // nazwa wyświetlana, port inspektora albo alias: pełna nazwa pakietu i nazwa bez scope (issue #8)
+  // display name, inspector port or alias: the full package name and the name without scope (issue #8)
   const matchesApp = (r, app) => r.app === app || String(r.port) === String(app) || (r.appAliases?.includes(app) ?? false);
 
   return {
-    /** Dodaje rekord (bez `id`), nadaje `id`, usuwa najstarszy po przekroczeniu limitu. */
+    /** Adds a record (without `id`), assigns `id`, removes the oldest when over the limit. */
     add(record) {
       if (requests.size >= maxRequests) requests.delete(requests.keys().next().value);
       const r = { id: ++seq, ...record };
@@ -41,7 +41,7 @@ export function createStore({ maxRequests }) {
     get lastId() { return seq; },
     appsSeen: () => [...new Set([...requests.values()].map(r => r.app))],
 
-    /** Filtr jak w narzędziach MCP; `nowMs` potrzebne tylko dla `last_ms`. */
+    /** A filter as in the MCP tools; `nowMs` is needed only for `last_ms`. */
     select({ app, url_contains, page_contains, page_request_id, next_request_id, next_html_request_id, status, last_ms, since_id } = {}, nowMs = 0) {
       let rs = [...requests.values()];
       if (app) rs = rs.filter(r => matchesApp(r, app));
@@ -56,7 +56,7 @@ export function createStore({ maxRequests }) {
       return rs.sort((a, b) => a.wallStart - b.wallStart || a.tsStart - b.tsStart);
     },
 
-    /** Usuwa wszystkie rekordy albo rekordy jednej aplikacji; zwraca liczbę usuniętych. */
+    /** Removes all records or the records of one app; returns the number removed. */
     clear({ app } = {}) {
       let n = 0;
       for (const [k, r] of requests) if (!app || matchesApp(r, app)) { requests.delete(k); n++; }

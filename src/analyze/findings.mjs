@@ -1,4 +1,4 @@
-// Raport analizy: per aplikacja, per żądanie strony; błędy (czyste).
+// Analysis report: per app, per page request; errors (pure).
 import { duration, bursts, maxConcurrency } from './timeline.mjs';
 import { chains, describeChain, criticalPathMs } from './waterfall.mjs';
 import { dependencyGraph } from './dependencies.mjs';
@@ -14,7 +14,7 @@ const VERDICTS = {
 };
 const verdictCode = (n, conc) => n === 1 ? 'single' : conc === 1 ? 'sequential' : conc === n ? 'parallel' : 'mixed';
 
-/** Analiza zapytań jednego procesu/aplikacji: serie, werdykty, łańcuchy, błędy. */
+/** Analysis of one process's/app's requests: bursts, verdicts, chains, errors. */
 export function analyzeApp(rs, { idle_gap_ms = 250, seq_gap_ms = 15 }) {
   rs = rs.filter(r => r.tsEnd != null).sort((a, b) => a.tsStart - b.tsStart);
   return {
@@ -24,7 +24,7 @@ export function analyzeApp(rs, { idle_gap_ms = 250, seq_gap_ms = 15 }) {
       const t0 = b[0].tsStart, tEnd = Math.max(...b.map(r => r.tsEnd));
       const wall = Math.round((tEnd - t0) * 1000);
       const maxConc = maxConcurrency(b);
-      // zależności danych (issue #6): bez nich wynik jak dawniej — wall minus najdłuższe zapytanie
+      // data dependencies (issue #6): without them the result is as before — wall minus the longest request
       const graph = dependencyGraph(b), check = graph.check(b);
       return {
         burst: i + 1, requests: b.length, wall_ms: wall, sum_of_durations_ms: b.reduce((s, r) => s + duration(r), 0), max_concurrency: maxConc,
@@ -39,18 +39,18 @@ export function analyzeApp(rs, { idle_gap_ms = 250, seq_gap_ms = 15 }) {
   };
 }
 
-/** Ile elementów pokazuje podsumowanie (pełne dane: `detail: "full"` albo `page_request_id`). */
+/** How many items the summary shows (full data: `detail: "full"` or `page_request_id`). */
 export const SUMMARY_LIMITS = Object.freeze({ pages: 20, errors: 5, inFlight: 5, bursts: 5, duplicates: 5, slow: 3, analyzedPages: 200 });
 
-/** Wskazówka dodawana raz do podsumowania (zamiast powtarzania opisów przy każdej stronie). */
+/** A hint added once to the summary (instead of repeating descriptions for every page). */
 export const SUMMARY_HINT = 'Summary: one entry per page (repeated visits grouped), numbers and codes only. '
   + 'Pass page_request_id for one page request (timeline, waterfall steps, hints, data dependencies) or detail: "full" for everything.';
 
-/** Oszczędność z kroków sekwencyjnych z uwzględnieniem zależności danych (suma po łańcuchach). */
+/** Saving from sequential steps accounting for data dependencies (sum over chains). */
 const chainSaving = p => (p.sequential_chains ?? []).reduce((sum, c) => sum + (c.potential_saving_ms ?? 0), 0);
 const median = xs => { const s = [...xs].sort((a, b) => a - b); return s[s.length >> 1]; };
 
-/** Zwarta pozycja podsumowania: powtórne wejścia na tę samą stronę w jednej pozycji, dane najnowszego wejścia. */
+/** A compact summary entry: repeated visits to the same page in one entry, data of the newest visit. */
 function pageGroup(visits) {
   const last = visits.at(-1), saving = chainSaving(last), errors = last.errors ?? 0;
   return {
@@ -64,7 +64,7 @@ function pageGroup(visits) {
 const compactBurst = b => ({ requests: b.requests, wall_ms: b.wall_ms, verdict_code: b.verdict_code,
   ...(chainSaving(b) > 0 ? { potential_saving_ms: chainSaving(b) } : {}) });
 
-/** Te same zapytania (metoda i URL) więcej niż raz w obrębie jednego żądania strony albo serii. */
+/** The same requests (method and URL) more than once within one page request or burst. */
 export function duplicates(groups) {
   const out = [];
   for (const { page, page_request_id, requests } of groups) {
@@ -75,15 +75,15 @@ export function duplicates(groups) {
   return out;
 }
 
-/** Zakończone zapytania trwające co najmniej `slowMs`, od najwolniejszego. */
+/** Finished requests lasting at least `slowMs`, slowest first. */
 export const slow = (rs, slowMs) => rs.filter(r => duration(r) >= slowMs).sort((a, b) => duration(b) - duration(a));
 
 const pageLabel = r => `${r.page.method} ${r.page.url}`;
 
 /**
- * Raport dla wybranych zapytań: osobno każda aplikacja, w niej osobno każde żądanie strony,
- * a zapytania bez strony dzielone na serie. Domyślnie podsumowanie (bez osi czasu, najnowsze
- * żądania stron); `detail: "full"` albo `page_request_id` daje pełny raport.
+ * Report for the selected requests: each app separately, and within it each page request separately,
+ * while requests without a page are split into bursts. A summary by default (no timeline, the newest
+ * page requests); `detail: "full"` or `page_request_id` gives the full report.
  */
 export function analyze(rs, args = {}, appsSeen = []) {
   if (!rs.length) return { summary: 'No requests in the selected range.', apps_with_traffic: appsSeen };
@@ -97,7 +97,7 @@ export function analyze(rs, args = {}, appsSeen = []) {
     const byPage = [...Map.groupBy(withPage, r => r.page.id)].map(([, reqs]) => reqs);
     const inFlight = list.filter(r => r.tsEnd == null);
     const errors = list.filter(isError);
-    // każde przychodzące żądanie strony analizowane osobno — równoległe renderowanie innych stron nie miesza wyników
+    // every incoming page request analyzed separately — parallel rendering of other pages does not mix results
     const pages = newest(byPage, full ? Infinity : L.analyzedPages).map(reqs => {
       const a = analyzeApp(reqs, { ...args, idle_gap_ms: 1e9 });
       const b = a.bursts[0];
@@ -111,7 +111,7 @@ export function analyze(rs, args = {}, appsSeen = []) {
         errors: reqs.filter(isError).length,
         timeline: b.timeline };
     }).filter(Boolean);
-    // zapytania bez powiązanej strony (np. zadania w tle, start serwera) — dzielone na serie czasowe
+    // requests without a linked page (e.g. background jobs, server start) — split into time bursts
     const unattributed = without.length ? analyzeApp(without, args).bursts : [];
     const dup = duplicates([
       ...byPage.map(reqs => ({ page: pageLabel(reqs[0]), page_request_id: reqs[0].page.id, requests: reqs })),
@@ -124,7 +124,7 @@ export function analyze(rs, args = {}, appsSeen = []) {
     };
     return [app, {
       total_requests: list.length,
-      // zapytania bez odpowiedzi nie wchodzą do osi czasu — pokazujemy je osobno zamiast pomijać po cichu
+      // requests without a response do not enter the timeline — we show them separately instead of dropping them silently
       in_flight: inFlight.length,
       ...(inFlight.length ? { in_flight_requests: newest(inFlight, L.inFlight).map(r => row(r)) } : {}),
       errors: newest(errors, L.errors).map(r => row(r)),
@@ -132,7 +132,7 @@ export function analyze(rs, args = {}, appsSeen = []) {
       ...(full
         ? { by_page_request: pages.map(({ errors: _e, ...p }) => p), unattributed }
         : (() => {
-          // grupy w kolejności ostatniego wejścia; najnowsze strony na końcu, jak w pozostałych listach
+          // groups in order of the last visit; the newest pages at the end, as in the other lists
           const groups = [...Map.groupBy(pages, p => p.page).values()].sort((a, b) => pages.indexOf(a.at(-1)) - pages.indexOf(b.at(-1)));
           return {
             pages: groups.slice(-L.pages).map(pageGroup),

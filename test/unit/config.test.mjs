@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parsePorts, parseAppNames, loadConfig } from '../../src/config.mjs';
 
-test('parsePorts: zakresy i pojedyncze porty', () => {
+test('parsePorts: ranges and single ports', () => {
   assert.deepEqual(parsePorts('9229-9231,9300'), [9229, 9230, 9231, 9300]);
   assert.deepEqual(parsePorts(' 9231 , 9241 '), [9231, 9241]);
   assert.deepEqual(parsePorts(''), []);
@@ -13,17 +13,17 @@ test('parseAppNames', () => {
   assert.deepEqual(parseAppNames(undefined), {});
 });
 
-test('loadConfig: wartości domyślne', () => {
+test('loadConfig: defaults', () => {
   const c = loadConfig({ env: {} });
   assert.equal(c.ports.length, 20);
-  assert.equal(c.ports[0], 9230, 'bez 9229: domyślny port zwykłego node --inspect (audyt B-01)');
+  assert.equal(c.ports[0], 9230, 'without 9229: the default port of a plain node --inspect (audit B-01)');
   assert.deepEqual([...c.ignoreHosts], ['registry.npmjs.org']);
   assert.equal(c.maxRequests, 5000);
   assert.equal(c.pageCorrelation, true);
   assert.ok(Object.isFrozen(c));
 });
 
-test('loadConfig: zmienne środowiskowe', () => {
+test('loadConfig: environment variables', () => {
   const c = loadConfig({ env: { INSPECTOR_PORTS: '9231', IGNORE_HOSTS: '', PAGE_CORRELATION: '0', MAX_REQUESTS: '10', APP_NAMES: '9231=web' } });
   assert.deepEqual([...c.ports], [9231]);
   assert.deepEqual([...c.ignoreHosts], []);
@@ -39,7 +39,7 @@ test('loadConfig: OUTBOUND_LIBRARY_PATHS', () => {
   assert.ok(Object.isFrozen(c.libraryPaths));
 });
 
-test('loadConfig: eksport OTLP domyślnie pomijany, OUTBOUND_IGNORE_OTLP=0 wyłącza (issue #4)', () => {
+test('loadConfig: OTLP export skipped by default, OUTBOUND_IGNORE_OTLP=0 turns it off (issue #4)', () => {
   assert.equal(loadConfig({ env: {} }).ignoreOtlp, true);
   assert.equal(loadConfig({ env: { OUTBOUND_IGNORE_OTLP: '1' } }).ignoreOtlp, true);
   assert.equal(loadConfig({ env: { OUTBOUND_IGNORE_OTLP: '0' } }).ignoreOtlp, false);

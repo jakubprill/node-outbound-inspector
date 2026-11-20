@@ -1,4 +1,4 @@
-// Odtwarza nagranie NDJSON (scripts/record-fixture.mjs) przez czysty rdzeń: ingest → store → korelacja.
+// Replays an NDJSON recording (scripts/record-fixture.mjs) through the pure core: ingest → store → correlation.
 import { readFileSync } from 'node:fs';
 import { createStore } from '../../src/store.mjs';
 import { applyNetworkEvent } from '../../src/ingest.mjs';

@@ -1,42 +1,42 @@
-// Ramki stosu inicjatora → miejsca wywołania w kodzie aplikacji (bez wnętrza Node, bibliotek i frameworka).
-// Klasyfikacja działa na ścieżce znormalizowanej: bez „file://”, z „/” zamiast „\”, po dekodowaniu %XX.
-// Zasada: ramkę odrzucamy tylko wtedy, gdy ścieżka JEDNOZNACZNIE wskazuje bibliotekę. Przy wątpliwości ramka zostaje.
+// Initiator stack frames → call sites in app code (without Node, library and framework internals).
+// Classification works on a normalized path: no "file://", "/" instead of "\", after decoding %XX.
+// Rule: a frame is dropped only when the path UNAMBIGUOUSLY points to a library. When in doubt the frame stays.
 //
-// Chunki Turbopacka (zweryfikowane na Next 16.4.0, pnpm, monorepo): nazwa to wspólna ścieżka modułów z „/” i „.”
-// zamienionymi na „_”, z prefiksem skróconym do hasha, np. „1sqn__pnpm_…” (z „.pnpm”), „0fe5_next_dist_esm_server_…”.
-// - „[root-of-the-server]__…” i „_1z2yvldm0ete0._.js” ZAWIERAJĄ kod aplikacji (strona, layout) razem z vendorowanym
-//   Next — nie są filtrowane (zweryfikowane).
-// - „1a-q_@opentelemetry_api_build_esm_…” to biblioteka, ale wzór „<hash>_@scope_…” jest NIEJEDNOZNACZNY: trasa
-//   równoległa „@modal” w kodzie aplikacji może dać podobną nazwę. Nie filtrujemy go po nazwie (można dopisać
-//   do OUTBOUND_LIBRARY_PATHS).
-// Lepsze rozwiązanie (M5, nie zaimplementowane): chunk zawiera identyfikatory modułów, np.
-// "[project]/apps/web/node_modules/... [app-rsc] (ecmascript)". Dla ramki (plik chunku + linia) można ustalić moduł,
-// w którym leży linia (granice modułów w tekście chunku albo mapa źródeł), i klasyfikować po ścieżce modułu,
-// a nie po nazwie chunku.
+// Turbopack chunks (verified on Next 16.4.0, pnpm, monorepo): the name is the shared module path with "/" and "."
+// replaced by "_", with the prefix shortened to a hash, e.g. "1sqn__pnpm_…" (from ".pnpm"), "0fe5_next_dist_esm_server_…".
+// - "[root-of-the-server]__…" and "_1z2yvldm0ete0._.js" CONTAIN app code (page, layout) together with vendored
+//   Next — they are not filtered (verified).
+// - "1a-q_@opentelemetry_api_build_esm_…" is a library, but the "<hash>_@scope_…" pattern is AMBIGUOUS: a parallel
+//   route "@modal" in app code can give a similar name. We do not filter it by name (it can be added
+//   to OUTBOUND_LIBRARY_PATHS).
+// A better solution (M5, not implemented): a chunk contains module ids, e.g.
+// "[project]/apps/web/node_modules/... [app-rsc] (ecmascript)". For a frame (chunk file + line) the module
+// containing the line can be found (module boundaries in the chunk text or the source map), and classified by module path
+// instead of the chunk name.
 
-/** Biblioteki zainstalowane menedżerem pakietów (npm, pnpm „node_modules/.pnpm/…”, Yarn PnP). */
+/** Libraries installed by a package manager (npm, pnpm "node_modules/.pnpm/…", Yarn PnP). */
 const PACKAGES = [
-  /\/node_modules\//,                       // dowolna biblioteka, także pnpm i webpack-internal:///(rsc)/./node_modules/…
-  /\/\.yarn\/(?:cache|unplugged|__virtual__|berry)\//, // Yarn PnP: archiwa zip i pakiety rozpakowane
-  /\/\.pnp\.(?:c?js|loader\.mjs)$/,         // środowisko uruchomieniowe Yarn PnP
+  /\/node_modules\//,                       // any library, also pnpm and webpack-internal:///(rsc)/./node_modules/…
+  /\/\.yarn\/(?:cache|unplugged|__virtual__|berry)\//, // Yarn PnP: zip archives and unpacked packages
+  /\/\.pnp\.(?:c?js|loader\.mjs)$/,         // Yarn PnP runtime
 ];
 
-/** Wnętrze Next.js i pakowanych chunków (Turbopack, webpack). */
+/** Next.js internals and bundled chunks (Turbopack, webpack). */
 const BUNDLED = [
-  /next\/dist\//,                                             // jak dotąd: także bez wiodącego „/”
-  /\/\.next\/.*_next_dist_/,                                   // Turbopack: wnętrze Next, np. 0fe5_next_dist_esm_server_….js
+  /next\/dist\//,                                             // as before: also without a leading "/"
+  /\/\.next\/.*_next_dist_/,                                   // Turbopack: Next internals, e.g. 0fe5_next_dist_esm_server_….js
   /\/\.next\/(?:dev\/)?server\/(?:edge-)?runtime/,
-  /\/\.next\/(?:dev\/)?server\/webpack-(?:api-)?runtime\.js$/,  // webpack: środowisko uruchomieniowe
-  /\/\.next\/(?:dev\/)?server\/vendor-chunks\//,               // webpack: biblioteki wydzielone do osobnych chunków
-  // Turbopack: wspólna ścieżka modułów chunku leży w node_modules (npm: „node_modules_@vercel_otel_…” z issue #2;
-  // także „apps_web_node_modules_…”, gdy pakiet nie jest wyniesiony do korzenia monorepo).
+  /\/\.next\/(?:dev\/)?server\/webpack-(?:api-)?runtime\.js$/,  // webpack: runtime
+  /\/\.next\/(?:dev\/)?server\/vendor-chunks\//,               // webpack: libraries split into separate chunks
+  // Turbopack: the chunk's shared module path is in node_modules (npm: "node_modules_@vercel_otel_…" from issue #2;
+  // also "apps_web_node_modules_…" when the package is not hoisted to the monorepo root).
   /\/chunks\/(?:[^/]+\/)*(?:[^/]*_)?node_modules_[^/]*$/,
   /\/chunks\/(?:[^/]+\/)*[^/]*__pnpm_[^/]*$/,                // pnpm: „1sqn__pnpm_…” (segment „.pnpm”)
   /\/chunks\/(?:[^/]+\/)*[^/]*__next-internal_[^/]*$/,       // manifest akcji Next: „…_web__next-internal_server_…”
-  /\/chunks\/(?:[^/]+\/)*\[(?:turbopack|externals)\]_[^/]*$/,  // runtime Turbopacka, moduły zewnętrzne
+  /\/chunks\/(?:[^/]+\/)*\[(?:turbopack|externals)\]_[^/]*$/,  // Turbopack runtime, external modules
 ];
 
-/** "file:///C:/a%20b\\x.js" → "/C:/a b/x.js"; ścieżki Windows dostają wiodący „/”, żeby wzorce były wspólne. */
+/** "file:///C:/a%20b\\x.js" → "/C:/a b/x.js"; Windows paths get a leading "/" so the patterns are shared. */
 export function normalizeFramePath(url) {
   let p = String(url).replace(/^file:\/\//, '');
   try { p = decodeURIComponent(p); } catch {}
@@ -45,8 +45,8 @@ export function normalizeFramePath(url) {
 }
 
 /**
- * @param {string} url adres ramki z CDP (file://…, ścieżka, node:…, webpack-internal://…)
- * @param {readonly string[]} [libraryPaths] dodatkowe fragmenty ścieżek bibliotek (OUTBOUND_LIBRARY_PATHS)
+ * @param {string} url frame address from CDP (file://…, path, node:…, webpack-internal://…)
+ * @param {readonly string[]} [libraryPaths] extra library path fragments (OUTBOUND_LIBRARY_PATHS)
  */
 export function isLibraryFrame(url, libraryPaths = []) {
   if (!url || url.startsWith('node:')) return true;
@@ -55,17 +55,17 @@ export function isLibraryFrame(url, libraryPaths = []) {
     || libraryPaths.some(s => s && p.includes(s.replace(/\\/g, '/')));
 }
 
-/** Ścieżka do wyświetlenia: jak dotąd bez „file://”; „file:///C:/…” → „C:/…”. */
+/** Path for display: as before without "file://"; "file:///C:/…" → "C:/…". */
 const displayPath = url => url.replace(/^file:\/\/\/([A-Za-z]:[\\/])/, '$1').replace(/^file:\/\//, '');
 
 /**
  * @param {{ stack?: { callFrames?: any[], parent?: any } }} [initiator]
  * @param {{ libraryPaths?: readonly string[] }} [options]
- * @returns {string[]} do 5 ramek „funkcja @ ścieżka:linia:kolumna”; pusta lista, gdy same biblioteki
+ * @returns {string[]} up to 5 frames "function @ path:line:column"; an empty list when all are libraries
  */
 export function userFrames(initiator, { libraryPaths = [] } = {}) {
   const frames = [];
-  // dane z inspektora: kształt sprawdzany, głębokość i liczba ramek ograniczone (audyt B-04, B-11)
+  // data from the inspector: shape checked, depth and number of frames limited (audit B-04, B-11)
   for (let st = initiator?.stack, depth = 0; st && typeof st === 'object' && depth < 50; st = st.parent, depth++) {
     if (Array.isArray(st.callFrames)) frames.push(...st.callFrames.slice(0, 200));
   }

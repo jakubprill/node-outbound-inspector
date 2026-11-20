@@ -1,16 +1,16 @@
-// Serwer MCP: JSON-RPC 2.0, jedna wiadomość na linię (stdio). `handle` nie dotyka strumieni.
-// Dwie ery protokołu (ADR 0007): dawna z `initialize` i bieżąca (2026-07-28), bezstanowa, z wersją
-// protokołu w `_meta` każdego żądania. Żądanie z `_meta` jest obsługiwane po nowemu, bez niego po staremu.
+// MCP server: JSON-RPC 2.0, one message per line (stdio). `handle` does not touch streams.
+// Two protocol eras (ADR 0007): the old one with `initialize` and the current one (2026-07-28), stateless, with the
+// protocol version in `_meta` of every request. A request with `_meta` is handled the new way, without it the old way.
 
-/** Wspierane wersje protokołu MCP z `initialize` (dawna era), od najnowszej. */
+/** Supported MCP protocol versions with `initialize` (old era), newest first. */
 export const SUPPORTED_PROTOCOL_VERSIONS = Object.freeze(['2025-06-18', '2025-03-26', '2024-11-05']);
-/** Wspierane wersje bezstanowe (wersja w `_meta` każdego żądania). */
+/** Supported stateless versions (version in `_meta` of every request). */
 export const MODERN_PROTOCOL_VERSIONS = Object.freeze(['2026-07-28']);
 
 const META = 'io.modelcontextprotocol/';
 export const ERR = Object.freeze({ invalidParams: -32602, methodNotFound: -32601, internal: -32603, unsupportedVersion: -32022 });
 
-/** Wersja wybrana dla klienta: jego, jeśli ją znamy; w przeciwnym razie najnowsza nasza. */
+/** The version chosen for the client: its own if we know it; otherwise our newest. */
 export const negotiateVersion = requested => SUPPORTED_PROTOCOL_VERSIONS.includes(requested) ? requested : SUPPORTED_PROTOCOL_VERSIONS[0];
 
 class RpcError extends Error {
@@ -31,7 +31,7 @@ export function createMcpServer({ info, instructions, tools, beforeCall = async 
     catch (e) { return { content: [{ type: 'text', text: String(e.message || e) }], isError: true }; }
   }
 
-  /** Dawna era: sesja otwarta przez `initialize`, wyniki bez `resultType`. */
+  /** Old era: a session opened by `initialize`, results without `resultType`. */
   async function legacy(method, params) {
     if (method === 'initialize') return {
       protocolVersion: negotiateVersion(params?.protocolVersion),
@@ -46,7 +46,7 @@ export function createMcpServer({ info, instructions, tools, beforeCall = async 
     return null;
   }
 
-  /** Bieżąca era: każde żądanie niesie wersję i możliwości klienta w `_meta`; wynik ma `resultType`. */
+  /** Current era: every request carries the client's version and capabilities in `_meta`; the result has `resultType`. */
   async function modern(method, params, meta) {
     const requested = meta[`${META}protocolVersion`];
     if (!MODERN_PROTOCOL_VERSIONS.includes(requested)) {
@@ -66,7 +66,7 @@ export function createMcpServer({ info, instructions, tools, beforeCall = async 
     return { resultType: 'complete', ...result, _meta: { [`${META}serverInfo`]: serverInfo } };
   }
 
-  /** @returns {Promise<object | null>} odpowiedź albo null (notyfikacja lub nieczytelna wiadomość) */
+  /** @returns {Promise<object | null>} a response or null (a notification or an unreadable message) */
   async function handle(msg) {
     const { id, method, params } = msg;
     if (id === undefined) return null; // notyfikacje
@@ -84,7 +84,7 @@ export function createMcpServer({ info, instructions, tools, beforeCall = async 
   return { handle };
 }
 
-/** Podpina serwer pod strumienie: linie wejścia → handle → linie wyjścia. */
+/** Connects the server to streams: input lines → handle → output lines. */
 export function serveStdio(server, { stdin, stdout, onEnd }) {
   let buf = '';
   stdin.setEncoding('utf8');

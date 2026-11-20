@@ -1,4 +1,4 @@
-// Uruchamiane przez `bun`: startHub w procesie Buna, lista celów i Runtime.evaluate przez hub (test hub-api).
+// Run by `bun`: startHub in a Bun process, the target list and Runtime.evaluate through the hub (hub-api test).
 import { startHub } from '../../src/hub/api.mjs';
 const hub = await startHub({ port: 0, ports: [Number(process.env.INSPECT_PORT)], scanIntervalMs: 200 });
 let apps = [];

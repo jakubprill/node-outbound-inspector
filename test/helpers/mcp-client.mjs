@@ -1,4 +1,4 @@
-// Minimalny klient MCP (stdio, JSON-RPC 2.0): uruchamia serwer i woła jego narzędzia jak agent.
+// A minimal MCP client (stdio, JSON-RPC 2.0): starts the server and calls its tools like an agent.
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -31,7 +31,7 @@ export async function startMcp({ env = {}, stderr = 'inherit' } = {}) {
       for (;;) {
         const s = await this.call('inspector_status');
         if (s.apps.filter(a => a.network_inspection).length >= n) return s;
-        if (Date.now() > until) throw new Error(`Nie podłączono ${n} aplikacji: ${JSON.stringify(s.apps)}`);
+        if (Date.now() > until) throw new Error(`${n} apps not attached: ${JSON.stringify(s.apps)}`);
         await new Promise(r => setTimeout(r, 300));
       }
     },

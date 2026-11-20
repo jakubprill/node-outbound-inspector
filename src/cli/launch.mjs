@@ -1,7 +1,7 @@
-// Przenośne uruchamianie CLI pod Node z flagą inspekcji sieci (zalążek launchera `outbound run` z M3).
-// Zastępuje w skryptach `dev:inspect` konstrukcję `$(node -p "require.resolve(…)")`, której nie rozumie cmd.exe:
-// ścieżkę do CLI rozwiązuje tu Node, a proces potomny startuje bez powłoki (spawn z process.execPath).
-// Import modułu nie ma efektów ubocznych; wszystko dzieje się dopiero w runNext().
+// Portable launching of a CLI under Node with the network inspection flag (the seed of the `outbound run` launcher from M3).
+// Replaces the `$(node -p "require.resolve(…)")` construct in `dev:inspect` scripts, which cmd.exe does not understand:
+// Node resolves the CLI path here, and the child process starts without a shell (spawn with process.execPath).
+// Importing the module has no side effects; everything happens only in runNext().
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { constants } from 'node:os';
@@ -13,9 +13,9 @@ const TAG = '[outbound-next]';
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
 
 /**
- * Plik CLI do uruchomienia: `OUTBOUND_NEXT_BIN` (ścieżka względem cwd; dla testów i nietypowych układów)
- * albo `next/dist/bin/next` rozwiązane tak, jak zrobiłby to `require` z pakietu w cwd. Działa dla
- * node_modules wynoszonych w górę (npm, bun, yarn), symlinków pnpm i Yarn PnP (hak z NODE_OPTIONS).
+ * The CLI file to run: `OUTBOUND_NEXT_BIN` (a path relative to cwd; for tests and unusual layouts)
+ * or `next/dist/bin/next` resolved the way `require` from a package in cwd would. Works for
+ * hoisted node_modules (npm, bun, yarn), pnpm symlinks and Yarn PnP (hook from NODE_OPTIONS).
  * @param {{ cwd: string, env: Record<string, string | undefined> }} input
  */
 export function resolveCli({ cwd, env }) {
@@ -24,9 +24,9 @@ export function resolveCli({ cwd, env }) {
 }
 
 /**
- * Argumenty dla `node`: flagi bieżącego procesu (bez inspektora — port inspektora należy do aplikacji,
- * a odziedziczony stały port dałby `address already in use`), flaga sieciowa, plik CLI, argumenty CLI.
- * Flaga musi stać w linii poleceń: Node odrzuca ją w NODE_OPTIONS.
+ * Arguments for `node`: the current process's flags (without the inspector — the inspector port belongs to the app,
+ * and an inherited fixed port would give `address already in use`), the network flag, the CLI file, CLI arguments.
+ * The flag must be on the command line: Node rejects it in NODE_OPTIONS.
  * @param {{ cli: string, args: string[], execArgv?: string[] }} input
  */
 export function buildNodeArgs({ cli, args, execArgv = [] }) {
@@ -35,9 +35,9 @@ export function buildNodeArgs({ cli, args, execArgv = [] }) {
 }
 
 /**
- * Ostrzeżenia o argumentach `--inspect` przekazywanych do Next (Next sam otwiera inspektor we właściwym
- * procesie). Bez `--inspect` flaga sieciowa nic nie daje; host spoza loopbacku wystawia pełną kontrolę
- * nad procesem w sieci. Sam port (`--inspect=9231`) oznacza 127.0.0.1.
+ * Warnings about `--inspect` arguments passed to Next (Next itself opens the inspector in the right
+ * process). Without `--inspect` the network flag does nothing; a non-loopback host exposes full control
+ * over the process on the network. A port alone (`--inspect=9231`) means 127.0.0.1.
  * @param {string[]} args
  * @returns {string[]}
  */
@@ -46,8 +46,8 @@ export function inspectWarnings(args) {
   if (!values.length) return ['No --inspect=<port> in the arguments: the process will have no inspector, so network inspection does nothing. Add e.g. --inspect=9231 (each app in a monorepo needs its own port).'];
   const warnings = remoteInspectHosts(args).map(host =>
     `The inspector on ${host} is reachable from outside this machine and gives full control over the process. Locally, use just the port (--inspect=<port> → 127.0.0.1).`);
-  // --inspect bez portu → 9229: port outbound-hub, poza domyślnym zakresem kolektora; w monorepo (także
-  // `portless -- --inspect`) wszystkie aplikacje chcą 9229 i wygrywa jedna, reszta działa bez inspektora
+  // --inspect without a port → 9229: the outbound-hub port, outside the collector's default range; in a monorepo (also
+  // `portless -- --inspect`) all apps want 9229 and one wins, the rest run without an inspector
   if (values.some(v => !/(^|:)\d+$/.test(v))) warnings.push('--inspect without a port uses 9229: that is the outbound-hub port and outside the collector\'s default range (9230-9249), '
     + 'and in a monorepo every app would want it (only one gets it, the rest run without an inspector). Give each app its own port, e.g. --inspect=9231.');
   return warnings;
@@ -55,7 +55,7 @@ export function inspectWarnings(args) {
 
 const INSPECT_ANY = /^--(?:inspect(?:-brk|-wait)?|inspect-port|debug-port)(?:=(.*))?$/;
 
-/** Wartości flag inspektora: `--flag=v` albo `--flag v` (gdy następny argument nie jest flagą). */
+/** Inspector flag values: `--flag=v` or `--flag v` (when the next argument is not a flag). */
 function inspectorValues(args, re) {
   return args.flatMap((a, i) => {
     const m = re.exec(a);
@@ -64,7 +64,7 @@ function inspectorValues(args, re) {
   });
 }
 
-/** Host z wartości flagi: sam port → brak hosta; `[::]:9229`; `0.0.0.0:9229`; sam host (`--inspect=0.0.0.0`). */
+/** Host from a flag value: port only → no host; `[::]:9229`; `0.0.0.0:9229`; host only (`--inspect=0.0.0.0`). */
 export function inspectorHost(v) {
   if (!v || /^\d+$/.test(v)) return '';
   if (v.startsWith('[')) return v.slice(0, v.indexOf(']') + 1);
@@ -73,8 +73,8 @@ export function inspectorHost(v) {
 }
 
 /**
- * Hosty inspektora spoza pętli zwrotnej w argumentach i w NODE_OPTIONS, także `--inspect=0.0.0.0` (sam host)
- * i `--inspect-port` / `--debug-port` (audyt B-08).
+ * Non-loopback inspector hosts in the arguments and in NODE_OPTIONS, also `--inspect=0.0.0.0` (host only)
+ * and `--inspect-port` / `--debug-port` (audit B-08).
  * @param {string[]} args  @param {Record<string, string | undefined>} [env]
  */
 export function remoteInspectHosts(args, env = {}) {
@@ -82,24 +82,24 @@ export function remoteInspectHosts(args, env = {}) {
   return [...new Set(inspectorValues(all, INSPECT_ANY).map(inspectorHost).filter(h => h && !LOOPBACK.has(h)))];
 }
 
-/** Sygnały przekazywane od razu. SIGBREAK istnieje tylko na Windows (Ctrl+Break). */
+/** Signals forwarded immediately. SIGBREAK exists only on Windows (Ctrl+Break). */
 const forwarded = platform => ['SIGTERM', 'SIGHUP', ...(platform === 'win32' ? ['SIGBREAK'] : [])];
 
 /**
- * Uruchamia `node <nodeArgs>` z dziedziczonym stdio (TTY, kolory) i czeka na koniec.
- * SIGTERM, SIGHUP (i SIGBREAK na Windows) trafiają do potomka od razu. SIGINT z terminala dostaje cała
- * grupa procesów (na Windows: wszystkie procesy konsoli), więc nie jest dublowany; gdy jednak przyszedł
- * tylko do nas (np. od narzędzia, które zabija sam pid), po `sigintGraceMs` przekazujemy go dalej.
+ * Runs `node <nodeArgs>` with inherited stdio (TTY, colors) and waits for it to end.
+ * SIGTERM, SIGHUP (and SIGBREAK on Windows) reach the child immediately. SIGINT from the terminal goes to the whole
+ * process group (on Windows: all console processes), so it is not duplicated; if it reached only us
+ * (e.g. from a tool that kills just the pid), we forward it after `sigintGraceMs`.
  * @param {{ execPath: string, nodeArgs: string[], proc?: NodeJS.Process, sigintGraceMs?: number,
  *   spawnImpl?: typeof spawn }} input
  * @returns {Promise<{ code: number | null, signal: NodeJS.Signals | null, error?: Error }>}
  */
 export function runChild({ execPath, nodeArgs, proc = process, sigintGraceMs = 1500, spawnImpl = spawn }) {
   return new Promise(resolve => {
-    // OUTBOUND_INSPECT=1: jawna zgoda na podsłuch dla kolektora (audyt B-01); dziedziczą ją procesy potomne next
+    // OUTBOUND_INSPECT=1: explicit consent to inspection for the collector (audit B-01); next's child processes inherit it
     const child = spawnImpl(execPath, nodeArgs, { stdio: 'inherit', env: { ...proc.env, OUTBOUND_INSPECT: '1' } });
     const alive = () => child.exitCode === null && child.signalCode === null;
-    const send = sig => { if (alive()) try { child.kill(sig); } catch { /* proces właśnie się skończył */ } };
+    const send = sig => { if (alive()) try { child.kill(sig); } catch { /* the process just ended */ } };
     const handlers = Object.fromEntries(forwarded(proc.platform).map(sig => [sig, () => send(sig)]));
     let graceTimer;
     handlers.SIGINT = () => { graceTimer ??= setTimeout(() => send('SIGINT'), sigintGraceMs); graceTimer.unref?.(); };
@@ -115,20 +115,20 @@ export function runChild({ execPath, nodeArgs, proc = process, sigintGraceMs = 1
 }
 
 /**
- * Odtwarza zakończenie potomka: kod wyjścia albo ten sam sygnał (POSIX). Na Windows nie ma sygnałów
- * POSIX, więc proces kończy się kodem 128 + numer sygnału, jak w powłokach.
+ * Reproduces how the child ended: the exit code or the same signal (POSIX). Windows has no POSIX
+ * signals, so the process ends with code 128 + the signal number, as in shells.
  * @param {{ code: number | null, signal: NodeJS.Signals | null }} result
  */
 export function exitLike({ code, signal }, proc = process) {
   if (signal) {
-    if (proc.platform !== 'win32') proc.kill(proc.pid, signal);   // nasze nasłuchy już zdjęte → domyślna akcja
+    if (proc.platform !== 'win32') proc.kill(proc.pid, signal);   // our listeners already removed → default action
     return proc.exit(128 + (constants.signals[signal] ?? 0));
   }
   return proc.exit(code ?? 1);
 }
 
 /**
- * Punkt wejścia `outbound-next`: `outbound-next dev --port 3101 --inspect=9231`.
+ * Entry point of `outbound-next`: `outbound-next dev --port 3101 --inspect=9231`.
  * @param {{ argv?: string[], env?: Record<string, string | undefined>, cwd?: string, proc?: NodeJS.Process }} [input]
  */
 export async function runNext({ argv = process.argv.slice(2), env = process.env, cwd = process.cwd(), proc = process } = {}) {
@@ -142,7 +142,7 @@ export async function runNext({ argv = process.argv.slice(2), env = process.env,
   } catch (e) {
     return fail(`Could not find ${NEXT_CLI} from ${cwd} (${e.code ?? e.message}). Run the script in an app directory that depends on "next", or point to the file with OUTBOUND_NEXT_BIN.`);
   }
-  // inspektor poza pętlą zwrotną daje każdemu w sieci wykonanie kodu w procesie: blokada, chyba że jawnie dozwolone
+  // an inspector outside loopback gives anyone on the network code execution in the process: blocked unless explicitly allowed
   const remote = remoteInspectHosts(argv, env);
   if (remote.length && env.OUTBOUND_ALLOW_REMOTE_INSPECT !== '1') {
     return fail(`The inspector would listen on ${remote.join(', ')}, reachable from outside this machine, which gives full control over the process. `

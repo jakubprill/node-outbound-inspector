@@ -1,6 +1,6 @@
-// Udaje CLI Next.js dla testów `outbound-next`: jak `next dev --inspect=<port>` otwiera inspektor
-// (Next robi to we właściwym procesie; tu — w tym samym), wypisuje jedną linię JSON o sobie
-// i czeka na stdin. Linia "exit <kod>" albo koniec stdin kończy proces tym kodem (domyślnie 0).
+// Pretends to be the Next.js CLI for `outbound-next` tests: like `next dev --inspect=<port>`, it opens the inspector
+// (Next does it in the right process; here — in the same one), prints one JSON line about itself
+// and waits on stdin. An "exit <code>" line or the end of stdin ends the process with that code (0 by default).
 import inspector from 'node:inspector';
 
 const arg = process.argv.slice(2).find(a => a.startsWith('--inspect='));

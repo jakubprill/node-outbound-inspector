@@ -1,16 +1,16 @@
-// Reguły pomijania zapytań przy przyjęciu (czyste): hosty z IGNORE_HOSTS, ruch do inspektorów
-// i eksport OpenTelemetry (OTLP). Pominięte zapytania nie trafiają do magazynu.
+// Rules for skipping requests at ingestion (pure): hosts from IGNORE_HOSTS, traffic to inspectors
+// and OpenTelemetry (OTLP) export. Skipped requests do not reach the store.
 //
-// OTLP rozpoznajemy po sygnaturze, nie po samej ścieżce: `/v1/traces|metrics|logs` tylko na
-// domyślnym porcie OTLP/HTTP 4318 (dowolny host: localhost, 127.0.0.1, kontener kolektora),
-// a ścieżkę usługi OTLP/gRPC na dowolnym porcie (jest jednoznaczna). Sama ścieżka `/v1/logs`
-// bez portu mogłaby ukryć prawdziwy ruch, np. własny backend z takim API.
+// OTLP is recognized by its signature, not by the path alone: `/v1/traces|metrics|logs` only on
+// the default OTLP/HTTP port 4318 (any host: localhost, 127.0.0.1, a collector container),
+// and the OTLP/gRPC service path on any port (it is unambiguous). A bare `/v1/logs` path
+// without the port could hide real traffic, e.g. your own backend with such an API.
 
 const OTLP_HTTP_PORT = '4318';
 const OTLP_HTTP_PATH = /^\/v1\/(traces|metrics|logs)\/?$/;
 const OTLP_GRPC_PATH = /^\/opentelemetry\.proto\.collector\.(trace|metrics|logs)\.v1\.(Trace|Metrics|Logs)Service\/Export$/;
 
-/** Opis reguł OTLP dla inspector_status (w tej samej postaci co wzorce: host:port/ścieżka). */
+/** Description of the OTLP rules for inspector_status (in the same form as the patterns: host:port/path). */
 export const OTLP_RULES = Object.freeze([
   '*:4318/v1/traces', '*:4318/v1/metrics', '*:4318/v1/logs',
   '*/opentelemetry.proto.collector.{trace,metrics,logs}.v1.*Service/Export',
@@ -22,7 +22,7 @@ export function isOtlpExport(u) {
 }
 
 /**
- * Powód pominięcia zapytania albo null, gdy zapytanie trafia do magazynu.
+ * Reason for skipping a request, or null when the request goes to the store.
  * @param {string} url
  * @param {{ ignoreHosts?: readonly string[], inspectorPorts?: readonly number[], ignoreOtlp?: boolean }} rules
  * @returns {'hosts' | 'inspector' | 'otlp' | null}

@@ -1,14 +1,14 @@
-// Redakcja sekretów przy przyjęciu danych (przed zapisem do magazynu): nagłówki, parametry URL i pola treści JSON.
-// Wartość zastępuje opis ze schematem, długością i krótkim skrótem — agent może stwierdzić,
-// czy dwa zapytania niosły ten sam sekret, ale nie odczyta go. Skrót to HMAC-SHA256 z kluczem
-// losowanym przy starcie kolektora: porównywalny w obrębie sesji, bezużyteczny do zgadywania poza nią.
+// Secret redaction at ingestion (before storing): headers, URL parameters and JSON body fields.
+// The value is replaced by a description with the scheme, length and a short digest — the agent can tell
+// whether two requests carried the same secret, but cannot read it. The digest is HMAC-SHA256 with a key
+// drawn when the collector starts: comparable within a session, useless for guessing outside it.
 import { createHmac, randomBytes } from 'node:crypto';
 
 export const SENSITIVE_HEADERS = Object.freeze(['authorization', 'proxy-authorization', 'cookie', 'set-cookie', 'x-api-key']);
 const SENSITIVE_NAME = /token|secret|password|passwd|session|api[-_]?key|(^|[-_])key($|[-_])|auth(?!or)|signature|credential/i;
-// krótkie nazwy dopasowywane w całości, żeby nie łapać np. country_code (audyt B-05)
+// short names matched whole, so e.g. country_code is not caught (audit B-05)
 const SENSITIVE_EXACT = /^(sig|code|pass|pwd|pin|otp|jwt|assertion|client_assertion|dsn|cookie|private_key)$/i;
-// wartości rozpoznawalne po formacie, niezależnie od nazwy pola (audyt B-05, B-06)
+// values recognizable by format, regardless of the field name (audit B-05, B-06)
 const VALUE_PATTERNS = [
   /\beyJ[\w-]{5,}\.[\w-]{5,}\.[\w-]*/g,                                  // JWT
   /\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{20,})/g,          // GitHub
@@ -23,16 +23,16 @@ const VALUE_PATTERNS = [
 ];
 const URL_IN_TEXT = /https?:\/\/[^\s<>"'`,;]+/g;
 const FORM = /^[\w.%[\]-]+=[^&\s]*(&[\w.%[\]-]+=[^&\s]*)*$/;
-/** camelCase → snake_case przed sprawdzeniem nazwy (privateKey → private_key). */
+/** camelCase → snake_case before checking the name (privateKey → private_key). */
 const snake = name => name.replace(/([a-z0-9])([A-Z])/g, '$1_$2');
-// Pole JSON z wartością skalarną: "nazwa": "tekst" albo "nazwa": liczba. Obiekty i tablice nie są redagowane.
+// A JSON field with a scalar value: "name": "text" or "name": number. Objects and arrays are not redacted.
 const JSON_FIELD = /"((?:[^"\\]|\\.){1,100})"(\s*:\s*)("(?:[^"\\]|\\.)*"|-?\d[\d.eE+-]*)/g;
 const SCHEME = /^(Bearer|Basic|Digest|Negotiate|Token|ApiKey)\s/i;
 
-/** Czy nazwa (parametru, pola) wygląda na sekret — ta sama reguła co dla nagłówków i parametrów URL. */
+/** Whether a name (parameter, field) looks like a secret — the same rule as for headers and URL parameters. */
 const decodeURIComponentSafe = s => { try { return decodeURIComponent(s); } catch { return s; } };
 
-// nazwy, które pasują do reguły, ale nie niosą sekretów (OAuth/OIDC): bez nich odpowiedź tokenowa traci czytelność
+// names that match the rule but carry no secrets (OAuth/OIDC): without them a token response loses readability
 const NOT_SECRET = /^(token_type|token_endpoint|auth_time|authorization_endpoint|session_state|code_challenge_method|expires_in)$/i;
 
 export const isSensitiveName = name => !NOT_SECRET.test(snake(name)) && (SENSITIVE_NAME.test(name) || SENSITIVE_EXACT.test(name) || SENSITIVE_EXACT.test(snake(name)) || SENSITIVE_NAME.test(snake(name)));
@@ -46,7 +46,7 @@ export function createRedactor({ enabled = true, extraHeaders = [], key = random
   const isSensitive = name => typeof name === 'string' && (names.has(name.toLowerCase()) || isSensitiveName(name));
   const short = v => `[redacted · #${hash(v)}]`;
 
-  /** Wartości o rozpoznawalnym formacie (JWT, tokeny GitHub/Stripe/Slack, klucze AWS, webhooki, PEM) w dowolnym tekście. */
+  /** Values with a recognizable format (JWT, GitHub/Stripe/Slack tokens, AWS keys, webhooks, PEM) in any text. */
   function values(text) {
     if (!enabled || typeof text !== 'string') return { text, count: 0 };
     let count = 0, out = text;
@@ -54,14 +54,14 @@ export function createRedactor({ enabled = true, extraHeaders = [], key = random
     return { text: out, count };
   }
 
-  /** Opis zastępujący wartość, np. „[redacted: Bearer · 12 chars · #a1b2c3]”. */
+  /** A description replacing the value, e.g. "[redacted: Bearer · 12 chars · #a1b2c3]". */
   function describe(value) {
     const v = String(value);
     const scheme = v.match(SCHEME)?.[1];
     return `[redacted: ${scheme ? scheme + ' · ' : ''}${v.length} chars · #${hash(v)}]`;
   }
 
-  /** Nagłówki: po nazwie; w pozostałych URL-e (Location, Link, Refresh…) i wartości o znanym formacie (audyt B-05). */
+  /** Headers: by name; in the others, URLs (Location, Link, Refresh…) and values of a known format (audit B-05). */
   function headers(h) {
     if (!enabled || !h) return h;
     const out = {};
@@ -73,8 +73,8 @@ export function createRedactor({ enabled = true, extraHeaders = [], key = random
   }
 
   /**
-   * URL bezwzględny albo ścieżka względna (adres żądania strony, np. `/callback?code=…`, audyt B-02): parametry
-   * zapytania i fragmentu o nazwach sekretów, hasło w userinfo, wartości o znanym formacie w ścieżce (audyt B-05).
+   * An absolute URL or a relative path (the page request address, e.g. `/callback?code=…`, audit B-02): query
+   * and fragment parameters with secret names, the userinfo password, values of a known format in the path (audit B-05).
    */
   function url(u) {
     if (!enabled || typeof u !== 'string') return u;
@@ -97,13 +97,13 @@ export function createRedactor({ enabled = true, extraHeaders = [], key = random
     const tail = parsed.search + parsed.hash;
     const built = !changed ? u : relative ? pathOut + tail
       : `${parsed.protocol}//${parsed.username ? parsed.username + (parsed.password ? ':' + parsed.password : '') + '@' : ''}${parsed.host}${pathOut}${tail}`;
-    return values(built).text; // wzorce zależne od hosta (webhooki Slack, Discord)
+    return values(built).text; // host-dependent patterns (Slack, Discord webhooks)
   }
 
   /**
-   * Treść JSON (także przycięta): wartości pól o nazwach sekretów zastępuje opis. Działa na tekście,
-   * więc zachowuje formatowanie i nie wymaga poprawnego JSON-a. Niezamknięta wartość sekretu na końcu
-   * przyciętej treści też jest zastępowana (audyt B-06).
+   * A JSON body (also truncated): values of fields with secret names are replaced with a description. Works on text,
+   * so it keeps formatting and does not need valid JSON. An unclosed secret value at the end
+   * of a truncated body is replaced too (audit B-06).
    * @returns {{ text: string, count: number }}
    */
   function jsonBody(text) {
@@ -124,7 +124,7 @@ export function createRedactor({ enabled = true, extraHeaders = [], key = random
     return { text: out, count };
   }
 
-  /** Drzewo JSON: poddrzewo pod kluczem-sekretem (także obiekt lub tablica) zastępuje opis. */
+  /** JSON tree: a subtree under a secret key (also an object or array) is replaced with a description. */
   function jsonTree(node) {
     let count = 0;
     const walk = v => {
@@ -141,8 +141,8 @@ export function createRedactor({ enabled = true, extraHeaders = [], key = random
   }
 
   /**
-   * Treść odpowiedzi dowolnego typu tekstowego (audyt B-06): JSON jako drzewo (przycięty — tekstowo),
-   * form-urlencoded po nazwach, a w każdej treści wartości o znanym formacie.
+   * A response body of any text type (audit B-06): JSON as a tree (truncated — as text),
+   * form-urlencoded by names, and in every body, values of a known format.
    * @returns {{ text: string, count: number }}
    */
   function body(text, contentType = '') {

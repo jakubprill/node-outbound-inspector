@@ -1,14 +1,14 @@
-// Budżet odpowiedzi narzędzi (ADR 0008): JSON bez wcięć, twardy limit znaków, jawne przycięcie (czyste).
+// Tool response budget (ADR 0008): JSON without indentation, a hard character limit, explicit truncation (pure).
 
-/** Długość wyniku tak, jak trafi do agenta. */
+/** Result length as it reaches the agent. */
 export const size = v => JSON.stringify(v)?.length ?? 0;
 
-/** Domyślny twardy limit znaków jednej odpowiedzi narzędzia. */
+/** The default hard character limit of one tool response. */
 export const DEFAULT_MAX_CHARS = 20000;
 
-const LONG_TEXT = 200; // krótszych tekstów nie skracamy
+const LONG_TEXT = 200; // shorter texts are not shortened
 
-/** Największy element do przycięcia: tablica z co najmniej dwoma elementami albo długi tekst. */
+/** The largest item to trim: an array with at least two elements or a long text. */
 function largest(root) {
   let best = null;
   const visit = (node, parent, key) => {
@@ -28,9 +28,9 @@ function largest(root) {
 }
 
 /**
- * Dopasowuje wynik do limitu znaków. Przycina najpierw największe tablice od początku
- * (tablice są uporządkowane od najstarszych, więc zostają najnowsze elementy), potem najdłuższe teksty.
- * Wynik przycięty jest obiektem z `truncated: true` i wskazówką, jak zawęzić zapytanie.
+ * Fits the result to the character limit. It first trims the largest arrays from the start
+ * (arrays are ordered oldest first, so the newest elements stay), then the longest texts.
+ * A truncated result is an object with `truncated: true` and a hint on how to narrow the query.
  * @param {any} value  @param {{ limit?: number, hint: string }} opts
  */
 export function fitToBudget(value, { limit = DEFAULT_MAX_CHARS, hint }) {
@@ -54,7 +54,7 @@ export function fitToBudget(value, { limit = DEFAULT_MAX_CHARS, hint }) {
   return size(out) <= limit ? out : meta;
 }
 
-/** Skraca długi query string w URL (pełny URL zwraca get_server_request). */
+/** Shortens a long query string in a URL (get_server_request returns the full URL). */
 export function shortUrl(url, maxQuery = 80) {
   if (typeof url !== 'string') return url;
   const i = url.indexOf('?');

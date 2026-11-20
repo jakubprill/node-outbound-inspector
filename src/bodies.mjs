@@ -1,20 +1,20 @@
-// Treści odpowiedzi: klasyfikacja wyniku Network.getResponseBody, dekompresja według content-encoding
-// i budżet pamięci kolektora (czyste: node:zlib to obliczenia, nie I/O).
+// Response bodies: classifying the Network.getResponseBody result, decompression by content-encoding
+// and the collector's memory budget (pure: node:zlib is computation, not I/O).
 //
 // Stany (body.state):
-//   none        — jeszcze nie pobrano (tryb lazy) albo zapytanie bez odpowiedzi
-//   available   — pełna treść tekstowa w body.data
-//   truncated   — część treści (limit kolektora, bufor inspektora, urwany strumień); body.reason mówi który
-//   unavailable — inspektor nie udostępnia treści (np. treść zniekształcona przez inspektor)
-//   evicted     — treść usunięta (z bufora inspektora albo z budżetu kolektora)
-//   skipped     — nie pokazana jako tekst: treść binarna, tryb off albo kodowanie, którego nie da się
-//                 zdekodować (bez surowych bajtów: ominęłyby redakcję, audyt B-10)
-// Treść z content-encoding: body.bytes to rozmiar po dekompresji, body.encodedBytes — na łączu,
-// body.encoding — kodowania w kolejności z nagłówka (np. 'gzip, br').
+//   none        — not fetched yet (lazy mode) or a request without a response
+//   available   — the full text body in body.data
+//   truncated   — part of the body (collector limit, inspector buffer, broken stream); body.reason says which
+//   unavailable — the inspector does not provide the body (e.g. a body garbled by the inspector)
+//   evicted     — the body was removed (from the inspector buffer or the collector budget)
+//   skipped     — not shown as text: a binary body, off mode, or an encoding that cannot be
+//                 decoded (no raw bytes: they would bypass redaction, audit B-10)
+// A body with content-encoding: body.bytes is the size after decompression, body.encodedBytes — on the wire,
+// body.encoding — the encodings in header order (e.g. 'gzip, br').
 import zlib from 'node:zlib';
 
 const TEXTUAL = /^(text\/|application\/(json|xml|javascript|x-www-form-urlencoded|graphql|ld\+json|problem\+json|[\w.+-]*\+(json|xml)))|charset=/i;
-// Skompresowane bajty zdekodowane przez inspektor jako UTF-8: znaki zastępcze albo sterujące.
+// Compressed bytes decoded by the inspector as UTF-8: replacement or control characters.
 const MANGLED = /[\uFFFD\u0000-\u0008\u000E-\u001F]/;
 
 const header = (headers, name) => {
@@ -24,12 +24,12 @@ const header = (headers, name) => {
 
 const Z = zlib.constants;
 const ZLIB_FLUSH = { finishFlush: Z.Z_SYNC_FLUSH };
-/** deflate według RFC 9110 to format zlib, ale część serwerów wysyła surowy strumień (RFC 1951). */
+/** deflate per RFC 9110 is the zlib format, but some servers send a raw stream (RFC 1951). */
 const inflateAny = (buf, opts) => {
   try { return zlib.inflateSync(buf, opts); }
   catch (e) { if (e.code === 'Z_DATA_ERROR') return zlib.inflateRawSync(buf, opts); throw e; }
 };
-// kodowanie → [dekoder, opcje dekodowania urwanego strumienia bez błędu]
+// encoding → [decoder, options for decoding a broken stream without an error]
 const DECODERS = {
   gzip: [zlib.gunzipSync, ZLIB_FLUSH], 'x-gzip': [zlib.gunzipSync, ZLIB_FLUSH],
   deflate: [inflateAny, ZLIB_FLUSH],
@@ -37,26 +37,26 @@ const DECODERS = {
   ...(zlib.zstdDecompressSync && { zstd: [zlib.zstdDecompressSync, {}] }), // Node ≥ 22.15 / 23.8
 };
 
-/** 'GZIP, br' → ['gzip', 'br'] (kolejność nałożenia); identity pomijane. */
+/** 'GZIP, br' → ['gzip', 'br'] (order of application); identity skipped. */
 export const parseCodings = value => String(value ?? '').split(/[,\n]/)
   .map(s => s.trim().toLowerCase()).filter(s => s && s !== 'identity');
 
 /**
- * Jedna warstwa z limitem wyniku (ochrona przed bombą dekompresyjną). Przy przekroczeniu limitu
- * zwraca najdłuższy początek wyniku mieszczący się w limicie: wyszukiwanie binarne po długości
- * wejścia, każda próba kończy się najpóźniej po `limit` bajtach wyniku.
+ * One layer with an output limit (decompression bomb protection). When the limit is exceeded
+ * it returns the longest output prefix that fits the limit: a binary search over the input
+ * length, each attempt ends after at most `limit` output bytes.
  */
 function decodeLayer(buf, [decode, flushOpts], limit) {
   const opts = { maxOutputLength: limit };
   try { return { out: decode(buf, opts), cut: false, over: false }; }
   catch (e) { if (e.code !== 'ERR_BUFFER_TOO_LARGE' && e.code !== 'Z_BUF_ERROR') throw e; }
   const prefix = n => {
-    // każdy błąd prefiksu (zstd zgłasza urwany strumień, nie przekroczenie limitu) to brak wyniku dla tej długości
+    // any prefix error (zstd reports a broken stream, not an exceeded limit) means no output for that length
     try { return decode(buf.subarray(0, n), { ...flushOpts, ...opts }); }
     catch { return null; }
   };
   const whole = prefix(buf.length);
-  if (whole) return { out: whole, cut: true, over: false }; // urwany strumień, ale mieści się w limicie
+  if (whole) return { out: whole, cut: true, over: false }; // broken stream, but fits the limit
   let lo = 0, hi = buf.length, out = Buffer.alloc(0);
   while (hi - lo > 1) {
     const mid = (lo + hi) >>> 1, o = prefix(mid);
@@ -66,10 +66,10 @@ function decodeLayer(buf, [decode, flushOpts], limit) {
 }
 
 /**
- * Dekompresja według listy kodowań (zdejmowanych od ostatniego). Rzuca błąd przy kodowaniu
- * nieobsługiwanym albo uszkodzonych danych.
- * @param {Buffer} raw  @param {string[]} codings  @param {number} limit maks. rozmiar wyniku w bajtach
- * @returns {{ out: Buffer, cut: boolean, over: boolean }} cut — strumień urwany, over — przekroczony limit
+ * Decompression by the list of encodings (removed from the last one). Throws on an
+ * unsupported encoding or broken data.
+ * @param {Buffer} raw  @param {string[]} codings  @param {number} limit max output size in bytes
+ * @returns {{ out: Buffer, cut: boolean, over: boolean }} cut — broken stream, over — limit exceeded
  */
 export function decodeContent(raw, codings, limit) {
   for (const c of codings) {
@@ -84,17 +84,17 @@ export function decodeContent(raw, codings, limit) {
 }
 
 /**
- * @param {any} res wynik Network.getResponseBody albo null (błąd / brak treści w inspektorze)
+ * @param {any} res the Network.getResponseBody result or null (error / no body in the inspector)
  * @param {{ type?: string, mimeType?: string, responseHeaders?: object }} record
  * @param {{ maxStoredBytes: number, missingState: 'evicted' | 'unavailable',
  *   redactText?: (text: string, contentType: string) => { text: string, count: number } }} opts
- *   redactText działa na pełnym tekście, przed przycięciem: cięcie nie odsłoni początku sekretu (audyt B-06)
+ *   redactText works on the full text, before truncation: the cut will not reveal the start of a secret (audit B-06)
  * @returns {{ state: string, data?: string, bytes?: number, encodedBytes?: number, encoding?: string, reason?: string, redactedFields?: number }}
  */
 export function classifyBody(res, record, { maxStoredBytes, missingState, redactText }) {
   if (!res) return { state: missingState, reason: missingState === 'evicted' ? 'body is no longer available in the inspector' : 'the inspector returned no body' };
   const contentType = header(record.responseHeaders, 'content-type') ?? record.mimeType ?? '';
-  const declared = Number(header(record.responseHeaders, 'content-length')); // bajty na łączu, czyli po kompresji
+  const declared = Number(header(record.responseHeaders, 'content-length')); // bytes on the wire, i.e. compressed
   const codings = parseCodings(header(record.responseHeaders, 'content-encoding'));
   const encoding = codings.length ? codings.join(', ') : undefined;
   const raw = res.base64Encoded ? Buffer.from(res.body, 'base64') : null;
@@ -114,12 +114,12 @@ export function classifyBody(res, record, { maxStoredBytes, missingState, redact
   } else {
     text = raw ? raw.toString('utf8') : String(res.body ?? '');
     bytes = raw ? raw.length : Buffer.byteLength(text);
-    // content-type z charset: inspektor oddaje bajty jako tekst UTF-8, skompresowane są wtedy nie do odzyskania
+    // content-type with charset: the inspector returns the bytes as UTF-8 text, compressed bytes are then unrecoverable
     if (!raw && encoding && MANGLED.test(text)) {
       return { state: 'unavailable', encoding, reason: `the Node inspector returned the compressed body (${encoding}) as UTF-8 text (content-type with charset); the bytes are garbled, decompression is impossible` };
     }
   }
-  const wireBytes = raw ? raw.length : (encoding ? null : bytes); // treść tekstowa z kodowaniem: rozmiar na łączu nieznany
+  const wireBytes = raw ? raw.length : (encoding ? null : bytes); // text body with an encoding: wire size unknown
 
   if (over && !text) return { state: 'skipped', ...enc, reason: `the body exceeds the collector limit of ${maxStoredBytes} B after decompression and cannot be cut (${encoding})` };
   let redacted = {};
@@ -138,9 +138,9 @@ export function classifyBody(res, record, { maxStoredBytes, missingState, redact
 }
 
 /**
- * Pilnuje łącznego rozmiaru przechowywanych treści: usuwa najstarsze, najpierw spośród odpowiedzi
- * bez błędu. Modyfikuje rekordy w miejscu; zwraca liczbę usuniętych treści.
- * @param {any[]} records w kolejności od najstarszego
+ * Keeps the total size of stored bodies in check: removes the oldest, first among responses
+ * without an error. Modifies records in place; returns the number of removed bodies.
+ * @param {any[]} records from oldest
  */
 export function enforceBodyBudget(records, { maxTotalBytes }) {
   const stored = records.filter(r => r.body?.data != null);

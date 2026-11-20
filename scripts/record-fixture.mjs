@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Nagrywa surowy ruch z inspektorów (zdarzenia CDP Network.* i wpisy haka) do pliku NDJSON,
-// który testy jednostkowe odtwarzają bez procesów i sieci (test/helpers/replay.mjs).
+// Records raw inspector traffic (CDP Network.* events and hook entries) to an NDJSON file,
+// which unit tests replay without processes or network (test/helpers/replay.mjs).
 //
-//   node scripts/record-fixture.mjs --ports 9231,9241 --out nagranie.ndjson [--ms 5000]
-//   node scripts/record-fixture.mjs --scenario   (→ test/fixtures/recordings/two-apps-node<wersja>.ndjson)
+//   node scripts/record-fixture.mjs --ports 9231,9241 --out recording.ndjson [--ms 5000]
+//   node scripts/record-fixture.mjs --scenario   (→ test/fixtures/recordings/two-apps-node<version>.ndjson)
 //
-// --scenario uruchamia aplikacje testowe (test/fixtures) i generuje na nich ruch.
-// Uwaga: nagranie z prawdziwej aplikacji może zawierać sekrety (nagłówki, adresy) — przejrzyj przed commitem.
+// --scenario starts the test apps (test/fixtures) and generates traffic on them.
+// Note: a recording from a real app may contain secrets (headers, addresses) — review it before committing.
 import { writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { loadConfig } from '../src/config.mjs';
@@ -45,7 +45,7 @@ const discovery = createDiscovery(config, {
       config, log: m => console.error('[record]', m), processId: ++processSeq,
       onNetwork: (session, method, params) => {
         write({ kind: 'network', port: session.port, method, params });
-        // treść odpowiedzi tak, jak zwraca ją inspektor (null = błąd) — do testów klasyfikacji treści
+        // the response body as the inspector returns it (null = error) — for body classification tests
         if (method === 'Network.loadingFinished') session.send('Network.getResponseBody', { requestId: params.requestId })
           .then(res => write({ kind: 'body', port: session.port, requestId: params.requestId, res }));
       },
@@ -75,7 +75,7 @@ if (scenario) {
 clearInterval(drainTimer); await drain();
 discovery.stop(); for (const s of sessions.values()) s.close();
 scenario?.stop();
-// Ścieżki bezwzględne z ramek stosu → <root> (nagrania trafiają do repozytorium)
+// Absolute paths from stack frames → <root> (recordings go into the repository)
 const ROOT = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
 writeFileSync(opt.out, lines.join('\n').split(ROOT).join('<root>') + '\n');
 console.error(`[record] wrote ${lines.length} entries to ${opt.out} (Node ${process.version})`);

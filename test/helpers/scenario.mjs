@@ -1,5 +1,5 @@
-// Wspólny scenariusz testowy: serwisy + dwie aplikacje (fake-app) uruchomione równolegle,
-// każda z własnym portem inspektora. Porty są parametrem, żeby pliki testów mogły działać równolegle.
+// A shared test scenario: services + two apps (fake-app) started in parallel,
+// each with its own inspector port. Ports are a parameter so test files can run in parallel.
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import net from 'node:net';
@@ -8,8 +8,8 @@ export const fx = p => fileURLToPath(new URL(`../fixtures/${p}`, import.meta.url
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /**
- * n różnych wolnych portów od systemu (wszystkie gniazda otwarte naraz, potem zamknięte).
- * Pliki testów działają równolegle — stałe numery portów kolidowały (np. 4851/9751 w trzech plikach).
+ * n different free ports from the system (all sockets opened at once, then closed).
+ * Test files run in parallel — fixed port numbers collided (e.g. 4851/9751 in three files).
  */
 export async function freePorts(n) {
   const servers = await Promise.all(Array.from({ length: n }, () => new Promise((ok, err) => {
@@ -21,7 +21,7 @@ export async function freePorts(n) {
 }
 
 export async function startScenario({ servicesPort, apps, inspectorFlags = ['--experimental-network-inspection'] }) {
-  // brakujące porty (servicesPort, apps[].port, apps[].inspect) przydziela system; wpisujemy je do przekazanych obiektów
+  // missing ports (servicesPort, apps[].port, apps[].inspect) are assigned by the system; we write them into the given objects
   const missing = [servicesPort == null, ...apps.flatMap(a => [a.port == null, a.inspect == null])].filter(Boolean).length;
   const pool = missing ? await freePorts(missing) : [];
   if (servicesPort == null) servicesPort = pool.shift();
