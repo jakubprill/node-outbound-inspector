@@ -172,7 +172,7 @@ test('poziom serii i żądania strony: zależność poza łańcuchem obniża pot
   // X i Y równolegle, Z startuje 50 ms po X (poza łańcuchem: przerwa > seq_gap_ms) i używa danych z X
   const x = req(0, 0.1, { page, body: json({ orderId: ORDER }) }), y = req(0, 0.05, { page });
   const z = req(0.15, 0.25, { page, url: `http://svc/s?o=${ORDER}` });
-  const p = analyze([x, y, z], {}).web.by_page_request[0];
+  const p = analyze([x, y, z], { detail: 'full' }).web.by_page_request[0];
   assert.deepEqual(p.sequential_chains, []);
   assert.deepEqual(p.dependencies.map(d => [d.from_id, d.to_id]), [[x.id, z.id]]);
   assert.equal(p.potential_saving_ms_if_fully_parallel, 0, 'X → (praca 50 ms) → Z to już ścieżka krytyczna; dawniej 150');

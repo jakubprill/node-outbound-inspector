@@ -4,6 +4,11 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/), wersj
 
 ## [Unreleased]
 
+### Zmienione (niezgodne): mniej tokenów
+- **Podsumowanie `analyze_server_timeline`**: zamiast `by_page_request` pole `pages` — jedna pozycja na stronę (powtórne wejścia zgrupowane: `visits`, `wall_ms_median`, `wall_ms_max`), same liczby i kody (`verdict_code`, `potential_saving_ms` z uwzględnieniem zależności, `errors`), bez tekstu werdyktu, kroków i wskazówek; jedna wskazówka `hint` na wynik. Do 5 błędów, 5 serii bez strony, 3 wolnych zapytań. Pełne dane bez zmian pod `page_request_id` i `detail: "full"` (`by_page_request`). Dla 120–1000 zapytań: około 1,2–1,4 tys. tokenów zamiast 5,5 tys.
+- `list_server_requests`: domyślnie 20 wierszy (było 50). `get_server_request`: domyślnie 2000 znaków treści (było 4000).
+- Krótsze opisy narzędzi i parametrów: definicje około 1,1 tys. tokenów.
+
 ### Bezpieczeństwo (przegląd z 2026-11-20, `docs/security-audit-2026-11-20.md`)
 - **Zmienione (niezgodne): podsłuch tylko za zgodą (B-01).** Kolektor wstrzykuje kod, łata i włącza inspekcję sieci tylko w procesach tego samego użytkownika ze zgodą: `outbound-next` (ustawia `OUTBOUND_INSPECT=1`), `OUTBOUND_INSPECT=1` albo `--experimental-network-inspection`. Inne: `skipped` w `inspector_status`. Domyślne porty kolektora i huba: **9230–9249** (bez 9229).
 - **Zmienione (niezgodne): `outbound-next` odmawia inspektora poza pętlą zwrotną (B-08)**, także `--inspect=0.0.0.0`, `--inspect-port`, `--debug-port` i `NODE_OPTIONS`; wyjątek `OUTBOUND_ALLOW_REMOTE_INSPECT=1`.

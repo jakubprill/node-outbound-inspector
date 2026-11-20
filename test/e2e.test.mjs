@@ -55,7 +55,7 @@ test('przypisuje zapytania do właściwej aplikacji i strony, gdy wszystko dziej
 });
 
 test('wykrywa waterfall, równoległość i błędy osobno dla każdej strony', async () => {
-  const res = await mcp.call('analyze_server_timeline');
+  const res = await mcp.call('analyze_server_timeline', { detail: 'full' });
   const page = (app, p) => res[app].by_page_request.find(x => x.page === p);
 
   const webSeq = page('@acme/web', 'GET /seq');

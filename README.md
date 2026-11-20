@@ -79,7 +79,7 @@ Or in the MCP client config:
 | `inspector_status` | Connected apps: name, port, pid, directory, page correlation state |
 | `list_server_requests` | Requests: app, page, method, URL, status, duration, code location. Returns `{ requests, next_since_id }`; pass `since_id` to page through everything |
 | `get_server_request` | Details: full URL, request and response headers, body (paged with `body_offset`), call stack |
-| `analyze_server_timeline` | Analysis per app and per page request: SEQUENTIAL / PARALLEL / MIXED, potential saving, errors, duplicates, slow requests. A summary of the newest 20 page requests by default; `page_request_id` or `detail: "full"` for everything; `settle_ms` waits until traffic goes quiet |
+| `analyze_server_timeline` | Analysis per app and per page request: SEQUENTIAL / PARALLEL / MIXED, potential saving, errors, duplicates, slow requests. By default a compact summary (`pages`: one entry per page, repeated visits grouped, codes and numbers only, about 1–1.5k tokens); `page_request_id` or `detail: "full"` for timelines, waterfall steps and hints; `settle_ms` waits until traffic goes quiet |
 | `clear_server_requests` | Clear the buffer (everything or one app) |
 
 Filters: `app`, `page_contains`, `page_request_id`, `url_contains`, `status` (`404`, `5xx`, `error`, `failed`, `pending`), `last_ms`, `since_id`.

@@ -40,7 +40,29 @@ export function analyzeApp(rs, { idle_gap_ms = 250, seq_gap_ms = 15 }) {
 }
 
 /** Ile elementów pokazuje podsumowanie (pełne dane: `detail: "full"` albo `page_request_id`). */
-export const SUMMARY_LIMITS = Object.freeze({ pages: 20, errors: 10, inFlight: 10, bursts: 10, duplicates: 10, slow: 5 });
+export const SUMMARY_LIMITS = Object.freeze({ pages: 20, errors: 5, inFlight: 5, bursts: 5, duplicates: 5, slow: 3, analyzedPages: 200 });
+
+/** Wskazówka dodawana raz do podsumowania (zamiast powtarzania opisów przy każdej stronie). */
+export const SUMMARY_HINT = 'Summary: one entry per page (repeated visits grouped), numbers and codes only. '
+  + 'Pass page_request_id for one page request (timeline, waterfall steps, hints, data dependencies) or detail: "full" for everything.';
+
+/** Oszczędność z kroków sekwencyjnych z uwzględnieniem zależności danych (suma po łańcuchach). */
+const chainSaving = p => (p.sequential_chains ?? []).reduce((sum, c) => sum + (c.potential_saving_ms ?? 0), 0);
+const median = xs => { const s = [...xs].sort((a, b) => a - b); return s[s.length >> 1]; };
+
+/** Zwarta pozycja podsumowania: powtórne wejścia na tę samą stronę w jednej pozycji, dane najnowszego wejścia. */
+function pageGroup(visits) {
+  const last = visits.at(-1), saving = chainSaving(last), errors = last.errors ?? 0;
+  return {
+    page: last.page, visits: visits.length, page_request_id: last.page_request_id,
+    ...(last.next_request_id ? { next_request_id: last.next_request_id } : {}), ...(last.next_html_request_id ? { next_html_request_id: last.next_html_request_id } : {}),
+    requests: last.requests, wall_ms: last.wall_ms,
+    ...(visits.length > 1 ? { wall_ms_median: median(visits.map(v => v.wall_ms)), wall_ms_max: Math.max(...visits.map(v => v.wall_ms)) } : {}),
+    verdict_code: last.verdict_code, ...(saving > 0 ? { potential_saving_ms: saving } : {}), ...(errors ? { errors } : {}),
+  };
+}
+const compactBurst = b => ({ requests: b.requests, wall_ms: b.wall_ms, verdict_code: b.verdict_code,
+  ...(chainSaving(b) > 0 ? { potential_saving_ms: chainSaving(b) } : {}) });
 
 /** Te same zapytania (metoda i URL) więcej niż raz w obrębie jednego żądania strony albo serii. */
 export function duplicates(groups) {
@@ -57,7 +79,6 @@ export function duplicates(groups) {
 export const slow = (rs, slowMs) => rs.filter(r => duration(r) >= slowMs).sort((a, b) => duration(b) - duration(a));
 
 const pageLabel = r => `${r.page.method} ${r.page.url}`;
-const stripTimeline = ({ timeline, ...rest }) => rest;
 
 /**
  * Raport dla wybranych zapytań: osobno każda aplikacja, w niej osobno każde żądanie strony,
@@ -77,7 +98,7 @@ export function analyze(rs, args = {}, appsSeen = []) {
     const inFlight = list.filter(r => r.tsEnd == null);
     const errors = list.filter(isError);
     // każde przychodzące żądanie strony analizowane osobno — równoległe renderowanie innych stron nie miesza wyników
-    const pages = newest(byPage, L.pages).map(reqs => {
+    const pages = newest(byPage, full ? Infinity : L.analyzedPages).map(reqs => {
       const a = analyzeApp(reqs, { ...args, idle_gap_ms: 1e9 });
       const b = a.bursts[0];
       const pg = reqs[0].page;
@@ -87,6 +108,7 @@ export function analyze(rs, args = {}, appsSeen = []) {
         wall_ms: b.wall_ms, max_concurrency: b.max_concurrency, verdict: b.verdict, verdict_code: b.verdict_code, sequential_chains: b.sequential_chains,
         potential_saving_ms_if_fully_parallel: b.potential_saving_ms_if_fully_parallel,
         ...(b.dependencies ? { dependencies: b.dependencies } : {}), ...(b.dependency_check ? { dependency_check: b.dependency_check } : {}),
+        errors: reqs.filter(isError).length,
         timeline: b.timeline };
     }).filter(Boolean);
     // zapytania bez powiązanej strony (np. zadania w tle, start serwera) — dzielone na serie czasowe
@@ -107,11 +129,20 @@ export function analyze(rs, args = {}, appsSeen = []) {
       ...(inFlight.length ? { in_flight_requests: newest(inFlight, L.inFlight).map(r => row(r)) } : {}),
       errors: newest(errors, L.errors).map(r => row(r)),
       ...(!full && errors.length > L.errors ? { errors_total: errors.length } : {}),
-      by_page_request: full ? pages : pages.map(stripTimeline),
-      ...(!full && byPage.length > L.pages ? { page_requests_total: byPage.length } : {}),
-      unattributed: full ? unattributed : newest(unattributed, L.bursts).map(stripTimeline),
+      ...(full
+        ? { by_page_request: pages.map(({ errors: _e, ...p }) => p), unattributed }
+        : (() => {
+          // grupy w kolejności ostatniego wejścia; najnowsze strony na końcu, jak w pozostałych listach
+          const groups = [...Map.groupBy(pages, p => p.page).values()].sort((a, b) => pages.indexOf(a.at(-1)) - pages.indexOf(b.at(-1)));
+          return {
+            pages: groups.slice(-L.pages).map(pageGroup),
+            page_requests_total: byPage.length,
+            ...(groups.length > L.pages ? { pages_total: groups.length } : {}),
+            unattributed: newest(unattributed, L.bursts).map(compactBurst),
+          };
+        })()),
       ...(Object.keys(findings).length ? { findings } : {}),
-      ...(!full ? { detail: 'summary' } : {}),
+
     }];
   }));
 }

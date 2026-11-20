@@ -1,104 +1,39 @@
 {
   "@acme/admin": {
-    "by_page_request": [
+    "errors": [],
+    "in_flight": 0,
+    "page_requests_total": 3,
+    "pages": [
       {
-        "dependency_check": "<node-dependent>",
-        "max_concurrency": 1,
-        "page": "GET /seq",
-        "page_request_id": "<str>",
-        "potential_saving_ms_if_fully_parallel": "<num>",
-        "requests": 3,
-        "sequential_chains": [
-          {
-            "dependencies": [],
-            "dependency_check": "<node-dependent>",
-            "hint": "If these requests do not depend on each other, Promise.all cuts this part down to the time of the slowest one.",
-            "if_parallel_ms": "<num>",
-            "length": 3,
-            "potential_saving_ms": "<num>",
-            "steps": [
-              "GET http://127.0.0.1:<port>/offers?ms=150 (<n> ms)",
-              "GET http://127.0.0.1:<port>/orders?ms=150 (<n> ms)",
-              "GET http://127.0.0.1:<port>/user?ms=150 (<n> ms)"
-            ],
-            "wall_ms": "<num>"
-          }
-        ],
-        "verdict": "SEQUENTIAL (waterfall) — each request waits for the previous one",
-        "verdict_code": "sequential",
-        "wall_ms": "<num>"
-      },
-      {
-        "max_concurrency": 1,
         "page": "GET /http",
         "page_request_id": "<str>",
-        "potential_saving_ms_if_fully_parallel": "<num>",
         "requests": 1,
-        "sequential_chains": [],
-        "verdict": "single request",
         "verdict_code": "single",
+        "visits": 1,
         "wall_ms": "<num>"
       },
       {
-        "max_concurrency": 3,
         "page": "GET /par",
         "page_request_id": "<str>",
-        "potential_saving_ms_if_fully_parallel": "<num>",
         "requests": 3,
-        "sequential_chains": [],
-        "verdict": "PARALLEL — all requests at once",
         "verdict_code": "parallel",
+        "visits": 1,
+        "wall_ms": "<num>"
+      },
+      {
+        "page": "GET /seq",
+        "page_request_id": "<str>",
+        "potential_saving_ms": "<num>",
+        "requests": 3,
+        "verdict_code": "sequential",
+        "visits": 1,
         "wall_ms": "<num>"
       }
     ],
-    "detail": "summary",
-    "errors": [],
-    "in_flight": 0,
     "total_requests": 7,
     "unattributed": []
   },
   "@acme/web": {
-    "by_page_request": [
-      {
-        "dependency_check": "<node-dependent>",
-        "max_concurrency": 1,
-        "page": "GET /seq",
-        "page_request_id": "<str>",
-        "potential_saving_ms_if_fully_parallel": "<num>",
-        "requests": 3,
-        "sequential_chains": [
-          {
-            "dependencies": [],
-            "dependency_check": "<node-dependent>",
-            "hint": "If these requests do not depend on each other, Promise.all cuts this part down to the time of the slowest one.",
-            "if_parallel_ms": "<num>",
-            "length": 3,
-            "potential_saving_ms": "<num>",
-            "steps": [
-              "GET http://127.0.0.1:<port>/offers?ms=150 (<n> ms)",
-              "GET http://127.0.0.1:<port>/orders?ms=150 (<n> ms)",
-              "GET http://127.0.0.1:<port>/user?ms=150 (<n> ms)"
-            ],
-            "wall_ms": "<num>"
-          }
-        ],
-        "verdict": "SEQUENTIAL (waterfall) — each request waits for the previous one",
-        "verdict_code": "sequential",
-        "wall_ms": "<num>"
-      },
-      {
-        "max_concurrency": 1,
-        "page": "GET /err",
-        "page_request_id": "<str>",
-        "potential_saving_ms_if_fully_parallel": "<num>",
-        "requests": 1,
-        "sequential_chains": [],
-        "verdict": "single request",
-        "verdict_code": "single",
-        "wall_ms": "<num>"
-      }
-    ],
-    "detail": "summary",
     "errors": [
       {
         "app": "@acme/web",
@@ -112,7 +47,29 @@
       }
     ],
     "in_flight": 0,
+    "page_requests_total": 2,
+    "pages": [
+      {
+        "errors": 1,
+        "page": "GET /err",
+        "page_request_id": "<str>",
+        "requests": 1,
+        "verdict_code": "single",
+        "visits": 1,
+        "wall_ms": "<num>"
+      },
+      {
+        "page": "GET /seq",
+        "page_request_id": "<str>",
+        "potential_saving_ms": "<num>",
+        "requests": 3,
+        "verdict_code": "sequential",
+        "visits": 1,
+        "wall_ms": "<num>"
+      }
+    ],
     "total_requests": 4,
     "unattributed": []
-  }
+  },
+  "hint": "Summary: one entry per page (repeated visits grouped), numbers and codes only. Pass page_request_id for one page request (timeline, waterfall steps, hints, data dependencies) or detail: \"full\" for everything."
 }

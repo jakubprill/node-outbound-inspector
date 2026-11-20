@@ -22,10 +22,10 @@ test('next_request_id i next_html_request_id z nagłówków, filtr, http_ports',
     assert.equal((await m.call('list_server_requests', { next_html_request_id: 'html-9' })).requests.length, 3);
 
     const a = (await m.call('analyze_server_timeline', { app: '@acme/web', settle_ms: 200 }))['@acme/web'];
-    const seq = a.by_page_request.find(p => p.page === 'GET /seq');
+    const seq = a.pages.find(p => p.page === 'GET /seq');
     assert.equal(seq.next_request_id, 'rq-123');
     assert.equal(seq.next_html_request_id, 'html-9');
-    assert.equal(a.by_page_request.find(p => p.page === 'GET /par').next_request_id, undefined, 'bez nagłówka bez pola');
+    assert.equal(a.pages.find(p => p.page === 'GET /par').next_request_id, undefined, 'bez nagłówka bez pola');
 
     const { apps } = await m.call('inspector_status');
     assert.ok(apps[0].http_ports.includes(APP.port), JSON.stringify(apps[0].http_ports));

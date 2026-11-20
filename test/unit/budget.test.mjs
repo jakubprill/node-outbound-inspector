@@ -125,7 +125,7 @@ test('filtry status i page_request_id', async () => {
   assert.throws(() => keys({ status: 'weird' }), /Unknown status filter/);
 });
 
-test('podsumowanie analizy: 132 zapytania (44 strony × 3) mieszczą się w 6000 znaków', async () => {
+test('podsumowanie analizy: 132 zapytania (44 wejścia × 3) mieszczą się w 2000 znaków', async () => {
   const store = createStore({ maxRequests: 5000 });
   let t = 1;
   for (let p = 0; p < 44; p++) {
@@ -136,12 +136,13 @@ test('podsumowanie analizy: 132 zapytania (44 strony × 3) mieszczą się w 6000
   }
   const tools = toolsFor(store);
   const summary = await call(tools, 'analyze_server_timeline', {});
-  assert.ok(summary.length <= 6000, `${summary.length} znaków`);
+  assert.ok(summary.length <= 2000, `${summary.length} znaków`);
   const s = JSON.parse(summary)['@acme/admin'];
-  assert.equal(s.by_page_request.length, 20);
+  assert.equal(s.pages.length, 1, 'powtórne wejścia na /par w jednej pozycji');
+  assert.equal(s.pages[0].visits, 44);
   assert.equal(s.page_requests_total, 44);
-  assert.equal(s.by_page_request.at(-1).page_request_id, '1093-43', 'najnowsze żądania stron');
-  assert.ok(s.by_page_request.every(p => !p.timeline), 'bez osi czasu');
+  assert.equal(s.pages[0].page_request_id, '1093-43', 'dane najnowszego wejścia');
+  assert.ok(s.pages.every(p => !p.timeline && !p.verdict && !p.sequential_chains), 'same liczby i kody');
   const one = JSON.parse(await call(tools, 'analyze_server_timeline', { page_request_id: '1093-7' }))['@acme/admin'];
   assert.equal(one.by_page_request.length, 1);
   assert.equal(one.by_page_request[0].timeline.length, 3, 'jedno żądanie strony: pełna oś czasu');

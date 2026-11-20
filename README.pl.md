@@ -79,7 +79,7 @@ Albo w konfiguracji klienta MCP:
 | `inspector_status` | Podłączone aplikacje: nazwa, port, pid, katalog, stan korelacji stron |
 | `list_server_requests` | Zapytania: aplikacja, strona, metoda, URL, status, czas, miejsce w kodzie. Zwraca `{ requests, next_since_id }`; z `since_id` przejdziesz przez wszystkie |
 | `get_server_request` | Szczegóły: pełny URL, nagłówki żądania i odpowiedzi, treść (stronicowana przez `body_offset`), stos wywołań |
-| `analyze_server_timeline` | Analiza per aplikacja i per żądanie strony: SEQUENTIAL / PARALLEL / MIXED, możliwa oszczędność, błędy, duplikaty, wolne zapytania. Domyślnie podsumowanie 20 najnowszych żądań stron; `page_request_id` albo `detail: "full"` daje całość; `settle_ms` czeka, aż ruch ucichnie |
+| `analyze_server_timeline` | Analiza per aplikacja i per żądanie strony: SEQUENTIAL / PARALLEL / MIXED, możliwa oszczędność, błędy, duplikaty, wolne zapytania. Domyślnie zwarte podsumowanie (`pages`: jedna pozycja na stronę, powtórne wejścia zgrupowane, same kody i liczby, około 1–1,5 tys. tokenów); `page_request_id` albo `detail: "full"` daje osie czasu, kroki waterfalla i wskazówki; `settle_ms` czeka, aż ruch ucichnie |
 | `clear_server_requests` | Czyszczenie bufora (całość albo jedna aplikacja) |
 
 Filtry: `app`, `page_contains`, `page_request_id`, `url_contains`, `status` (`404`, `5xx`, `error`, `failed`, `pending`), `last_ms`, `since_id`.

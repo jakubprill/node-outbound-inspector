@@ -25,11 +25,10 @@ for (const r of (await mcp.call('list_server_requests', { limit: 200 })).request
 
 console.log('\n### Analysis');
 for (const [app, x] of Object.entries(await mcp.call('analyze_server_timeline'))) {
-  if (!x.by_page_request) continue;
+  if (!x.pages) continue;
   console.log(`  [${app}] requests: ${x.total_requests}, errors: ${x.errors.length}`);
-  for (const p of x.by_page_request) {
-    const ch = p.sequential_chains[0];
-    console.log(`    ${p.page.padEnd(12)} ${p.requests} req., ${p.wall_ms} ms → ${p.verdict}${ch ? ` | potential saving ${ch.potential_saving_ms} ms` : ''}`);
+  for (const p of x.pages) {
+    console.log(`    ${p.page.padEnd(12)} ${p.requests} req., ${p.wall_ms} ms → ${p.verdict_code.toUpperCase()}${p.potential_saving_ms ? ` | potential saving ${p.potential_saving_ms} ms` : ''}`);
   }
   for (const e of x.errors) console.log(`    error: ${e.method} ${e.url} → ${e.status} (page ${e.page})`);
 }

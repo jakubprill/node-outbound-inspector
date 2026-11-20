@@ -20,7 +20,7 @@ for (const file of files) {
     const { store } = replay(entries);
     assert.equal(store.size, 11);
     assert.ok(store.values().every(x => x.page), 'każde zapytanie przypisane do strony');
-    const res = analyze(store.select(), {});
+    const res = analyze(store.select(), { detail: 'full' });
     const page = (app, p) => res[app].by_page_request.find(x => x.page === p);
     assert.equal(page('@acme/web', 'GET /seq').verdict_code, 'sequential');
     assert.equal(page('@acme/admin', 'GET /par').verdict_code, 'parallel');
@@ -42,7 +42,7 @@ for (const file of files) {
 
   test(`${file} (${node}): zależności danych — bez treści fetch stan nieznany, nie „niezależne” (issue #6)`, () => {
     const { store } = replay(entries);
-    const seq = analyze(store.select(), {})['@acme/web'].by_page_request.find(x => x.page === 'GET /seq');
+    const seq = analyze(store.select(), { detail: 'full' })['@acme/web'].by_page_request.find(x => x.page === 'GET /seq');
     const [ch] = seq.sequential_chains;
     assert.deepEqual(ch.dependencies, [], 'zapytania /user, /orders, /offers nie przekazują sobie danych');
     assert.equal(ch.dependency_check.status, 'complete');

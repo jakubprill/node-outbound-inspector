@@ -22,7 +22,7 @@ test('settle_ms: analiza w trakcie strony z trzema zapytaniami po 150 ms zwraca 
 
     assert.equal(res.settle.settled, true, JSON.stringify(res.settle));
     assert.ok(res.settle.waited_ms >= 300, `czekał ${res.settle.waited_ms} ms`);
-    const [seq] = res['@acme/web'].by_page_request;
+    const [seq] = res['@acme/web'].pages;
     assert.equal(seq.requests, 3, JSON.stringify(res['@acme/web']));
     assert.equal(seq.verdict_code, 'sequential');
     assert.equal(res['@acme/web'].in_flight, 0);

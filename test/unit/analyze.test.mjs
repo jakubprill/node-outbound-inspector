@@ -39,7 +39,11 @@ test('analyze: błędy, strony, zapytania bez strony, pusty wynik', () => {
   const res = analyze([r(0, 0.1, { page: p }), r(0.1, 0.2, { page: p, status: 500 }), r(5, 5.1), r(6, 6.1, { state: 'failed', status: undefined, error: 'x' })], {});
   assert.equal(res.web.total_requests, 4);
   assert.equal(res.web.errors.length, 2);
-  assert.equal(res.web.by_page_request[0].page, 'GET /seq');
-  assert.equal(res.web.unattributed.length, 2);
+  assert.deepEqual(res.web.pages, [{ page: 'GET /seq', visits: 1, page_request_id: 'p1', requests: 2, wall_ms: 200, verdict_code: 'sequential', potential_saving_ms: 100, errors: 1 }]);
+  assert.equal(res.web.page_requests_total, 1);
+  assert.deepEqual(res.web.unattributed.map(b => b.verdict_code), ['single', 'single']);
+  const full = analyze([r(0, 0.1, { page: p }), r(0.1, 0.2, { page: p, status: 500 })], { detail: 'full' });
+  assert.equal(full.web.by_page_request[0].page, 'GET /seq');
+  assert.ok(full.web.by_page_request[0].timeline && full.web.by_page_request[0].verdict);
   assert.deepEqual(analyze([], {}, ['web']), { summary: 'No requests in the selected range.', apps_with_traffic: ['web'] });
 });
