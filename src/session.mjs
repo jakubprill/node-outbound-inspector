@@ -4,9 +4,10 @@ import path from 'node:path';
 import { connectCdp } from './cdp-client.mjs';
 import { INSTALL_EXPRESSION, DRAIN_EXPRESSION } from './hook/hook.mjs';
 import { NODE_FIXES_EXPRESSION } from './hook/node-fixes.mjs';
+import { appIdentity } from './names.mjs';
 
-// tylko odczyt; bez argv (mogą w nim być tokeny, audyt B-16); uid i zgoda na podsłuch (audyt B-01)
-export const IDENTITY_EXPRESSION = 'JSON.stringify({ cwd: process.cwd(), pkg: process.env.npm_package_name || null, pid: process.pid, execArgv: process.execArgv, node: process.version, uid: typeof process.getuid === "function" ? process.getuid() : null, optIn: process.env.OUTBOUND_INSPECT === "1" })';
+// tylko odczyt; PORTLESS_URL daje nazwę aplikacji pod portless (issue #8); bez argv (mogą w nim być tokeny, audyt B-16); uid i zgoda na podsłuch (audyt B-01)
+export const IDENTITY_EXPRESSION = 'JSON.stringify({ cwd: process.cwd(), pkg: process.env.npm_package_name || null, pid: process.pid, execArgv: process.execArgv, node: process.version, uid: typeof process.getuid === "function" ? process.getuid() : null, optIn: process.env.OUTBOUND_INSPECT === "1", portless: process.env.PORTLESS_URL || null })';
 const NETWORK_FLAG = '--experimental-network-inspection';
 
 export const MIN_NODE_MAJOR = 24;
@@ -46,12 +47,13 @@ export function processWarnings({ execArgv = [], node = '', networkEnabled }) {
   return { networkInspection: hasFlag && !!networkEnabled, warnings };
 }
 
-/** Nazwa bez znaków sterujących i spacji, do 64 znaków: trafia do agenta i logów (audyt B-07). */
-export const cleanName = v => typeof v === 'string' ? v.replace(/[^\w@./+:-]/g, '').slice(0, 64) : '';
-
-/** Nazwa aplikacji: APP_NAMES → npm_package_name → name z package.json w cwd → nazwa katalogu → port. */
-export function resolveAppName({ port, appNames = {}, pkg, pkgName, cwd }) {
-  return cleanName(appNames[port]) || cleanName(pkg) || cleanName(pkgName) || (typeof cwd === 'string' ? cleanName(path.basename(cwd)) : '') || `port-${port}`;
+/**
+ * Tożsamość nazwy procesu z wyniku IDENTITY_EXPRESSION (issue #8): APP_NAMES → portless → pakiet → katalog → port.
+ * @returns {Promise<ReturnType<typeof appIdentity>>}
+ */
+export async function identityOf(info, { port, appNames = {}, stripScope = true }) {
+  return appIdentity({ port, appNames, pkg: info.pkg, pkgName: await readPackageName(info.cwd), cwd: info.cwd, portlessUrl: info.portless },
+    { stripScope });
 }
 
 /**
@@ -73,9 +75,10 @@ export async function readPackageName(cwd) {
  * Otwiera sesję. Zwraca obiekt od razu; identyfikacja i podpięcie haka dzieją się po połączeniu.
  * @param {{ webSocketDebuggerUrl: string, title?: string }} target
  * @param {number} port
- * @param {{ config: any, log: (msg: string) => void, onNetwork: (session: any, method: string, params: any) => void, onClose: (session: any) => void, processId: number }} deps
+ * @param {{ config: any, log: (msg: string) => void, onNetwork: (session: any, method: string, params: any) => void, onClose: (session: any) => void,
+ *   onIdentified?: (session: any) => void, processId: number }} deps
  */
-export function openSession(target, port, { config, log, onNetwork, onClose, processId }) {
+export function openSession(target, port, { config, log, onNetwork, onClose, onIdentified = () => {}, processId }) {
   const url = target.webSocketDebuggerUrl;
   const session = { processId, port, title: target.title, url, connectedAt: new Date().toISOString(), app: `port-${port}`, pendingPages: [], warnings: [] };
 
@@ -86,7 +89,9 @@ export function openSession(target, port, { config, log, onNetwork, onClose, pro
     session.pid = Number.isInteger(info.pid) ? info.pid : undefined;
     session.cwd = typeof info.cwd === 'string' ? info.cwd.slice(0, 1024) : undefined;
     session.node = typeof info.node === 'string' ? info.node.slice(0, 32) : undefined;
-    session.app = resolveAppName({ port, appNames: config.appNames, pkg: info.pkg, pkgName: await readPackageName(info.cwd), cwd: info.cwd });
+    session.identity = await identityOf(info, { port, appNames: config.appNames, stripScope: config.stripScope });
+    session.app = session.identity.short; session.appAliases = session.identity.aliases;
+    onIdentified(session); // kolektor rozstrzyga kolizje krótkich nazw między procesami
     // bez zgody albo inny użytkownik: bez łatek, Network.enable i haka — status podaje powód (audyt B-01)
     const allowed = consent(info);
     if (!allowed.allowed) {

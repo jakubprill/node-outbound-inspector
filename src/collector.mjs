@@ -8,6 +8,7 @@ import { applyPageEntries } from './correlate.mjs';
 import { createRedactor } from './redact.mjs';
 import { classifyBody, enforceBodyBudget } from './bodies.mjs';
 import { OTLP_RULES } from './ignore.mjs';
+import { assignNames } from './names.mjs';
 
 const MAX_SESSIONS = 64;
 
@@ -45,12 +46,26 @@ export function createCollector(config, { log = () => {}, now = Date.now } = {})
     }
   }
 
+  /**
+   * Nazwy wyświetlane po identyfikacji procesu (issue #8): krótkie, a przy kolizji (`@a/web` i `@b/web`)
+   * pełne dla całej grupy — także w już zebranych rekordach. Nie zależy od kolejności startu.
+   */
+  function assignAppNames() {
+    const live = [...sessions.values()].filter(s => s.identity);
+    const names = assignNames(live.map(s => s.identity));
+    live.forEach((s, i) => {
+      if (s.app === names[i]) return;
+      s.app = names[i];
+      for (const r of store.values()) if (r.processId === s.processId) r.app = s.app;
+    });
+  }
+
   const discovery = createDiscovery(config, {
     isKnown: url => sessions.has(url),
     onTarget: (target, port) => {
       if (sessions.size >= MAX_SESSIONS) return; // limit wobec fałszywych inspektorów (audyt B-11)
       const session = openSession(target, port, {
-        config, log, onNetwork, processId: ++processSeq,
+        config, log, onNetwork, processId: ++processSeq, onIdentified: assignAppNames,
         onClose: s => { sessions.delete(s.url); byProcess.delete(s.processId); },
       });
       sessions.set(session.url, session);

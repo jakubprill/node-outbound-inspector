@@ -4,6 +4,16 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/), wersj
 
 ## [Unreleased]
 
+### Zmienione (niezgodne): nazwy aplikacji bez scope npm (issue #8)
+- Nazwa wyświetlana bez scope: `@acme/web` → `web` (status, wiersze zapytań, klucze analizy, `chrome://inspect`). Gdy dwie aplikacje miałyby tę samą krótką nazwę (`@a/web`, `@b/web`), obie dostają pełne nazwy — także w już zebranych rekordach, niezależnie od kolejności startu. `APP_NAME_STRIP_SCOPE=0` przywraca pełne nazwy.
+- Aplikacja pod [portless](https://github.com/vercel-labs/portless) nazywa się jak w portless (`PORTLESS_URL`: `http://web.localhost:1355` → `web`).
+- Filtr `app` przyjmuje nazwę wyświetlaną, pełną nazwę pakietu, nazwę bez scope i port inspektora; `APP_NAMES` zwykle nie jest już potrzebne.
+
+### Dodane
+- **Programowe API huba (issue #9):** `import { startHub } from 'node-outbound-inspector/hub'`. Statusy `listening` / `already-running` / `port-taken` (z `holder`) zamiast `process.exit`, `close()` bezpieczne przy każdym statusie, bez obsługi sygnałów. Działa także pod Bunem (sprawdzone na 1.4.4: wykrywanie, nazwy, przepięcie DevTools). Typy w `src/hub/api.d.ts`; `package.json` ma `exports` (`./hub`, `./package.json`). `bin/outbound-hub.mjs` to cienka nakładka na API.
+- `outbound-next` ostrzega przed `--inspect` bez portu (9229: port huba, poza zakresem kolektora, kolizja w monorepo, np. `portless -- --inspect`).
+- README i `llms.txt`: sekcja o portless z wynikami testu (Next 16.4, portless 0.18.1); `docs/portless.md`, `docs/staging-built-app.md`.
+
 ## [0.6.0] — 2026-11-20
 
 ### Zmienione (niezgodne): mniej tokenów

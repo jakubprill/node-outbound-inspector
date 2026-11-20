@@ -24,7 +24,7 @@ test('odrzucone połączenie: status nigdy nie jest "FAILED: " bez opisu, szczeg
     const [timeout] = (await m.call('list_server_requests', { url_contains: '/slow' })).requests;
     assert.equal(timeout.status, 'FAILED: The operation was aborted due to timeout');
     assert.equal((await m.call('get_server_request', { id: timeout.id })).error_kind, 'timeout');
-    const { errors } = (await m.call('analyze_server_timeline'))['@acme/web'];
+    const { errors } = (await m.call('analyze_server_timeline'))['web'];
     assert.equal(errors.length, 2);
     assert.ok(errors.every(e => e.status !== 'FAILED: '), JSON.stringify(errors));
   }));
@@ -34,7 +34,7 @@ test('eksport OTLP na :4318 domyślnie pomijany: brak w liście i błędach, wid
     await sc.hit(sc.apps[0], '/otel'); await sleep(300);
     const rows = (await m.call('list_server_requests')).requests;
     assert.deepEqual(rows.map(r => new URL(r.url).pathname), ['/user'], 'zostaje tylko zwykłe zapytanie');
-    assert.deepEqual((await m.call('analyze_server_timeline'))['@acme/web'].errors, []);
+    assert.deepEqual((await m.call('analyze_server_timeline'))['web'].errors, []);
     const s = await m.call('inspector_status');
     assert.ok(s.ignored_otlp.includes('*:4318/v1/traces'));
     assert.equal(s.ignored_requests_total.otlp, 2, 'fetch i node:http');
@@ -43,7 +43,7 @@ test('eksport OTLP na :4318 domyślnie pomijany: brak w liście i błędach, wid
 test('OUTBOUND_IGNORE_OTLP=0: eksport OTLP widoczny jako błąd', () =>
   withApp(app(), { OUTBOUND_IGNORE_OTLP: '0' }, async (sc, m) => {
     await sc.hit(sc.apps[0], '/otel'); await sleep(300);
-    const { errors } = (await m.call('analyze_server_timeline'))['@acme/web'];
+    const { errors } = (await m.call('analyze_server_timeline'))['web'];
     assert.deepEqual(errors.map(e => new URL(e.url).pathname).sort(), ['/v1/metrics', '/v1/traces']);
     const s = await m.call('inspector_status');
     assert.deepEqual(s.ignored_otlp, []);

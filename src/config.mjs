@@ -21,6 +21,8 @@ export function loadConfig({ env = {} } = {}) {
     // bez 9229: to domyślny port zwykłego `node --inspect` (i port outbound-hub), nie aplikacji pod narzędziem (audyt B-01)
     ports: Object.freeze(parsePorts(env.INSPECTOR_PORTS || '9230-9249')),
     appNames: Object.freeze(parseAppNames(env.APP_NAMES)),
+    // nazwy pakietów bez scope npm: @acme/web → web (issue #8); APP_NAME_STRIP_SCOPE=0 przywraca pełne nazwy
+    stripScope: env.APP_NAME_STRIP_SCOPE !== '0',
     ignoreHosts: Object.freeze((env.IGNORE_HOSTS ?? 'registry.npmjs.org').split(',').filter(Boolean)),
     // eksport OpenTelemetry (OTLP, np. @vercel/otel → localhost:4318/v1/traces) to szum, gdy lokalnie nie ma kolektora
     ignoreOtlp: env.OUTBOUND_IGNORE_OTLP !== '0',

@@ -40,7 +40,7 @@ export function applyNetworkEvent(store, session, method, p, { ignoreHosts, insp
     const reason = ignoreReason(p.request.url, { ignoreHosts, inspectorPorts, ignoreOtlp });
     if (reason) return [{ type: 'ignored', reason }];
     store.add({
-      key, processId: session.processId, app: session.app, port: session.port, pid: session.pid, requestId: p.requestId,
+      key, processId: session.processId, app: session.app, appAliases: session.appAliases ?? [], port: session.port, pid: session.pid, requestId: p.requestId,
       method: cut(p.request.method, 16), url: redact.url(cut(p.request.url, FIELD_LIMITS.url)), requestHeaders: redact.headers(capHeaders(p.request.headers)),
       wallStart: normalizeWallTime(p.wallTime, nowMs), tsStart: p.timestamp,
       origin: userFrames(p.initiator && typeof p.initiator === 'object' ? p.initiator : {}, { libraryPaths }),

@@ -7,7 +7,8 @@ import net from 'node:net';
 import { isIP } from 'node:net';
 import { listTargets, validTarget, DISCOVERY_LIMITS } from '../discovery.mjs';
 import { connectCdp } from '../cdp-client.mjs';
-import { IDENTITY_EXPRESSION, readPackageName, resolveAppName } from '../session.mjs';
+import { IDENTITY_EXPRESSION, identityOf } from '../session.mjs';
+import { appIdentity, assignNames } from '../names.mjs';
 
 export const HUB_MARKER = 'node-outbound-inspector-hub';
 
@@ -37,23 +38,23 @@ export function rewriteTarget(t, { port, name, hubHost }) {
 }
 
 /**
- * @param {{ host?: string, port: number, ports: readonly number[], appNames?: Record<string, string>,
+ * @param {{ host?: string, port: number, ports: readonly number[], appNames?: Record<string, string>, stripScope?: boolean,
  *   scanIntervalMs?: number, listTimeoutMs?: number, identify?: boolean, version?: string, log?: (m: string) => void }} opts
  */
-export function createHub({ host = '127.0.0.1', port, ports, appNames = {}, scanIntervalMs = 1500, listTimeoutMs = 500, identify = true, version = '0', log = () => {} }) {
+export function createHub({ host = '127.0.0.1', port, ports, appNames = {}, stripScope = true, scanIntervalMs = 1500, listTimeoutMs = 500, identify = true, version = '0', log = () => {} }) {
   const scanned = ports.filter(p => p !== port);
   /** port → { targets, name } */
   const apps = new Map();
-  /** webSocketDebuggerUrl → nazwa (tożsamość ustalana raz na proces) */
-  const names = new Map();
+  /** webSocketDebuggerUrl → tożsamość nazwy (ustalana raz na proces) */
+  const identities = new Map();
   let timer = null;
 
-  /** Nazwa aplikacji jak w kolektorze: APP_NAMES → npm_package_name → package.json w cwd → katalog → port. */
+  /** Tożsamość nazwy jak w kolektorze: APP_NAMES → portless → pakiet (bez scope) → katalog → port. */
   function identifyTarget(t, p) {
-    const fallback = resolveAppName({ port: p, appNames });
+    const fallback = appIdentity({ port: p, appNames }, { stripScope });
     if (appNames[p] || !identify) return Promise.resolve(fallback);
     return new Promise(resolve => {
-      const done = name => { clearTimeout(timeout); try { cdp.close(); } catch {} resolve(name); };
+      const done = id => { clearTimeout(timeout); try { cdp.close(); } catch {} resolve(id); };
       const timeout = setTimeout(() => done(fallback), 2000);
       const cdp = connectCdp(t.webSocketDebuggerUrl, {
         timeoutMs: 1500,
@@ -62,11 +63,18 @@ export function createHub({ host = '127.0.0.1', port, ports, appNames = {}, scan
           const res = await cdp.send('Runtime.evaluate', { expression: IDENTITY_EXPRESSION, returnByValue: true });
           let info = {};
           try { info = JSON.parse(res?.result?.value ?? '{}'); } catch {}
-          done(resolveAppName({ port: p, appNames, pkg: info.pkg, pkgName: await readPackageName(info.cwd), cwd: info.cwd }));
+          done(await identityOf(info, { port: p, appNames, stripScope }));
         },
         onClose: () => done(fallback),
       });
     });
+  }
+
+  /** Nazwy wyświetlane: krótkie, przy kolizji pełne (issue #8) — liczone dla celów widocznych teraz. */
+  function displayNames() {
+    const urls = [...apps.values()].flatMap(a => a.targets.map(t => t.webSocketDebuggerUrl)).filter(u => identities.has(u));
+    const names = assignNames(urls.map(u => identities.get(u)));
+    return new Map(urls.map((u, i) => [u, names[i]]));
   }
 
   async function scanPort(p) {
@@ -76,19 +84,22 @@ export function createHub({ host = '127.0.0.1', port, ports, appNames = {}, scan
       .slice(0, DISCOVERY_LIMITS.targetsPerPort);
     if (!targets.length) { if (apps.delete(p)) log(`gone port=${p}`); return; }
     for (const t of targets) {
-      if (!names.has(t.webSocketDebuggerUrl)) {
-        names.set(t.webSocketDebuggerUrl, `port-${p}`);
-        names.set(t.webSocketDebuggerUrl, await identifyTarget(t, p));
-        log(`found app="${names.get(t.webSocketDebuggerUrl)}" port=${p}`);
+      if (!identities.has(t.webSocketDebuggerUrl)) {
+        identities.set(t.webSocketDebuggerUrl, appIdentity({ port: p }));
+        identities.set(t.webSocketDebuggerUrl, await identifyTarget(t, p));
+        log(`found app="${identities.get(t.webSocketDebuggerUrl).short}" port=${p}`);
       }
     }
-    apps.set(p, { targets, name: names.get(targets[0].webSocketDebuggerUrl) });
+    apps.set(p, { targets });
   }
   const scan = () => Promise.all(scanned.map(scanPort));
 
   /** Lista celów dla chrome://inspect (Host z żądania, żeby adresy pasowały do tego, czym Chrome się łączył). */
-  const list = hubHost => [...apps].sort(([a], [b]) => a - b)
-    .flatMap(([p, a]) => a.targets.map(t => rewriteTarget(t, { port: p, name: names.get(t.webSocketDebuggerUrl) ?? a.name, hubHost })));
+  const list = hubHost => {
+    const names = displayNames();
+    return [...apps].sort(([a], [b]) => a - b)
+      .flatMap(([p, a]) => a.targets.map(t => rewriteTarget(t, { port: p, name: names.get(t.webSocketDebuggerUrl) ?? `port-${p}`, hubHost })));
+  };
 
   // jak inspektor Node: Content-Length i bez keep-alive — prosty klient HTTP w chrome://inspect nie czyta odpowiedzi chunked
   const json = (res, code, body) => {
@@ -115,7 +126,7 @@ export function createHub({ host = '127.0.0.1', port, ports, appNames = {}, scan
     const p = m && Number(m[1]);
     const target = m && apps.get(p)?.targets.find(t => t.id === m[2]);
     if (!target) return reject(404, 'Not Found');
-    log(`devtools → app="${names.get(target.webSocketDebuggerUrl) ?? `port-${p}`}" port=${p}`);
+    log(`devtools → app="${displayNames().get(target.webSocketDebuggerUrl) ?? `port-${p}`}" port=${p}`);
     const upstream = net.connect(p, '127.0.0.1', () => {
       const headers = Object.entries(req.headers).map(([k, v]) => `${k}: ${k === 'host' ? `127.0.0.1:${p}` : v}`);
       upstream.write(`GET /${m[2]} HTTP/1.1\r\n${headers.join('\r\n')}\r\n\r\n`);
@@ -141,7 +152,10 @@ export function createHub({ host = '127.0.0.1', port, ports, appNames = {}, scan
       });
     },
     scan,
-    apps: () => [...apps].map(([p, a]) => ({ port: p, app: a.name, targets: a.targets.length })),
+    apps: () => {
+      const names = displayNames();
+      return [...apps].map(([p, a]) => ({ port: p, app: names.get(a.targets[0].webSocketDebuggerUrl) ?? `port-${p}`, targets: a.targets.length }));
+    },
     close() { clearInterval(timer); server.closeAllConnections?.(); return new Promise(r => server.close(() => r())); },
   };
 }

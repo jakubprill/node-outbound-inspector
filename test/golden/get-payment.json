@@ -1,5 +1,5 @@
 {
-  "app": "@acme/web",
+  "app": "web",
   "body": "<node-dependent>",
   "body_bytes": "<node-dependent>",
   "body_reason": "<node-dependent>",

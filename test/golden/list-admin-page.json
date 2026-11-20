@@ -2,7 +2,7 @@
   "next_since_id": "<num>",
   "requests": [
     {
-      "app": "@acme/admin",
+      "app": "admin",
       "duration_ms": "<num>",
       "id": "<num>",
       "method": "GET",
@@ -12,7 +12,7 @@
       "url": "http://127.0.0.1:<port>/offers?ms=150"
     },
     {
-      "app": "@acme/admin",
+      "app": "admin",
       "duration_ms": "<num>",
       "id": "<num>",
       "method": "GET",
@@ -22,7 +22,7 @@
       "url": "http://127.0.0.1:<port>/orders?ms=150"
     },
     {
-      "app": "@acme/admin",
+      "app": "admin",
       "duration_ms": "<num>",
       "id": "<num>",
       "method": "GET",

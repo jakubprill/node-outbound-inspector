@@ -68,8 +68,8 @@ test('hub: lista z nazwami, przepięcie DevTools, Host, tylko znalezione procesy
     await hub.listen();
     let list = [];
     for (let i = 0; i < 50 && list.length < 2; i++) { await sleep(100); list = JSON.parse((await rawGet(hubPort, '/json/list')).body); }
-    assert.deepEqual(list.map(t => t.title).sort(), ['@acme/admin', '@acme/web'], 'nazwy z package.json, jak w kolektorze');
-    const web = list.find(t => t.title === '@acme/web');
+    assert.deepEqual(list.map(t => t.title).sort(), ['admin', 'web'], 'nazwy z package.json, jak w kolektorze');
+    const web = list.find(t => t.title === 'web');
     assert.match(web.webSocketDebuggerUrl, new RegExp(`^ws://127\\.0\\.0\\.1:${hubPort}/${apps[0].inspect}/[\\w-]+$`));
     assert.match(web.devtoolsFrontendUrl, new RegExp(`ws=127\\.0\\.0\\.1:${hubPort}/${apps[0].inspect}/`));
     assert.equal(JSON.parse((await rawGet(hubPort, '/json')).body).length, 2, '/json to samo co /json/list');
@@ -77,7 +77,7 @@ test('hub: lista z nazwami, przepięcie DevTools, Host, tylko znalezione procesy
 
     // DevTools przez hub trafia do właściwego procesu
     assert.match(await evaluate(web.webSocketDebuggerUrl, 'process.cwd()'), /apps[\\/]web$/);
-    const admin = list.find(t => t.title === '@acme/admin');
+    const admin = list.find(t => t.title === 'admin');
     assert.match(await evaluate(admin.webSocketDebuggerUrl, 'process.cwd()'), /apps[\\/]admin$/);
 
     // DNS rebinding: obca nazwa w Host → 403, dla listy i dla Upgrade
@@ -94,12 +94,12 @@ test('hub: lista z nazwami, przepięcie DevTools, Host, tylko znalezione procesy
     await m.waitForApps(2);
     await sleep(1800); // jeden pełny cykl skanowania więcej
     const status = await m.call('inspector_status');
-    assert.deepEqual(status.apps.map(a => a.app).sort(), ['@acme/admin', '@acme/web']);
+    assert.deepEqual(status.apps.map(a => a.app).sort(), ['admin', 'web']);
 
     // proces znika z listy po zakończeniu
     sc.apps[1].proc.kill();
     for (let i = 0; i < 50 && list.length > 1; i++) { await sleep(100); list = JSON.parse((await rawGet(hubPort, '/json/list')).body); }
-    assert.deepEqual(list.map(t => t.title), ['@acme/web']);
+    assert.deepEqual(list.map(t => t.title), ['web']);
   } finally { m?.close(); await hub.close(); sc.stop(); }
 });
 

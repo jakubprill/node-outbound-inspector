@@ -1,6 +1,6 @@
 {
   "apps_with_traffic": [
-    "@acme/web"
+    "web"
   ],
   "summary": "No requests in the selected range."
 }

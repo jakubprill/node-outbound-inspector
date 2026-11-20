@@ -39,6 +39,21 @@ A custom script that spawns the apps (e.g. started with `bun run`): change the s
 
 `outbound-hub` (bin of this package) listens on `127.0.0.1:9229`, the address `chrome://inspect` checks by default, and lists every app found on ports 9230–9249 by name, so developers do not add ports in Chrome. Start it next to the apps in the dev script (a second instance exits quietly). Requirement: no app may use inspector port 9229. The MCP server ignores the hub's proxied targets.
 
+From a JS dev script (Node ≥ 24 or Bun) start it in-process instead of spawning the binary:
+
+```js
+import { startHub } from 'node-outbound-inspector/hub';
+const hub = await startHub({ log: console.error }); // status: 'listening' | 'already-running' | 'port-taken'
+// on exit:
+await hub.close();
+```
+
+`startHub` never calls `process.exit` and installs no signal handlers. Options: `port` (9229), `ports` (`"9230-9249"` or array), `appNames`, `stripScope` (true), `log`.
+
+## Optional: portless
+
+With [portless](https://github.com/vercel-labs/portless) (named `*.localhost` URLs), keep everything above and change only the app script: no `--port` (Next reads `PORT` from portless), keep a unique `--inspect=<port>` per app, e.g. `"dev:portless": "outbound-next dev --inspect=9231"`, start with `portless --script dev:portless` from the monorepo root. Never `portless -- --inspect` or `--inspect` without a port: every app gets 9229, one wins, the rest have no inspector. Tested working with Next 16.4 and portless 0.18.1; apps are named as in portless (`web`).
+
 ## Integration: connect the MCP server
 
 ```
@@ -48,10 +63,10 @@ claude mcp add outbound -- node /path/to/node-outbound-inspector/src/outbound-mc
 Or in the MCP client config:
 
 ```json
-{ "mcpServers": { "outbound": { "command": "node", "args": ["/path/to/node-outbound-inspector/src/outbound-mcp.mjs"], "env": { "APP_NAMES": "9231=web,9232=admin" } } } }
+{ "mcpServers": { "outbound": { "command": "node", "args": ["/path/to/node-outbound-inspector/src/outbound-mcp.mjs"], "env": {} } } }
 ```
 
-The collector rescans the ports periodically, so it also finds processes started after it. `APP_NAMES` is optional; without it the name comes from the process's `package.json`.
+The collector rescans the ports periodically, so it also finds processes started after it. `APP_NAMES` is optional and usually unnecessary: the name comes from portless (`PORTLESS_URL`) or the package name without the npm scope (`@acme/web` → `web`; colliding short names keep full names; `APP_NAME_STRIP_SCOPE=0` disables). The `app` filter accepts the shown name, the full package name and the inspector port.
 
 ## Verify the integration
 

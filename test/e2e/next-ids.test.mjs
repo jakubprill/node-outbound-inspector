@@ -21,7 +21,7 @@ test('next_request_id i next_html_request_id z nagłówków, filtr, http_ports',
     assert.ok(requests.every(r => r.next_request_id === 'rq-123' && r.page === 'GET /seq'));
     assert.equal((await m.call('list_server_requests', { next_html_request_id: 'html-9' })).requests.length, 3);
 
-    const a = (await m.call('analyze_server_timeline', { app: '@acme/web', settle_ms: 200 }))['@acme/web'];
+    const a = (await m.call('analyze_server_timeline', { app: '@acme/web', settle_ms: 200 }))['web'];
     const seq = a.pages.find(p => p.page === 'GET /seq');
     assert.equal(seq.next_request_id, 'rq-123');
     assert.equal(seq.next_html_request_id, 'html-9');

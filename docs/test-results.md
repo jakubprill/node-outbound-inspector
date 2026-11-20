@@ -97,3 +97,9 @@ Ten sam URL (`/user`) wołany w tej samej chwili przez obie aplikacje i przez dw
 - Wymóg `chrome://inspect` znaleziony testem: odpowiedź z `Content-Length` (bez `chunked`) i `Browser: node.js/…` w `/json/version`; bez tego Chrome odpytuje hub, ale nie pokazuje celów.
 - Pełny zestaw: 182 testy, 181 zielonych, 1 `todo` (wada 1 → M4).
 
+
+## 9. portless, nazwy bez scope, API huba (2026-11-20)
+
+- **portless 0.18.1 + Next 16.4 na Macu** (monorepo, dwie aplikacje, `portless --script dev:portless`): hub i kolektor widzą obie aplikacje, przypisanie do stron i analiza bez zmian, `http_ports` = porty od portless, wywołania po nazwie `*.localhost` zapisane. `--inspect` bez portu: przy dwóch aplikacjach druga bez inspektora (`address already in use`). Szczegóły: [portless.md](portless.md).
+- **Nazwy (issue #8):** testy jednostkowe `names.test.mjs` (kolejność źródeł, scope, portless, kolizje, filtr) i e2e `names.test.mjs` (kolizja `@acme/web`/`@other/web` w statusie, rekordach i hubie; nazwa z `PORTLESS_URL`; `APP_NAME_STRIP_SCOPE=0`).
+- **API huba (issue #9):** e2e `hub-api.test.mjs` — import przez `exports`, `listening` / `already-running` / `port-taken` z `holder`, idempotentne `close()`, opcje jako tekst; ten sam hub uruchomiony pod **Bun 1.4.4**: wykrycie aplikacji, nazwa i `Runtime.evaluate` przez hub (test pomijany, gdy brak `bun`).

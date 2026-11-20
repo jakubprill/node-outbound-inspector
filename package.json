@@ -11,6 +11,13 @@
   "homepage": "https://github.com/jakubprill/node-outbound-inspector#readme",
   "private": true,
   "type": "module",
+  "exports": {
+    "./hub": {
+      "types": "./src/hub/api.d.ts",
+      "default": "./src/hub/api.mjs"
+    },
+    "./package.json": "./package.json"
+  },
   "bin": {
     "outbound-mcp": "src/outbound-mcp.mjs",
     "outbound-next": "bin/outbound-next.mjs",

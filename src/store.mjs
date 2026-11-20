@@ -23,7 +23,8 @@ export function createStore({ maxRequests }) {
   const requests = new Map();
   let seq = 0;
 
-  const matchesApp = (r, app) => r.app === app || String(r.port) === String(app);
+  // nazwa wyświetlana, port inspektora albo alias: pełna nazwa pakietu i nazwa bez scope (issue #8)
+  const matchesApp = (r, app) => r.app === app || String(r.port) === String(app) || (r.appAliases?.includes(app) ?? false);
 
   return {
     /** Dodaje rekord (bez `id`), nadaje `id`, usuwa najstarszy po przekroczeniu limitu. */

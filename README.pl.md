@@ -61,6 +61,15 @@ Uruchom `outbound-hub` obok aplikacji (np. w skrypcie dev). Słucha na `127.0.0.
 
 Hub odpowiada tylko na żądania z nagłówkiem `Host` będącym adresem IP albo `localhost` (ochrona przed DNS rebinding, jak w samym Node) i przekazuje połączenia DevTools tylko do aplikacji, które sam znalazł na skanowanych portach. Zostaw mu port 9229: aplikacjom daj porty inspektora od 9230. `OUTBOUND_HUB_PORT` zmienia port, a `INSPECTOR_PORTS` i `APP_NAMES` działają jak w serwerze MCP.
 
+Z własnego skryptu dev (Node ≥ 24 albo Bun) hub da się uruchomić w tym samym procesie, bez procesu potomnego:
+```js
+import { startHub } from 'node-outbound-inspector/hub';
+const hub = await startHub({ log: console.error }); // port, ports, appNames, stripScope: opcjonalne, domyślne jak w binarce
+// hub.status: 'listening' | 'already-running' (port obsługuje inny hub) | 'port-taken' (kto: hub.holder)
+await hub.close(); // bezpieczne przy każdym statusie; bez process.exit i bez obsługi sygnałów
+```
+Binarka to cienka nakładka na to API. Typy: [`src/hub/api.d.ts`](src/hub/api.d.ts).
+
 Bez huba: **Open dedicated DevTools for Node** → **Connection** → dopisz `localhost:<port>` dla każdej aplikacji.
 
 ### 2b. Podłącz agenta (MCP)
@@ -96,7 +105,8 @@ Serwer obsługuje obie ery MCP: z `initialize` (2024-11-05 do 2025-06-18) i bezs
 | Zmienna | Domyślnie | Opis |
 |---|---|---|
 | `INSPECTOR_PORTS` | `9230-9249` | Porty/zakresy inspektorów, np. `9231,9241`. 9229 (zwykłe `node --inspect`, `outbound-hub`) celowo pominięty |
-| `APP_NAMES` | — | Nazwy po porcie, np. `9231=web,9241=admin`. Domyślnie nazwa pochodzi z `npm_package_name`, potem z `name` w `package.json` w katalogu procesu, potem z nazwy katalogu. |
+| `APP_NAMES` | — | Nazwy po porcie, np. `9231=web,9241=admin`. Zwykle niepotrzebne: domyślnie nazwa pochodzi z portless (`PORTLESS_URL`), potem z `npm_package_name`, potem z `name` w `package.json` w katalogu procesu (zawsze bez scope npm: `@acme/web` → `web`), potem z nazwy katalogu. Gdy dwie aplikacje dostałyby tę samą krótką nazwę (`@a/web`, `@b/web`), obie zachowują pełną. Filtr `app` przyjmuje nazwę wyświetlaną, pełną nazwę pakietu, nazwę bez scope i port inspektora. |
+| `APP_NAME_STRIP_SCOPE` | `1` | `0` pokazuje pełne nazwy pakietów (`@acme/web`), jak przed 0.7.0 |
 | `PAGE_CORRELATION` | `1` | `0` wyłącza wstrzykiwanie kodu korelującego zapytania ze stronami |
 | `OUTBOUND_REDACT` | `1` | `0` wyłącza redakcję sekretów (ostrzeżenie w `inspector_status`) |
 | `OUTBOUND_REDACT_HEADERS` | — | Dodatkowe nagłówki do redakcji, np. `x-acme-token,x-tenant-secret` |
@@ -153,6 +163,26 @@ Pełne porównanie: [docs/nextjs-mcp-comparison.md](docs/nextjs-mcp-comparison.m
 - `inspector_status` podaje `http_ports` każdej aplikacji, czyli port do `nextjs_call`. `next-devtools-mcp` sam znalazł obie aplikacje monorepo uruchomione przez `outbound-next … --inspect=…` (Next 16.4, macOS); jeśli którejś nie znajdzie, podaj port w `nextjs_index`.
 - Żądania do wewnętrznych endpointów dev Next (`/_next/mcp`, HMR, `/__nextjs_*`) nie są traktowane jak żądania stron.
 - Zapytanie, którego tu brakuje, a które `get_request_insights` pokazuje ze statusem cache `hit` albo `hmr`, zostało obsłużone z cache Next.
+
+## Z portless
+
+[portless](https://github.com/vercel-labs/portless) zastępuje porty aplikacji nazwanymi adresami (`https://web.localhost`). Działa z tym narzędziem bez zmian: portless zarządza portem **HTTP** aplikacji, my używamy portu **inspektora** i żaden nie przechodzi przez drugi. Test z 2026-11-20 (Next 16.4, portless 0.18.1 bez TLS, monorepo npm workspaces z dwiema aplikacjami uruchomionymi z korzenia przez `portless --script dev:portless`):
+
+- `outbound-hub` i serwer MCP znalazły obie aplikacje, inspekcja sieci i przypisanie do stron działały, analiza dała te same werdykty co bez portless.
+- `http_ports` pokazuje losowy port nadany przez portless (4000–4999), zgodny z `portless list`.
+- Wywołania serwera do innych aplikacji po nazwie (`http://api.localhost:1355/…`) są zapisane z tym adresem; `*.localhost` rozwiązuje się w Node na macOS.
+- Aplikacja nazywa się jak w portless (`web`, z `PORTLESS_URL`); filtry dalej przyjmują nazwę pakietu.
+
+```json
+"portless": { "name": "web" },
+"scripts": { "dev:portless": "outbound-next dev --inspect=9231" }
+```
+
+- Usuń `--port` ze skryptu: Next czyta `PORT` od portless.
+- Zostaw **osobny port inspektora dla każdej aplikacji**. `portless -- --inspect` (albo `next dev --inspect` bez portu) daje każdej aplikacji 9229: wygrywa jedna, reszta działa bez inspektora, a 9229 to port huba. `outbound-next` o tym ostrzega.
+- Trybu HTTPS (domyślnego w portless) nie testowaliśmy; nie dotyka inspektora, a dla wywołań serwera do `https://*.localhost` portless ustawia `NODE_EXTRA_CA_CERTS`.
+
+Szczegóły: [docs/portless.md](docs/portless.md).
 
 ## Model bezpieczeństwa
 

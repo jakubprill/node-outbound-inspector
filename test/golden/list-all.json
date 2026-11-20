@@ -2,7 +2,7 @@
   "next_since_id": "<num>",
   "requests": [
     {
-      "app": "@acme/admin",
+      "app": "admin",
       "duration_ms": "<num>",
       "id": "<num>",
       "method": "GET",
@@ -12,7 +12,7 @@
       "url": "http://127.0.0.1:<port>/legacy?ms=30"
     },
     {
-      "app": "@acme/admin",
+      "app": "admin",
       "duration_ms": "<num>",
       "id": "<num>",
       "method": "GET",
@@ -22,7 +22,7 @@
       "url": "http://127.0.0.1:<port>/audit?ms=150"
     },
     {
-      "app": "@acme/admin",
+      "app": "admin",
       "duration_ms": "<num>",
       "id": "<num>",
       "method": "GET",
@@ -32,7 +32,7 @@
       "url": "http://127.0.0.1:<port>/reports?ms=150"
     },
     {
-      "app": "@acme/admin",
+      "app": "admin",
       "duration_ms": "<num>",
       "id": "<num>",
       "method": "GET",
@@ -42,7 +42,7 @@
       "url": "http://127.0.0.1:<port>/user?ms=150"
     },
     {
-      "app": "@acme/admin",
+      "app": "admin",
       "duration_ms": "<num>",
       "id": "<num>",
       "method": "GET",
@@ -52,7 +52,7 @@
       "url": "http://127.0.0.1:<port>/offers?ms=150"
     },
     {
-      "app": "@acme/admin",
+      "app": "admin",
       "duration_ms": "<num>",
       "id": "<num>",
       "method": "GET",
@@ -62,7 +62,7 @@
       "url": "http://127.0.0.1:<port>/orders?ms=150"
     },
     {
-      "app": "@acme/admin",
+      "app": "admin",
       "duration_ms": "<num>",
       "id": "<num>",
       "method": "GET",
@@ -72,7 +72,7 @@
       "url": "http://127.0.0.1:<port>/user?ms=150"
     },
     {
-      "app": "@acme/web",
+      "app": "web",
       "duration_ms": "<num>",
       "id": "<num>",
       "method": "GET",
@@ -82,7 +82,7 @@
       "url": "http://127.0.0.1:<port>/offers?ms=150"
     },
     {
-      "app": "@acme/web",
+      "app": "web",
       "duration_ms": "<num>",
       "id": "<num>",
       "method": "GET",
@@ -92,7 +92,7 @@
       "url": "http://127.0.0.1:<port>/orders?ms=150"
     },
     {
-      "app": "@acme/web",
+      "app": "web",
       "duration_ms": "<num>",
       "id": "<num>",
       "method": "GET",
@@ -102,7 +102,7 @@
       "url": "http://127.0.0.1:<port>/user?ms=150"
     },
     {
-      "app": "@acme/web",
+      "app": "web",
       "duration_ms": "<num>",
       "id": "<num>",
       "method": "POST",

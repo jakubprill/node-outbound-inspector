@@ -22,10 +22,10 @@ test('settle_ms: analiza w trakcie strony z trzema zapytaniami po 150 ms zwraca 
 
     assert.equal(res.settle.settled, true, JSON.stringify(res.settle));
     assert.ok(res.settle.waited_ms >= 300, `czekał ${res.settle.waited_ms} ms`);
-    const [seq] = res['@acme/web'].pages;
-    assert.equal(seq.requests, 3, JSON.stringify(res['@acme/web']));
+    const [seq] = res['web'].pages;
+    assert.equal(seq.requests, 3, JSON.stringify(res['web']));
     assert.equal(seq.verdict_code, 'sequential');
-    assert.equal(res['@acme/web'].in_flight, 0);
+    assert.equal(res['web'].in_flight, 0);
 
     const quiet = await m.call('analyze_server_timeline', { app: '@acme/web', settle_ms: 100 });
     assert.ok(quiet.settle.settled && quiet.settle.waited_ms < 1000, 'cisza w ruchu: bez zbędnego czekania');

@@ -16,7 +16,7 @@ test('POST /orders → GET /orders/status?orderId=…: zależne; para niezależn
     for (const p of ['/order', '/order-full', '/indep']) await sc.hit(sc.apps[0], p);
     await sleep(500);
     const res = await m.call('analyze_server_timeline', { app: '@acme/web', detail: 'full' });
-    const page = p => res['@acme/web'].by_page_request.find(x => x.page === `GET ${p}`);
+    const page = p => res['web'].by_page_request.find(x => x.page === `GET ${p}`);
 
     const order = page('/order'), [dep] = order.sequential_chains;
     assert.equal(order.verdict_code, 'sequential', 'werdykt opisuje oś czasu — ta się nie zmienia');

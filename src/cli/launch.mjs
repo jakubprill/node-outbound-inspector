@@ -44,8 +44,13 @@ export function buildNodeArgs({ cli, args, execArgv = [] }) {
 export function inspectWarnings(args) {
   const values = inspectorValues(args, /^--inspect(?:-brk|-wait)?(?:=(.*))?$/);
   if (!values.length) return ['No --inspect=<port> in the arguments: the process will have no inspector, so network inspection does nothing. Add e.g. --inspect=9231 (each app in a monorepo needs its own port).'];
-  return remoteInspectHosts(args).map(host =>
+  const warnings = remoteInspectHosts(args).map(host =>
     `The inspector on ${host} is reachable from outside this machine and gives full control over the process. Locally, use just the port (--inspect=<port> → 127.0.0.1).`);
+  // --inspect bez portu → 9229: port outbound-hub, poza domyślnym zakresem kolektora; w monorepo (także
+  // `portless -- --inspect`) wszystkie aplikacje chcą 9229 i wygrywa jedna, reszta działa bez inspektora
+  if (values.some(v => !/(^|:)\d+$/.test(v))) warnings.push('--inspect without a port uses 9229: that is the outbound-hub port and outside the collector\'s default range (9230-9249), '
+    + 'and in a monorepo every app would want it (only one gets it, the rest run without an inspector). Give each app its own port, e.g. --inspect=9231.');
+  return warnings;
 }
 
 const INSPECT_ANY = /^--(?:inspect(?:-brk|-wait)?|inspect-port|debug-port)(?:=(.*))?$/;

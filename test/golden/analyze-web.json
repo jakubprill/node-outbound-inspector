@@ -1,8 +1,9 @@
 {
-  "@acme/web": {
+  "hint": "Summary: one entry per page (repeated visits grouped), numbers and codes only. Pass page_request_id for one page request (timeline, waterfall steps, hints, data dependencies) or detail: \"full\" for everything.",
+  "web": {
     "errors": [
       {
-        "app": "@acme/web",
+        "app": "web",
         "duration_ms": "<num>",
         "id": "<num>",
         "method": "POST",
@@ -36,6 +37,5 @@
     ],
     "total_requests": 4,
     "unattributed": []
-  },
-  "hint": "Summary: one entry per page (repeated visits grouped), numbers and codes only. Pass page_request_id for one page request (timeline, waterfall steps, hints, data dependencies) or detail: \"full\" for everything."
+  }
 }

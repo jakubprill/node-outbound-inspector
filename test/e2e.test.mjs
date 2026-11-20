@@ -34,7 +34,7 @@ after(() => { mcp?.close(); procs.forEach(p => p.kill()); });
 
 test('rozpoznaje obie aplikacje po package.json w cwd', async () => {
   const s = await mcp.call('inspector_status');
-  assert.deepEqual(s.apps.map(a => a.app).sort(), ['@acme/admin', '@acme/web']);
+  assert.deepEqual(s.apps.map(a => a.app).sort(), ['admin', 'web']);
   assert.ok(s.apps.every(a => a.network_inspection && a.page_correlation));
 });
 
@@ -46,11 +46,11 @@ test('przypisuje zapytania do właściwej aplikacji i strony, gdy wszystko dziej
   await sleep(500);
   const reqs = (await mcp.call('list_server_requests', { limit: 100 })).requests;
   const pick = (app, page) => reqs.filter(r => r.app === app && r.page === page).map(r => new URL(r.url).pathname).sort();
-  assert.deepEqual(pick('@acme/web', 'GET /seq'), ['/offers', '/orders', '/user']);
-  assert.deepEqual(pick('@acme/web', 'GET /err'), ['/payments']);
-  assert.deepEqual(pick('@acme/admin', 'GET /par'), ['/audit', '/reports', '/user']);
-  assert.deepEqual(pick('@acme/admin', 'GET /seq'), ['/offers', '/orders', '/user']);
-  assert.deepEqual(pick('@acme/admin', 'GET /http'), ['/legacy'], 'node:http też jest przypisany do strony');
+  assert.deepEqual(pick('web', 'GET /seq'), ['/offers', '/orders', '/user']);
+  assert.deepEqual(pick('web', 'GET /err'), ['/payments']);
+  assert.deepEqual(pick('admin', 'GET /par'), ['/audit', '/reports', '/user']);
+  assert.deepEqual(pick('admin', 'GET /seq'), ['/offers', '/orders', '/user']);
+  assert.deepEqual(pick('admin', 'GET /http'), ['/legacy'], 'node:http też jest przypisany do strony');
   assert.equal(reqs.length, 11, "web: 3 + 1, admin: 3 + 3 + 1");
 });
 
@@ -58,19 +58,19 @@ test('wykrywa waterfall, równoległość i błędy osobno dla każdej strony', 
   const res = await mcp.call('analyze_server_timeline', { detail: 'full' });
   const page = (app, p) => res[app].by_page_request.find(x => x.page === p);
 
-  const webSeq = page('@acme/web', 'GET /seq');
+  const webSeq = page('web', 'GET /seq');
   assert.equal(webSeq.max_concurrency, 1);
   assert.match(webSeq.verdict, /SEQUENTIAL/);
   assert.equal(webSeq.sequential_chains[0].length, 3);
   assert.ok(webSeq.sequential_chains[0].potential_saving_ms > 250, 'oszczędność ok. 2 × 150 ms');
 
-  const adminPar = page('@acme/admin', 'GET /par');
+  const adminPar = page('admin', 'GET /par');
   assert.equal(adminPar.max_concurrency, 3);
   assert.match(adminPar.verdict, /PARALLEL/);
   assert.equal(adminPar.sequential_chains.length, 0);
 
-  assert.deepEqual(res['@acme/web'].errors.map(e => [new URL(e.url).pathname, e.status]), [['/payments', 500]]);
-  assert.equal(res['@acme/admin'].errors.length, 0);
+  assert.deepEqual(res['web'].errors.map(e => [new URL(e.url).pathname, e.status]), [['/payments', 500]]);
+  assert.equal(res['admin'].errors.length, 0);
 });
 
 test('zwraca szczegóły zapytania z nagłówkami', async () => {

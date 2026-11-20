@@ -13,10 +13,19 @@ test('buildNodeArgs: flaga przed plikiem CLI, flagi inspektora launchera odfiltr
 
 test('inspectWarnings: brak inspektora i host spoza loopbacku', () => {
   assert.equal(inspectWarnings(['dev']).length, 1);
-  for (const ok of [['--inspect=9231'], ['--inspect'], ['--inspect=127.0.0.1:9231'], ['--inspect=localhost:1'], ['--inspect=[::1]:9231'], ['--inspect-brk=9231']])
+  for (const ok of [['--inspect=9231'], ['--inspect=127.0.0.1:9231'], ['--inspect=localhost:1'], ['--inspect=[::1]:9231'], ['--inspect-brk=9231']])
     assert.deepEqual(inspectWarnings(['dev', ...ok]), [], ok.join(' '));
   assert.match(inspectWarnings(['dev', '--inspect=0.0.0.0:9231'])[0], /0\.0\.0\.0/);
   assert.match(inspectWarnings(['dev', '--inspect', '10.0.0.5:9231'])[0], /10\.0\.0\.5/);
+});
+
+test('inspectWarnings: --inspect bez portu → 9229 (port huba, kolizja w monorepo, np. portless -- --inspect)', () => {
+  for (const args of [['--inspect'], ['--inspect=127.0.0.1'], ['--inspect-brk'], ['--inspect', '--port', '3000']]) {
+    const w = inspectWarnings(['dev', ...args]);
+    assert.equal(w.length, 1, args.join(' '));
+    assert.match(w[0], /without a port uses 9229/);
+  }
+  assert.equal(inspectWarnings(['dev', '--inspect=0.0.0.0']).length, 2, 'host spoza loopbacku i brak portu');
 });
 
 test('remoteInspectHosts: sam host, --inspect-port, NODE_OPTIONS, IPv6 (audyt B-08)', () => {
@@ -25,7 +34,7 @@ test('remoteInspectHosts: sam host, --inspect-port, NODE_OPTIONS, IPv6 (audyt B-
   assert.deepEqual(remoteInspectHosts(['--inspect=9231', '--inspect-port=0.0.0.0:9231']), ['0.0.0.0']);
   assert.deepEqual(remoteInspectHosts(['dev', '--inspect=[::]:9229']), ['[::]']);
   assert.deepEqual(remoteInspectHosts(['dev', '--inspect=9231'], { NODE_OPTIONS: '--max-old-space-size=4096 --inspect=0.0.0.0:9230' }), ['0.0.0.0']);
-  for (const ok of [['--inspect=9231'], ['--inspect'], ['--inspect=127.0.0.1:9231'], ['--inspect=localhost'], ['--inspect=[::1]:9231'], ['--debug-port=9231']])
+  for (const ok of [['--inspect=9231'], ['--inspect=127.0.0.1:9231'], ['--inspect=localhost'], ['--inspect=[::1]:9231'], ['--debug-port=9231']])
     assert.deepEqual(remoteInspectHosts(ok), [], ok.join(' '));
 });
 
