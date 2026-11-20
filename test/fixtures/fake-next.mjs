@@ -9,7 +9,7 @@ if (arg) {
   const i = v.lastIndexOf(':');
   inspector.open(Number(i >= 0 ? v.slice(i + 1) : v), i >= 0 ? v.slice(0, i) : '127.0.0.1');
 }
-console.log(JSON.stringify({ pid: process.pid, execArgv: process.execArgv, argv: process.argv.slice(2), inspectorUrl: inspector.url() ?? null }));
+console.log(JSON.stringify({ pid: process.pid, execArgv: process.execArgv, argv: process.argv.slice(2), inspectorUrl: inspector.url() ?? null, optIn: process.env.OUTBOUND_INSPECT ?? null }));
 let code = 0, buf = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', d => {

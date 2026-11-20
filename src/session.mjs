@@ -5,10 +5,25 @@ import { connectCdp } from './cdp-client.mjs';
 import { INSTALL_EXPRESSION, DRAIN_EXPRESSION } from './hook/hook.mjs';
 import { NODE_FIXES_EXPRESSION } from './hook/node-fixes.mjs';
 
-export const IDENTITY_EXPRESSION = 'JSON.stringify({ cwd: process.cwd(), pkg: process.env.npm_package_name || null, pid: process.pid, argv: process.argv.slice(1).join(" "), execArgv: process.execArgv, node: process.version })';
+// tylko odczyt; bez argv (mogą w nim być tokeny, audyt B-16); uid i zgoda na podsłuch (audyt B-01)
+export const IDENTITY_EXPRESSION = 'JSON.stringify({ cwd: process.cwd(), pkg: process.env.npm_package_name || null, pid: process.pid, execArgv: process.execArgv, node: process.version, uid: typeof process.getuid === "function" ? process.getuid() : null, optIn: process.env.OUTBOUND_INSPECT === "1" })';
 const NETWORK_FLAG = '--experimental-network-inspection';
 
 export const MIN_NODE_MAJOR = 24;
+
+/**
+ * Czy wolno podsłuchiwać proces (audyt B-01): ten sam użytkownik (gdy system ma uid) i jawna zgoda —
+ * OUTBOUND_INSPECT=1 (ustawia go outbound-next) albo flaga --experimental-network-inspection, którą deweloper
+ * dodaje właśnie po to. Inne procesy z inspektorem (np. zwykłe `node --inspect` innego projektu) są pomijane.
+ * @returns {{ allowed: true } | { allowed: false, reason: 'other_user' | 'no_consent', warning: string }}
+ */
+export function consent({ uid, optIn, execArgv = [] } = {}, ownUid = typeof process.getuid === 'function' ? process.getuid() : null) {
+  if (Number.isInteger(uid) && Number.isInteger(ownUid) && uid !== ownUid) {
+    return { allowed: false, reason: 'other_user', warning: `The process belongs to another user (uid ${uid}): not inspected, no code injected.` };
+  }
+  if (optIn === true || (Array.isArray(execArgv) && execArgv.includes(NETWORK_FLAG))) return { allowed: true };
+  return { allowed: false, reason: 'no_consent', warning: `The process has an inspector but no consent for inspection (start it with outbound-next, OUTBOUND_INSPECT=1 or ${NETWORK_FLAG}): not inspected, no code injected.` };
+}
 
 /** Czy proces aplikacji działa na wspieranej wersji Node (≥ 24). Nieznana wersja = wspierana. */
 export function supportedNode(node) {
@@ -65,8 +80,18 @@ export function openSession(target, port, { config, log, onNetwork, onClose, pro
     const res = await session.send('Runtime.evaluate', { expression: IDENTITY_EXPRESSION, returnByValue: true });
     let info = {};
     try { info = JSON.parse(res?.result?.value ?? '{}'); } catch {}
-    session.pid = info.pid; session.cwd = info.cwd; session.argv = info.argv; session.node = info.node;
+    session.pid = Number.isInteger(info.pid) ? info.pid : undefined;
+    session.cwd = typeof info.cwd === 'string' ? info.cwd.slice(0, 1024) : undefined;
+    session.node = typeof info.node === 'string' ? info.node.slice(0, 32) : undefined;
     session.app = resolveAppName({ port, appNames: config.appNames, pkg: info.pkg, pkgName: await readPackageName(info.cwd), cwd: info.cwd });
+    // bez zgody albo inny użytkownik: bez łatek, Network.enable i haka — status podaje powód (audyt B-01)
+    const allowed = consent(info);
+    if (!allowed.allowed) {
+      session.networkOk = false; session.skipped = allowed.reason; session.warnings = [allowed.warning];
+      session.ready = true;
+      log(`skipped app=${JSON.stringify(session.app)} port=${port} pid=${session.pid}: ${allowed.warning}`);
+      return;
+    }
     // Node < 24 nie jest wspierany: bez Network.enable i bez haka — status podaje powód
     if (!supportedNode(info.node)) {
       const check = processWarnings({ node: info.node });

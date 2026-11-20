@@ -130,6 +130,8 @@ export function createCollector(config, { log = () => {}, now = Date.now } = {})
           node: s.node, ready: !!s.ready, node_workarounds: s.nodeWorkarounds ?? [],
           // porty HTTP procesu (z haka): np. port next dev do wywołań Next DevTools MCP
           ...(s.httpPorts?.length ? { http_ports: s.httpPorts } : {}),
+          // pominięty bez podsłuchu: no_consent | other_user (audyt B-01)
+          ...(s.skipped ? { skipped: s.skipped } : {}),
           warnings: s.warnings })),
         buffered_requests_total: store.size, last_id: store.lastId,
         redaction: config.redact, bodies: config.bodies, warnings: globalWarnings(),

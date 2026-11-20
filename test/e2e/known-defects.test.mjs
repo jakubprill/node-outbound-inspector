@@ -28,13 +28,35 @@ test('wada 1: dwa kolektory naraz — oba widzą przypisanie do stron', { todo: 
     }
   }));
 
-test('wada 2: proces bez --experimental-network-inspection — status to pokazuje i podaje powód', () =>
-  withApp(app({ flags: [] }), async (sc, mcp) => {
+test('wada 2: proces bez --experimental-network-inspection (ze zgodą OUTBOUND_INSPECT=1) — status to pokazuje i podaje powód', () =>
+  withApp(app({ flags: [], env: { OUTBOUND_INSPECT: '1' } }), async (sc, mcp) => {
     const m = await mcp();
     for (let i = 0; i < 40 && !(await m.call('inspector_status')).apps[0]?.ready; i++) await sleep(250);
     const [s] = (await m.call('inspector_status')).apps;
     assert.equal(s.network_inspection, false);
+    assert.equal(s.skipped, undefined);
     assert.match(s.warnings.join(' '), /without --experimental-network-inspection/);
+  }));
+
+test('audyt B-01: proces z inspektorem bez zgody jest pomijany — bez haka, łatek i Network.enable', () =>
+  withApp(app({ flags: [] }), async (sc, mcp) => {
+    const m = await mcp();
+    for (let i = 0; i < 40 && !(await m.call('inspector_status')).apps[0]?.ready; i++) await sleep(250);
+    const [s] = (await m.call('inspector_status')).apps;
+    assert.equal(s.skipped, 'no_consent');
+    assert.equal(s.network_inspection, false);
+    assert.equal(s.page_correlation, false);
+    assert.match(s.warnings[0], /no consent for inspection/);
+    // stan procesu sprawdzony własnym połączeniem z inspektorem: nic nie zostało wstrzyknięte
+    const [t] = await (await fetch(`http://127.0.0.1:${sc.apps[0].inspect}/json/list`)).json();
+    const ws = new WebSocket(t.webSocketDebuggerUrl);
+    await new Promise(r => { ws.onopen = r; });
+    const value = await new Promise(r => {
+      ws.onmessage = ({ data }) => { const msg = JSON.parse(data); if (msg.id === 1) r(msg.result.result.value); };
+      ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression: 'typeof globalThis.__outboundInspector + "," + (process.getBuiltinModule("node:inspector").Network?.dataReceived?.__outboundFix66551 === true)', returnByValue: true } }));
+    });
+    ws.close();
+    assert.equal(value, 'undefined,false');
   }));
 
 test('wada 3: restart aplikacji na tym samym porcie — rekordy sprzed restartu zostają', () =>

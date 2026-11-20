@@ -91,7 +91,8 @@ const forwarded = platform => ['SIGTERM', 'SIGHUP', ...(platform === 'win32' ? [
  */
 export function runChild({ execPath, nodeArgs, proc = process, sigintGraceMs = 1500, spawnImpl = spawn }) {
   return new Promise(resolve => {
-    const child = spawnImpl(execPath, nodeArgs, { stdio: 'inherit' });
+    // OUTBOUND_INSPECT=1: jawna zgoda na podsłuch dla kolektora (audyt B-01); dziedziczą ją procesy potomne next
+    const child = spawnImpl(execPath, nodeArgs, { stdio: 'inherit', env: { ...proc.env, OUTBOUND_INSPECT: '1' } });
     const alive = () => child.exitCode === null && child.signalCode === null;
     const send = sig => { if (alive()) try { child.kill(sig); } catch { /* proces właśnie się skończył */ } };
     const handlers = Object.fromEntries(forwarded(proc.platform).map(sig => [sig, () => send(sig)]));

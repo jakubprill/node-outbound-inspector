@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // outbound-hub: wszystkie procesy Node z inspektorem pod jednym adresem dla chrome://inspect (127.0.0.1:9229),
 // bez wpisywania portów w „Configure…”. Uruchom obok aplikacji, np. w skrypcie dev monorepo.
-//   OUTBOUND_HUB_PORT (domyślnie 9229), INSPECTOR_PORTS (domyślnie 9229-9249, bez portu huba), APP_NAMES
+//   OUTBOUND_HUB_PORT (domyślnie 9229), INSPECTOR_PORTS (domyślnie 9230-9249), APP_NAMES
 import { readFileSync } from 'node:fs';
 import { createHub, HUB_MARKER } from '../src/hub/hub.mjs';
 import { parsePorts, parseAppNames } from '../src/config.mjs';
@@ -16,7 +16,7 @@ const port = Number(env.OUTBOUND_HUB_PORT || 9229);
 const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const hub = createHub({
   port,
-  ports: parsePorts(env.INSPECTOR_PORTS || '9229-9249'),
+  ports: parsePorts(env.INSPECTOR_PORTS || '9230-9249'),
   appNames: parseAppNames(env.APP_NAMES),
   identify: env.OUTBOUND_HUB_IDENTIFY !== '0',
   version,

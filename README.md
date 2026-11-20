@@ -95,7 +95,7 @@ Tool descriptions, tool output and CLI messages are in English. For logic, use t
 ### Configuration (environment variables)
 | Variable | Default | Description |
 |---|---|---|
-| `INSPECTOR_PORTS` | `9229-9249` | Inspector ports/ranges, e.g. `9231,9241` |
+| `INSPECTOR_PORTS` | `9230-9249` | Inspector ports/ranges, e.g. `9231,9241`. 9229 (plain `node --inspect`, `outbound-hub`) is left out on purpose |
 | `APP_NAMES` | — | Names by port, e.g. `9231=web,9241=admin`. By default the name comes from `npm_package_name`, then from `name` in `package.json` in the process directory, then from the directory name. |
 | `PAGE_CORRELATION` | `1` | `0` disables injecting the code that correlates requests with pages |
 | `OUTBOUND_REDACT` | `1` | `0` disables secret redaction (warning in `inspector_status`) |

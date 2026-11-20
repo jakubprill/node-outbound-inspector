@@ -18,7 +18,8 @@ export function parseAppNames(spec) {
  */
 export function loadConfig({ env = {} } = {}) {
   return Object.freeze({
-    ports: Object.freeze(parsePorts(env.INSPECTOR_PORTS || '9229-9249')),
+    // bez 9229: to domyślny port zwykłego `node --inspect` (i port outbound-hub), nie aplikacji pod narzędziem (audyt B-01)
+    ports: Object.freeze(parsePorts(env.INSPECTOR_PORTS || '9230-9249')),
     appNames: Object.freeze(parseAppNames(env.APP_NAMES)),
     ignoreHosts: Object.freeze((env.IGNORE_HOSTS ?? 'registry.npmjs.org').split(',').filter(Boolean)),
     // eksport OpenTelemetry (OTLP, np. @vercel/otel → localhost:4318/v1/traces) to szum, gdy lokalnie nie ma kolektora

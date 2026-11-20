@@ -8,7 +8,7 @@
 // Podłączenie do agenta:  claude mcp add outbound -- node /ścieżka/src/outbound-mcp.mjs
 //
 // Zmienne środowiskowe:
-//   INSPECTOR_PORTS  porty/zakresy inspektorów do skanowania, np. "9229-9249" (domyślnie) lub "9231,9241"
+//   INSPECTOR_PORTS  porty/zakresy inspektorów do skanowania, np. "9230-9249" (domyślnie) lub "9231,9241"
 //   APP_NAMES        opcjonalne nazwy aplikacji po porcie, np. "9231=web,9241=admin"
 //                    (domyślnie: npm_package_name procesu → name z package.json w cwd → nazwa katalogu)
 //   IGNORE_HOSTS     hosty pomijane (domyślnie registry.npmjs.org)

@@ -95,7 +95,7 @@ Serwer obsługuje obie ery MCP: z `initialize` (2024-11-05 do 2025-06-18) i bezs
 ### Konfiguracja (zmienne środowiskowe)
 | Zmienna | Domyślnie | Opis |
 |---|---|---|
-| `INSPECTOR_PORTS` | `9229-9249` | Porty/zakresy inspektorów, np. `9231,9241` |
+| `INSPECTOR_PORTS` | `9230-9249` | Porty/zakresy inspektorów, np. `9231,9241`. 9229 (zwykłe `node --inspect`, `outbound-hub`) celowo pominięty |
 | `APP_NAMES` | — | Nazwy po porcie, np. `9231=web,9241=admin`. Domyślnie nazwa pochodzi z `npm_package_name`, potem z `name` w `package.json` w katalogu procesu, potem z nazwy katalogu. |
 | `PAGE_CORRELATION` | `1` | `0` wyłącza wstrzykiwanie kodu korelującego zapytania ze stronami |
 | `OUTBOUND_REDACT` | `1` | `0` wyłącza redakcję sekretów (ostrzeżenie w `inspector_status`) |

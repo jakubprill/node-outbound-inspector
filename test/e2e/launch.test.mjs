@@ -40,6 +40,7 @@ test('proces potomny: flaga sieciowa w execArgv, inspektor na podanym porcie, ar
   assert.deepEqual(child.argv, args, 'argumenty bez zmian, także ze spacją');
   assert.ok(child.inspectorUrl.startsWith(`ws://127.0.0.1:${P1}/`), child.inspectorUrl);
   assert.notEqual(child.pid, run.p.pid, 'osobny proces potomny');
+  assert.equal(child.optIn, '1', 'zgoda na podsłuch dla kolektora (OUTBOUND_INSPECT=1, audyt B-01)');
   const targets = await fetch(`http://127.0.0.1:${P1}/json/list`).then(r => r.json());
   assert.equal(targets.length, 1);
   // narzędzie widzi tak uruchomiony proces jako aplikację z inspekcją sieci

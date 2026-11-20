@@ -15,8 +15,8 @@ test('parseAppNames', () => {
 
 test('loadConfig: wartości domyślne', () => {
   const c = loadConfig({ env: {} });
-  assert.equal(c.ports.length, 21);
-  assert.equal(c.ports[0], 9229);
+  assert.equal(c.ports.length, 20);
+  assert.equal(c.ports[0], 9230, 'bez 9229: domyślny port zwykłego node --inspect (audyt B-01)');
   assert.deepEqual([...c.ignoreHosts], ['registry.npmjs.org']);
   assert.equal(c.maxRequests, 5000);
   assert.equal(c.pageCorrelation, true);
